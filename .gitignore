@@ -1,0 +1,14 @@
+**/bin/
+**/obj/
+**/.vs/
+model-build/project-check/
+*.user
+*.suo
+*.log
+appsettings.Local.json
+.env
+.env.*
+!.env.example
+# Local database tooling and pre-integration backup
+database-work/tools/
+database-work/before-integration/
