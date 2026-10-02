@@ -1,0 +1,27 @@
+@baseUrl = http://localhost:5237
+@bookingId = REPLACE_WITH_BOOKING_ID
+@bookingToken = REPLACE_WITH_ACCESS_TOKEN
+
+GET {{baseUrl}}/health/ready
+
+### List car slots
+GET {{baseUrl}}/api/slots?floor=F02&status=AVAILABLE&pageSize=20
+
+### Guest booking (enable Features:GuestBookings in User Secrets first)
+POST {{baseUrl}}/api/bookings/guest
+Content-Type: application/json
+
+{
+  "plate": "51A-12345",
+  "vehicleType": "CAR",
+  "phone": "0901234567",
+  "slotId": "F02-A0001"
+}
+
+### Read own booking
+GET {{baseUrl}}/api/bookings/{{bookingId}}
+X-Booking-Token: {{bookingToken}}
+
+### Cancel own booking
+POST {{baseUrl}}/api/bookings/{{bookingId}}/cancel
+X-Booking-Token: {{bookingToken}}

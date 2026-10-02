@@ -1,0 +1,66 @@
+# ==========================================
+# GITIGNORE - Smart Parking 3D System
+# ==========================================
+
+# 1. Ignored Templates (Theo yeu cau khong day templates len GitHub)
+docs/templates/
+docs/template/
+
+# 2. Cloned Reference Repositories
+Parking3D/
+
+# 3. .NET / C# Build Outputs
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+*.metaproj
+*.tmp
+*.log
+
+# 4. Visual Studio / IDE Files
+.vs/
+.vscode/
+*.user
+*.userprefs
+*.suo
+*.userosscache
+*.sln.docstates
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.DotSettings.user
+
+# 5. User Secrets & Configuration Overrides
+appsettings.*.local.json
+secrets.json
+.env
+.env.*
+!.env.example
+
+# 6. Node / Frontend
+node_modules/
+dist/
+build/
+.npm
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# 7. OS Specific Files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# 8. Database local dumps / backups
+*.db
+*.sqlite
+*.bak
+database-backups/
