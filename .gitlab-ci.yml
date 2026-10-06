@@ -1,0 +1,32 @@
+stages: [verify]
+
+build-and-unit-tests:
+  stage: verify
+  image: mcr.microsoft.com/dotnet/sdk:9.0
+  variables:
+    DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    NUGET_PACKAGES: "$CI_PROJECT_DIR/.nuget/packages"
+  cache:
+    key: parking-microservices-nuget
+    paths: [.nuget/packages/]
+  script:
+    - dotnet restore Parking.Microservices.slnx
+    - dotnet build Parking.Microservices.slnx --no-restore -c Release
+    - dotnet test tests/Parking.Microservices.Tests/Parking.Microservices.Tests.csproj --no-build -c Release --logger "trx;LogFileName=unit.trx"
+  artifacts:
+    when: always
+    paths: [tests/Parking.Microservices.Tests/TestResults/]
+
+postgres-schema-checks:
+  stage: verify
+  image: postgres:17
+  services:
+    - name: postgres:17
+      alias: postgres
+  variables:
+    PGHOST: postgres
+    PGUSER: postgres
+    POSTGRES_HOST_AUTH_METHOD: trust
+  script:
+    - for i in $(seq 1 30); do pg_isready -h "$PGHOST" -U "$PGUSER" && break; sleep 1; done
+    - sh scripts/microservices/validate-schemas.sh

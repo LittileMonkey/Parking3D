@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Grpc.Net.Client" Version="2.76.0" />
+    <ProjectReference Include="../../src/Contracts/Parking.Contracts/Parking.Contracts.csproj" />
+  </ItemGroup>
+</Project>

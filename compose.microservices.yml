@@ -1,0 +1,173 @@
+# Local isolated Development; internal gRPC is not exposed to the host.
+services:
+  identity-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: parking_identity
+      POSTGRES_USER: identity
+      POSTGRES_PASSWORD: ${IDENTITY_DB_PASSWORD:?Run New-DevelopmentEnv.ps1}
+    volumes:
+      - identity-data:/var/lib/postgresql/data
+      - ./database/services/identity/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U identity -d parking_identity"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  parking-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: parking_parking
+      POSTGRES_USER: parking
+      POSTGRES_PASSWORD: ${PARKING_DB_PASSWORD:?Run New-DevelopmentEnv.ps1}
+    volumes:
+      - parking-data:/var/lib/postgresql/data
+      - ./database/services/parking/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U parking -d parking_parking"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  payment-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: parking_payment
+      POSTGRES_USER: payment
+      POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD:?Run New-DevelopmentEnv.ps1}
+    volumes:
+      - payment-data:/var/lib/postgresql/data
+      - ./database/services/payment/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payment -d parking_payment"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  ai-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: parking_ai
+      POSTGRES_USER: ai
+      POSTGRES_PASSWORD: ${AI_DB_PASSWORD:?Run New-DevelopmentEnv.ps1}
+    volumes:
+      - ai-data:/var/lib/postgresql/data
+      - ./database/services/ai/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai -d parking_ai"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  identity:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        PROJECT: src/Services/Identity/Parking.Identity.Api/Parking.Identity.Api.csproj
+        APP_DLL: Parking.Identity.Api.dll
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Ports__Bind: 0.0.0.0
+      Jwt__Key: ${JWT_KEY:?Run New-DevelopmentEnv.ps1}
+      Grpc__ServiceKey: ${GRPC_SERVICE_KEY:?Run New-DevelopmentEnv.ps1}
+      ConnectionStrings__Service: "Host=identity-db;Database=parking_identity;Username=identity;Password=${IDENTITY_DB_PASSWORD}"
+      Services__IdentityGrpc: http://identity:8081
+      Services__ParkingGrpc: http://parking:8081
+      Services__AIGrpc: http://ai:8081
+      Bootstrap__Email: ${BOOTSTRAP_EMAIL:?Set administrator email}
+      Bootstrap__Password: ${BOOTSTRAP_PASSWORD:?Run New-DevelopmentEnv.ps1}
+    depends_on:
+      identity-db:
+        condition: service_healthy
+    restart: unless-stopped
+  parking:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        PROJECT: src/Services/Parking/Parking.Parking.Api/Parking.Parking.Api.csproj
+        APP_DLL: Parking.Parking.Api.dll
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Ports__Bind: 0.0.0.0
+      Jwt__Key: ${JWT_KEY:?Run New-DevelopmentEnv.ps1}
+      Grpc__ServiceKey: ${GRPC_SERVICE_KEY:?Run New-DevelopmentEnv.ps1}
+      ConnectionStrings__Service: "Host=parking-db;Database=parking_parking;Username=parking;Password=${PARKING_DB_PASSWORD}"
+      Services__IdentityGrpc: http://identity:8081
+      Services__ParkingGrpc: http://parking:8081
+      Services__AIGrpc: http://ai:8081
+    depends_on:
+      parking-db:
+        condition: service_healthy
+    restart: unless-stopped
+  payment:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        PROJECT: src/Services/Payment/Parking.Payment.Api/Parking.Payment.Api.csproj
+        APP_DLL: Parking.Payment.Api.dll
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Ports__Bind: 0.0.0.0
+      Jwt__Key: ${JWT_KEY:?Run New-DevelopmentEnv.ps1}
+      Grpc__ServiceKey: ${GRPC_SERVICE_KEY:?Run New-DevelopmentEnv.ps1}
+      ConnectionStrings__Service: "Host=payment-db;Database=parking_payment;Username=payment;Password=${PAYMENT_DB_PASSWORD}"
+      Services__IdentityGrpc: http://identity:8081
+      Services__ParkingGrpc: http://parking:8081
+      Services__AIGrpc: http://ai:8081
+    depends_on:
+      payment-db:
+        condition: service_healthy
+    restart: unless-stopped
+  ai:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        PROJECT: src/Services/AI/Parking.AI.Api/Parking.AI.Api.csproj
+        APP_DLL: Parking.AI.Api.dll
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Ports__Bind: 0.0.0.0
+      Jwt__Key: ${JWT_KEY:?Run New-DevelopmentEnv.ps1}
+      Grpc__ServiceKey: ${GRPC_SERVICE_KEY:?Run New-DevelopmentEnv.ps1}
+      ConnectionStrings__Service: "Host=ai-db;Database=parking_ai;Username=ai;Password=${AI_DB_PASSWORD}"
+      Services__IdentityGrpc: http://identity:8081
+      Services__ParkingGrpc: http://parking:8081
+      Services__AIGrpc: http://ai:8081
+      AI__OcrEndpoint: ${OCR_ENDPOINT:-}
+      AI__OcrApiKey: ${OCR_API_KEY:-}
+    depends_on:
+      ai-db:
+        condition: service_healthy
+    restart: unless-stopped
+  gateway:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        PROJECT: src/Gateway/Parking.Gateway/Parking.Gateway.csproj
+        APP_DLL: Parking.Gateway.dll
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: 8080
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      identity:
+        condition: service_healthy
+      parking:
+        condition: service_healthy
+      payment:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  identity-data:
+  parking-data:
+  payment-data:
+  ai-data:

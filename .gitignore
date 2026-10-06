@@ -64,3 +64,8 @@ $RECYCLE.BIN/
 *.sqlite
 *.bak
 database-backups/
+
+# Microservices local outputs
+artifacts/microservices/
+.nuget/
+**/TestResults/

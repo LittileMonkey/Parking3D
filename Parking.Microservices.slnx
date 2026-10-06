@@ -1,0 +1,41 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/BuildingBlocks/">
+    <Project Path="src/BuildingBlocks/Parking.ServiceDefaults/Parking.ServiceDefaults.csproj" />
+  </Folder>
+  <Folder Name="/src/Contracts/">
+    <Project Path="src/Contracts/Parking.Contracts/Parking.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/src/Gateway/">
+    <Project Path="src/Gateway/Parking.Gateway/Parking.Gateway.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/" />
+  <Folder Name="/src/Services/AI/">
+    <Project Path="src/Services/AI/Parking.AI.Api/Parking.AI.Api.csproj" />
+    <Project Path="src/Services/AI/Parking.AI.Application/Parking.AI.Application.csproj" />
+    <Project Path="src/Services/AI/Parking.AI.Domain/Parking.AI.Domain.csproj" />
+    <Project Path="src/Services/AI/Parking.AI.Infrastructure/Parking.AI.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/Identity/">
+    <Project Path="src/Services/Identity/Parking.Identity.Api/Parking.Identity.Api.csproj" />
+    <Project Path="src/Services/Identity/Parking.Identity.Application/Parking.Identity.Application.csproj" />
+    <Project Path="src/Services/Identity/Parking.Identity.Domain/Parking.Identity.Domain.csproj" />
+    <Project Path="src/Services/Identity/Parking.Identity.Infrastructure/Parking.Identity.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/Parking/">
+    <Project Path="src/Services/Parking/Parking.Parking.Api/Parking.Parking.Api.csproj" />
+    <Project Path="src/Services/Parking/Parking.Parking.Application/Parking.Parking.Application.csproj" />
+    <Project Path="src/Services/Parking/Parking.Parking.Domain/Parking.Parking.Domain.csproj" />
+    <Project Path="src/Services/Parking/Parking.Parking.Infrastructure/Parking.Parking.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/Payment/">
+    <Project Path="src/Services/Payment/Parking.Payment.Api/Parking.Payment.Api.csproj" />
+    <Project Path="src/Services/Payment/Parking.Payment.Application/Parking.Payment.Application.csproj" />
+    <Project Path="src/Services/Payment/Parking.Payment.Domain/Parking.Payment.Domain.csproj" />
+    <Project Path="src/Services/Payment/Parking.Payment.Infrastructure/Parking.Payment.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Parking.Grpc.Probe/Parking.Grpc.Probe.csproj" />
+    <Project Path="tests/Parking.Microservices.Tests/Parking.Microservices.Tests.csproj" />
+  </Folder>
+</Solution>

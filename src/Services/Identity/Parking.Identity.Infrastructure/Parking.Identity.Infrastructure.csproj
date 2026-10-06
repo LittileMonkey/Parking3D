@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Parking.Identity.Application/Parking.Identity.Application.csproj" />
+    <ProjectReference Include="../../../BuildingBlocks/Parking.ServiceDefaults/Parking.ServiceDefaults.csproj" />
+    <ProjectReference Include="../../../Contracts/Parking.Contracts/Parking.Contracts.csproj" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+</Project>

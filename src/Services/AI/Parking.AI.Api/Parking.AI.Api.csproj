@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <ItemGroup>
+    <ProjectReference Include="../Parking.AI.Infrastructure/Parking.AI.Infrastructure.csproj" />
+    
+  </ItemGroup>
+</Project>
