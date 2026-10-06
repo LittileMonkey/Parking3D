@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/MyStoreService/" />
+  <Folder Name="/MyStoreService/AccountService/">
+    <Project Path="Template.Application/Template.Application.csproj" Id="4ee16ebe-15ef-489a-8f86-c417b3bcc6eb" />
+    <Project Path="Template.Domain/Template.Domain.csproj" Id="8c69b4f2-da82-4ff3-8156-4bb7231fc314" />
+    <Project Path="Template.Persistence/Template.Persistence.csproj" Id="9b5f9975-72ae-47c5-ab50-e7a9cf7728e8" />
+    <Project Path="Template.WebAPI/Template.WebAPI.csproj" Id="f6bb2d42-e6e2-41d5-8851-125ebefd2534" />
+    <Project Path="TemplateInfractructure/Template.Infractructure.csproj" Id="bfacca74-0f8d-49a2-b664-8849a44f1903" />
+  </Folder>
+  <Folder Name="/MyStoreService/AnthenticateService/">
+    <Project Path="AuthenticationService.API/AuthenticationService.API.csproj" Id="95abd624-95be-4bc8-bc25-1d63c6cc8de7" />
+    <Project Path="AuthenticationService.Application/AuthenticationService.Application.csproj" Id="5d2b3af0-fab6-4562-9cdf-ec7e3d0ed691" />
+    <Project Path="AuthenticationService.Domain/AuthenticationService.Domain.csproj" Id="e835d61c-aec9-4fc2-a470-734229969424" />
+    <Project Path="AuthenticationService.Infractructure/AuthenticationService.Infractructure.csproj" Id="c51d4440-9030-4f3c-9f6c-8a1ae646f651" />
+    <Project Path="AuthenticationService.Persistence/AuthenticationService.Persistence.csproj" Id="f84ce614-daf9-4933-8d9f-6236a6aca4b6" />
+  </Folder>
+</Solution>
