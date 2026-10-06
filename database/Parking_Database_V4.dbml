@@ -1,0 +1,901 @@
+// V4 AI extension derived from V3 MVP. Original V3 input is unchanged.
+// DESIGN ONLY: not reverse-engineered from executed SQL. Read 11-AI-EXTENSION.md before migration.
+// Constraints not expressible here remain REQUIRED, not implemented by these notes.
+Project Parking_OJT_FA26_V4_AI {
+  database_type: 'PostgreSQL'
+  Note: '47 tables; unchanged V3 core + upload OCR, occupancy forecasting, newcomer assistant. Design only.'
+}
+
+Enum booking_status {
+  PENDING_PAYMENT
+  CONFIRMED
+  CHECKED_IN
+  COMPLETED
+  CANCELLED
+  EXPIRED
+  NO_SHOW
+}
+
+Enum booking_mode {
+  EXACT_SLOT
+  AUTO_SLOT
+}
+
+Enum session_status {
+  ACTIVE
+  EXIT_PENDING
+  COMPLETED
+}
+
+Enum reservation_status {
+  HELD
+  CONFIRMED
+  RELEASED
+}
+
+Enum slot_operational_status {
+  ACTIVE
+  MAINTENANCE
+  DISABLED
+}
+
+Enum payment_status {
+  PENDING
+  SUCCESS
+  FAILED
+  PARTIALLY_REFUNDED
+  REFUNDED
+}
+
+Enum payment_method {
+  VNPAY
+  CASH
+}
+
+Enum map_version_status {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+Table app_settings {
+  key text [pk, not null]
+  value jsonb [not null]
+  updated_by uuid
+  updated_at timestamptz [not null]
+}
+
+Table app_users {
+  id uuid [pk, not null]
+  email_normalized text [unique]
+  phone_e164 varchar(20) [unique]
+  full_name varchar(200) [not null]
+  password_hash text
+  email_verified_at timestamptz
+  phone_verified_at timestamptz
+  status text [not null]
+  locked_until timestamptz
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table platform_user_roles {
+  user_id uuid [not null]
+  role_code text [not null]
+  indexes {
+    (user_id, role_code) [pk]
+  }
+}
+
+Table auth_tokens {
+  id uuid [pk, not null]
+  user_id uuid [not null]
+  token_hash text [not null, unique]
+  family_id uuid [not null]
+  purpose text [not null]
+  expires_at timestamptz [not null]
+  consumed_at timestamptz
+  revoked_at timestamptz
+  created_at timestamptz [not null]
+}
+
+Table vehicle_types {
+  code text [pk, not null]
+  name text [not null]
+}
+
+Table vehicles {
+  Note: 'Guest flow upserts a normalized vehicle identity without granting account access. Account ownership/access is managed separately through user_vehicle_access.'
+  id uuid [pk, not null]
+  plate_country char(2) [not null]
+  plate_normalized varchar(20) [not null]
+  vehicle_type text [not null]
+  fuel_type text [not null]
+  is_active boolean [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (id, vehicle_type) [unique]
+    (plate_country, plate_normalized) [unique]
+  }
+}
+
+Table user_vehicle_access {
+  user_id uuid [not null]
+  vehicle_id uuid [not null]
+  access_kind text [not null]
+  verified_at timestamptz
+  is_primary boolean [not null]
+  revoked_at timestamptz
+  created_at timestamptz [not null]
+  indexes {
+    (user_id, vehicle_id) [pk]
+  }
+}
+
+Table lot_staff_assignments {
+  id uuid [pk, not null]
+  lot_id uuid [not null]
+  user_id uuid [not null]
+  role_code text [not null]
+  valid_from timestamptz [not null]
+  valid_until timestamptz
+  revoked_at timestamptz
+}
+
+Table parking_lots {
+  id uuid [pk, not null]
+  code varchar(30) [not null, unique]
+  name text [not null]
+  address text [not null]
+  latitude numeric(9,6) [not null]
+  longitude numeric(9,6) [not null]
+  timezone text [not null]
+  status text [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table lot_vehicle_policies {
+  lot_id uuid [not null]
+  vehicle_type text [not null]
+  guest_booking_enabled boolean [not null]
+  dynamic_multiplier_cap numeric(6,3) [not null]
+  hold_minutes int [not null]
+  min_booking_minutes int [not null]
+  max_booking_minutes int [not null]
+  early_arrival_minutes int [not null]
+  late_arrival_minutes int [not null]
+  warning_percent numeric(5,2) [not null]
+  admission_percent numeric(5,2) [not null]
+  reserved_capacity int [not null]
+  cancellation_refund_cutoff_minutes int [not null]
+  indexes {
+    (lot_id, vehicle_type) [pk]
+  }
+}
+
+Table lot_opening_intervals {
+  Note: 'Local time in parking_lots.timezone. Split intervals crossing the week boundary into two rows. 24/7 = [0,10080). No rows means closed, not 24/7. Apply lot_closures afterwards.'
+  id uuid [pk, not null]
+  lot_id uuid [not null]
+  start_minute int [not null, note: 'Inclusive minute of local week; Monday 00:00 = 0; 0..10079']
+  end_minute int [not null, note: 'Exclusive minute of local week; 1..10080; start < end']
+}
+
+Table lot_closures {
+  id uuid [pk, not null]
+  lot_id uuid [not null]
+  starts_at timestamptz [not null]
+  ends_at timestamptz [not null]
+  reason text [not null]
+}
+
+Table lot_gates {
+  id uuid [pk, not null]
+  lot_id uuid [not null]
+  code text [not null]
+  gate_kind text [not null]
+  latitude numeric(9,6)
+  longitude numeric(9,6)
+  indexes {
+    (id, lot_id) [unique]
+    (lot_id, code) [unique]
+  }
+}
+
+Table parking_levels {
+  id uuid [pk, not null]
+  lot_id uuid [not null]
+  code varchar(30) [not null]
+  name text [not null]
+  level_kind text [not null]
+  elevation_m numeric(8,3) [not null]
+  display_order int [not null]
+  indexes {
+    (id, lot_id) [unique]
+    (lot_id, code) [unique]
+  }
+}
+
+Table zones {
+  id uuid [pk, not null]
+  lot_id uuid [not null]
+  level_id uuid [not null]
+  code varchar(30) [not null]
+  name text [not null]
+  indexes {
+    (id, lot_id) [unique]
+    (id, lot_id, level_id) [unique]
+    (level_id, code) [unique]
+  }
+}
+
+Table parking_slots {
+  id uuid [pk, not null]
+  lot_id uuid [not null]
+  zone_id uuid [not null]
+  level_id uuid [not null]
+  code varchar(30) [not null]
+  operational_status slot_operational_status [not null]
+  width_m numeric(6,2)
+  length_m numeric(6,2)
+  indexes {
+    (id, lot_id) [unique]
+    (zone_id, code) [unique]
+    (id, lot_id, level_id) [unique]
+  }
+}
+
+Table slot_vehicle_types {
+  slot_id uuid [not null]
+  lot_id uuid [not null]
+  vehicle_type text [not null]
+  indexes {
+    (slot_id, lot_id, vehicle_type) [pk]
+  }
+}
+
+Table slot_features {
+  code text [pk, not null]
+  name text [not null]
+}
+
+Table slot_feature_links {
+  Note: 'Feature metadata is retained. EV charging, accessible/priority authorization workflows are deferred; do not offer restricted slots as generally bookable.'
+  slot_id uuid [not null]
+  feature_code text [not null]
+  indexes {
+    (slot_id, feature_code) [pk]
+  }
+}
+
+Table map_versions {
+  id uuid [pk, not null]
+  lot_id uuid [not null]
+  version_no int [not null]
+  status map_version_status [not null]
+  coordinate_unit text [not null]
+  created_by uuid [not null]
+  created_at timestamptz [not null]
+  published_at timestamptz
+  indexes {
+    (id, lot_id) [unique]
+    (lot_id, version_no) [unique]
+  }
+}
+
+Table map_objects {
+  Note: 'PARKING_SLOT requires slot_id, other types must not impersonate a slot. Composite FK ties slot to its actual level and lot. Metadata never decides occupancy.'
+  id uuid [pk, not null]
+  lot_id uuid [not null]
+  map_version_id uuid [not null]
+  level_id uuid [not null]
+  slot_id uuid
+  gate_id uuid
+  object_type text [not null]
+  x numeric(10,3) [not null]
+  y numeric(10,3) [not null]
+  z numeric(10,3) [not null]
+  rotation_y numeric(9,4) [not null]
+  size_x numeric(10,3) [not null]
+  size_y numeric(10,3) [not null]
+  size_z numeric(10,3) [not null]
+  metadata jsonb [not null]
+  indexes {
+    (map_version_id, slot_id) [unique]
+  }
+}
+
+Table bookings {
+  Note: 'Customer must have verified active vehicle access; guest must supply verified contact per lot policy. Confirmation and hold release require transaction checks. EXACT_SLOT and AUTO_SLOT only in this MVP.'
+  id uuid [pk, not null]
+  code varchar(30) [not null, unique]
+  lot_id uuid [not null]
+  vehicle_id uuid [not null]
+  vehicle_type text [not null]
+  customer_id uuid
+  guest_contact text
+  plate_snapshot text [not null]
+  mode booking_mode [not null]
+  starts_at timestamptz [not null]
+  ends_at timestamptz [not null]
+  hold_expires_at timestamptz
+  arrival_deadline timestamptz [not null]
+  status booking_status [not null]
+  pricing_snapshot_id uuid [not null]
+  estimated_amount numeric(18,0) [not null]
+  created_at timestamptz [not null]
+  cancelled_at timestamptz
+  cancellation_reason text
+  indexes {
+    (id, lot_id) [unique]
+    (id, lot_id, vehicle_id) [unique]
+    (id, lot_id, vehicle_type, starts_at, ends_at) [unique]
+  }
+}
+
+Table slot_reservations {
+  Note: 'Effective HELD/CONFIRMED intervals use [starts_at,ends_at). Expired holds must be explicitly released in a transaction. Cross-row exclusion and vehicle overlap checks required.'
+  id uuid [pk, not null]
+  booking_id uuid [not null]
+  lot_id uuid [not null]
+  slot_id uuid [not null]
+  vehicle_type text [not null]
+  starts_at timestamptz [not null]
+  ends_at timestamptz [not null]
+  status reservation_status [not null]
+  created_at timestamptz [not null]
+  released_at timestamptz
+  release_reason text
+}
+
+Table qr_tokens {
+  id uuid [pk, not null]
+  booking_id uuid [not null]
+  nonce_hash text [not null, unique]
+  expires_at timestamptz [not null]
+  consumed_at timestamptz
+  revoked_at timestamptz
+  created_at timestamptz [not null]
+}
+
+Table parking_sessions {
+  id uuid [pk, not null]
+  lot_id uuid [not null]
+  vehicle_id uuid [not null]
+  vehicle_type text [not null]
+  booking_id uuid [unique]
+  pricing_snapshot_id uuid [not null]
+  plate_snapshot text [not null]
+  entry_gate_id uuid
+  exit_gate_id uuid
+  entry_at timestamptz [not null]
+  expected_exit_at timestamptz [not null]
+  exit_at timestamptz
+  status session_status [not null]
+  entry_method text [not null]
+  entered_by uuid
+  exited_by uuid
+  indexes {
+    (id, lot_id) [unique]
+    (id, lot_id, vehicle_id) [unique]
+    (id, lot_id, vehicle_type) [unique]
+  }
+}
+
+Table session_slot_assignments {
+  Note: 'Keep movement history. Only one open assignment per active session and slot; active assignment lifetime must match the session. EXCLUDE/partial indexes are required in executable SQL.'
+  id uuid [pk, not null]
+  session_id uuid [not null]
+  lot_id uuid [not null]
+  slot_id uuid [not null]
+  vehicle_type text [not null]
+  occupied_from timestamptz [not null]
+  vacated_at timestamptz
+  assigned_by uuid
+  reason text
+}
+
+Table pricing_plans {
+  id uuid [pk, not null]
+  lot_id uuid [not null]
+  vehicle_type text [not null]
+  version_no int [not null]
+  name text [not null]
+  status text [not null]
+  effective_from timestamptz [not null]
+  effective_until timestamptz
+  currency char(3) [not null]
+  created_by uuid [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (id, lot_id) [unique]
+    (id, lot_id, vehicle_type) [unique]
+    (lot_id, vehicle_type, version_no) [unique]
+  }
+}
+
+Table pricing_rules {
+  id uuid [pk, not null]
+  plan_id uuid [not null]
+  lot_id uuid [not null]
+  zone_id uuid
+  rule_type text [not null]
+  priority int [not null]
+  amount numeric(18,0)
+  billing_unit_minutes int
+  multiplier numeric(6,3)
+  parameters jsonb [not null]
+  indexes {
+    (plan_id, priority) [unique]
+  }
+}
+
+Table pricing_snapshots {
+  id uuid [pk, not null]
+  lot_id uuid [not null]
+  plan_id uuid [not null]
+  vehicle_type text [not null]
+  engine_version text [not null]
+  resolved_rules jsonb [not null]
+  policy_snapshot jsonb [not null]
+  currency char(3) [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (id, lot_id) [unique]
+    (id, lot_id, vehicle_type) [unique]
+  }
+}
+
+Table billing_accounts {
+  Note: 'One parking visit account: booking only before entry, session only for walk-in, or both for a linked booking/session. At least one is required. Both must refer to the SAME visit, lot and vehicle. See V3_REVIEW.md; requires SQL/service validation.'
+  id uuid [pk, not null]
+  lot_id uuid [not null]
+  vehicle_id uuid [not null]
+  booking_id uuid [unique]
+  session_id uuid [unique]
+  currency char(3) [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (id, lot_id) [unique]
+  }
+}
+
+Table billing_lines {
+  Note: 'Immutable charge/credit ledger. Explicit signed amount by line_kind. source_key prevents duplicate charges. Record corrections as new lines; do not overwrite charged history.'
+  id uuid [pk, not null]
+  account_id uuid [not null]
+  line_kind text [not null]
+  amount numeric(18,0) [not null]
+  description text [not null]
+  source_key text [not null]
+  calculation jsonb [not null]
+  created_by uuid
+  created_at timestamptz [not null]
+  indexes {
+    (account_id, source_key) [unique]
+  }
+}
+
+Table payments {
+  id uuid [pk, not null]
+  account_id uuid [not null]
+  amount numeric(18,0) [not null]
+  method payment_method [not null]
+  status payment_status [not null]
+  idempotency_key text [not null, unique]
+  collected_by uuid
+  succeeded_at timestamptz
+  created_at timestamptz [not null]
+}
+
+Table payment_attempts {
+  id uuid [pk, not null]
+  payment_id uuid [not null]
+  provider text [not null]
+  merchant_reference text [not null]
+  provider_transaction_id text
+  status text [not null]
+  requested_at timestamptz [not null]
+  completed_at timestamptz
+  response_code text
+  indexes {
+    (provider, merchant_reference) [unique]
+    (provider, provider_transaction_id) [unique]
+  }
+}
+
+Table payment_webhook_events {
+  Note: 'Keep callback deduplication. Validate provider signature before applying financial changes. A received event is not proof of successful payment.'
+  id uuid [pk, not null]
+  provider text [not null]
+  event_key text [not null]
+  payment_attempt_id uuid
+  received_at timestamptz [not null]
+  processed_at timestamptz
+  status text [not null]
+  sanitized_payload jsonb [not null]
+  refund_id uuid
+  indexes {
+    (provider, event_key) [unique]
+  }
+}
+
+Table refunds {
+  id uuid [pk, not null]
+  payment_id uuid [not null]
+  amount numeric(18,0) [not null]
+  status text [not null]
+  idempotency_key text [not null, unique]
+  provider_reference text [unique]
+  reason text [not null]
+  requested_by uuid
+  approved_by uuid
+  created_at timestamptz [not null]
+  succeeded_at timestamptz
+}
+
+Table devices {
+  id uuid [pk, not null]
+  lot_id uuid [not null]
+  gate_id uuid
+  slot_id uuid
+  code text [not null]
+  device_type text [not null]
+  api_key_hash text
+  enabled boolean [not null]
+  indexes {
+    (id, lot_id) [unique]
+    (lot_id, code) [unique]
+  }
+}
+
+Table device_events {
+  id uuid [pk, not null]
+  device_id uuid [not null]
+  lot_id uuid [not null]
+  external_event_id text [not null]
+  slot_id uuid
+  event_type text [not null]
+  occurred_at timestamptz [not null]
+  received_at timestamptz [not null]
+  confidence numeric(5,4)
+  payload jsonb [not null]
+  processing_status text [not null]
+  indexes {
+    (device_id, external_event_id) [unique]
+    (id, lot_id) [unique]
+  }
+}
+
+Table slot_observations {
+  slot_id uuid [pk, not null]
+  lot_id uuid [not null]
+  event_id uuid
+  occupancy text [not null]
+  observed_at timestamptz [not null]
+  verified_by uuid
+}
+
+Table parking_issues {
+  id uuid [pk, not null]
+  lot_id uuid [not null]
+  session_id uuid
+  booking_id uuid
+  device_event_id uuid
+  issue_type text [not null]
+  status text [not null]
+  reason text [not null]
+  resolution text
+  reported_by uuid
+  approved_by uuid
+  created_at timestamptz [not null]
+  resolved_at timestamptz
+  indexes {
+    (id, lot_id) [unique]
+  }
+}
+
+Table notifications {
+  id uuid [pk, not null]
+  lot_id uuid
+  recipient_user_id uuid
+  recipient_contact text
+  channel text [not null]
+  template_code text [not null]
+  payload jsonb [not null]
+  dedupe_key text [not null, unique]
+  delivery_status text [not null]
+  read_at timestamptz
+  created_at timestamptz [not null]
+}
+
+Table outbox_events {
+  Note: 'Retained for reliable notifications and simulator events even in a modular monolith. No microservice or message broker requirement.'
+  id uuid [pk, not null]
+  lot_id uuid
+  event_type text [not null]
+  aggregate_id uuid [not null]
+  payload jsonb [not null]
+  occurred_at timestamptz [not null]
+  published_at timestamptz
+  attempts int [not null]
+}
+
+Table audit_logs {
+  id uuid [pk, not null]
+  lot_id uuid
+  actor_user_id uuid
+  actor_type text [not null]
+  action text [not null]
+  entity_type text [not null]
+  entity_id text [not null]
+  reason text
+  request_id text
+  old_values jsonb
+  new_values jsonb
+  created_at timestamptz [not null]
+}
+
+Ref: app_settings.updated_by > app_users.id
+Ref: audit_logs.actor_user_id > app_users.id
+Ref: audit_logs.lot_id > parking_lots.id
+Ref: auth_tokens.user_id > app_users.id
+Ref: billing_accounts.(booking_id, lot_id, vehicle_id) > bookings.(id, lot_id, vehicle_id)
+Ref: billing_accounts.(session_id, lot_id, vehicle_id) > parking_sessions.(id, lot_id, vehicle_id)
+Ref: billing_lines.account_id > billing_accounts.id
+Ref: billing_lines.created_by > app_users.id
+Ref: bookings.customer_id > app_users.id
+Ref: bookings.(lot_id, vehicle_type) > lot_vehicle_policies.(lot_id, vehicle_type)
+Ref: bookings.(pricing_snapshot_id, lot_id, vehicle_type) > pricing_snapshots.(id, lot_id, vehicle_type)
+Ref: bookings.(vehicle_id, vehicle_type) > vehicles.(id, vehicle_type)
+Ref: device_events.(device_id, lot_id) > devices.(id, lot_id)
+Ref: device_events.(slot_id, lot_id) > parking_slots.(id, lot_id)
+Ref: devices.(gate_id, lot_id) > lot_gates.(id, lot_id)
+Ref: devices.lot_id > parking_lots.id
+Ref: devices.(slot_id, lot_id) > parking_slots.(id, lot_id)
+Ref: lot_closures.lot_id > parking_lots.id
+Ref: lot_gates.lot_id > parking_lots.id
+Ref: lot_opening_intervals.lot_id > parking_lots.id
+Ref: lot_staff_assignments.lot_id > parking_lots.id
+Ref: lot_staff_assignments.user_id > app_users.id
+Ref: lot_vehicle_policies.lot_id > parking_lots.id
+Ref: lot_vehicle_policies.vehicle_type > vehicle_types.code
+Ref: map_objects.(gate_id, lot_id) > lot_gates.(id, lot_id)
+Ref: map_objects.(level_id, lot_id) > parking_levels.(id, lot_id)
+Ref: map_objects.(map_version_id, lot_id) > map_versions.(id, lot_id)
+Ref: map_objects.(slot_id, lot_id, level_id) > parking_slots.(id, lot_id, level_id)
+Ref: map_versions.created_by > app_users.id
+Ref: map_versions.lot_id > parking_lots.id
+Ref: notifications.lot_id > parking_lots.id
+Ref: notifications.recipient_user_id > app_users.id
+Ref: outbox_events.lot_id > parking_lots.id
+Ref: parking_issues.approved_by > app_users.id
+Ref: parking_issues.(booking_id, lot_id) > bookings.(id, lot_id)
+Ref: parking_issues.(device_event_id, lot_id) > device_events.(id, lot_id)
+Ref: parking_issues.lot_id > parking_lots.id
+Ref: parking_issues.reported_by > app_users.id
+Ref: parking_issues.(session_id, lot_id) > parking_sessions.(id, lot_id)
+Ref: parking_levels.lot_id > parking_lots.id
+Ref: parking_sessions.(booking_id, lot_id, vehicle_id) > bookings.(id, lot_id, vehicle_id)
+Ref: parking_sessions.entered_by > app_users.id
+Ref: parking_sessions.(entry_gate_id, lot_id) > lot_gates.(id, lot_id)
+Ref: parking_sessions.(exit_gate_id, lot_id) > lot_gates.(id, lot_id)
+Ref: parking_sessions.exited_by > app_users.id
+Ref: parking_sessions.(lot_id, vehicle_type) > lot_vehicle_policies.(lot_id, vehicle_type)
+Ref: parking_sessions.(pricing_snapshot_id, lot_id, vehicle_type) > pricing_snapshots.(id, lot_id, vehicle_type)
+Ref: parking_sessions.(vehicle_id, vehicle_type) > vehicles.(id, vehicle_type)
+Ref: parking_slots.lot_id > parking_lots.id
+Ref: parking_slots.(zone_id, lot_id, level_id) > zones.(id, lot_id, level_id)
+Ref: payment_attempts.payment_id > payments.id
+Ref: payment_webhook_events.payment_attempt_id > payment_attempts.id
+Ref: payment_webhook_events.refund_id > refunds.id
+Ref: payments.account_id > billing_accounts.id
+Ref: payments.collected_by > app_users.id
+Ref: platform_user_roles.user_id > app_users.id
+Ref: pricing_plans.created_by > app_users.id
+Ref: pricing_plans.(lot_id, vehicle_type) > lot_vehicle_policies.(lot_id, vehicle_type)
+Ref: pricing_rules.(plan_id, lot_id) > pricing_plans.(id, lot_id)
+Ref: pricing_rules.(zone_id, lot_id) > zones.(id, lot_id)
+Ref: pricing_snapshots.(plan_id, lot_id, vehicle_type) > pricing_plans.(id, lot_id, vehicle_type)
+Ref: qr_tokens.booking_id > bookings.id
+Ref: refunds.approved_by > app_users.id
+Ref: refunds.payment_id > payments.id
+Ref: refunds.requested_by > app_users.id
+Ref: session_slot_assignments.assigned_by > app_users.id
+Ref: session_slot_assignments.(session_id, lot_id, vehicle_type) > parking_sessions.(id, lot_id, vehicle_type)
+Ref: session_slot_assignments.(slot_id, lot_id, vehicle_type) > slot_vehicle_types.(slot_id, lot_id, vehicle_type)
+Ref: slot_feature_links.feature_code > slot_features.code
+Ref: slot_feature_links.slot_id > parking_slots.id
+Ref: slot_observations.(event_id, lot_id) > device_events.(id, lot_id)
+Ref: slot_observations.(slot_id, lot_id) > parking_slots.(id, lot_id)
+Ref: slot_observations.verified_by > app_users.id
+Ref: slot_reservations.(booking_id, lot_id, vehicle_type, starts_at, ends_at) > bookings.(id, lot_id, vehicle_type, starts_at, ends_at)
+Ref: slot_reservations.(slot_id, lot_id, vehicle_type) > slot_vehicle_types.(slot_id, lot_id, vehicle_type)
+Ref: slot_vehicle_types.(lot_id, vehicle_type) > lot_vehicle_policies.(lot_id, vehicle_type)
+Ref: slot_vehicle_types.(slot_id, lot_id) > parking_slots.(id, lot_id)
+Ref: user_vehicle_access.user_id > app_users.id
+Ref: user_vehicle_access.vehicle_id > vehicles.id
+Ref: vehicles.vehicle_type > vehicle_types.code
+Ref: zones.(level_id, lot_id) > parking_levels.(id, lot_id)
+Ref: zones.lot_id > parking_lots.id
+
+TableGroup Identity {
+  app_settings
+  app_users
+  platform_user_roles
+  auth_tokens
+  vehicle_types
+  vehicles
+  user_vehicle_access
+  lot_staff_assignments
+}
+
+TableGroup Facilities_Map {
+  parking_lots
+  lot_vehicle_policies
+  lot_opening_intervals
+  lot_closures
+  lot_gates
+  parking_levels
+  zones
+  parking_slots
+  slot_vehicle_types
+  slot_features
+  slot_feature_links
+  map_versions
+  map_objects
+}
+
+TableGroup Booking_Operation {
+  bookings
+  slot_reservations
+  qr_tokens
+  parking_sessions
+  session_slot_assignments
+}
+
+TableGroup Pricing_Payment {
+  pricing_plans
+  pricing_rules
+  pricing_snapshots
+  billing_accounts
+  billing_lines
+  payments
+  payment_attempts
+  payment_webhook_events
+  refunds
+}
+
+TableGroup Monitoring {
+  devices
+  device_events
+  slot_observations
+  parking_issues
+  notifications
+  outbox_events
+  audit_logs
+}
+
+// Additive design extension for database-v3 snake_case core. See 11-AI-EXTENSION.md.
+// CHECK constraints are implemented in 001_ai_extension.sql; DBML is an ERD, not a migration.
+Table ai_plate_recognitions {
+  id uuid [pk, not null]
+  lot_id uuid [not null]
+  uploaded_by uuid [not null]
+  idempotency_key varchar(128) [not null]
+  image_sha256 varchar(64) [not null]
+  image_object_key text
+  candidate_plate varchar(20)
+  confidence numeric(6,5)
+  status text [not null, note: 'PROCESSING/PENDING_REVIEW/NO_PLATE/FAILED/REVIEWED/CONSUMED']
+  model_version text [not null]
+  reviewed_plate varchar(20)
+  reviewed_by uuid
+  reviewed_at timestamptz
+  consumed_at timestamptz
+  failure_code varchar(64)
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  expires_at timestamptz [not null]
+  version int [not null, default: 1]
+  indexes {
+    (lot_id, uploaded_by, idempotency_key) [unique]
+    (lot_id, created_at)
+    expires_at
+  }
+}
+
+Table occupancy_snapshots {
+  id uuid [pk, not null]
+  lot_id uuid [not null]
+  vehicle_type text [not null]
+  observed_at timestamptz [not null]
+  usable_capacity int [not null]
+  occupied_count int [not null]
+  reserved_count int [not null]
+  data_source text [not null, note: 'ACTUAL/SIMULATED']
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  version int [not null, default: 1]
+  indexes {
+    (lot_id, vehicle_type, observed_at, data_source) [unique]
+    (lot_id, vehicle_type, observed_at)
+  }
+}
+
+Table occupancy_forecasts {
+  id uuid [pk, not null]
+  lot_id uuid [not null]
+  vehicle_type text [not null]
+  generated_at timestamptz [not null]
+  target_at timestamptz [not null]
+  data_cutoff_at timestamptz [not null]
+  usable_capacity int [not null]
+  predicted_occupied numeric(12,3) [not null]
+  lower_occupied numeric(12,3)
+  upper_occupied numeric(12,3)
+  model_version text [not null]
+  data_source text [not null, note: 'ACTUAL/SIMULATED']
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  version int [not null, default: 1]
+  indexes {
+    (lot_id, vehicle_type, generated_at, target_at, model_version, data_source) [unique]
+    (lot_id, vehicle_type, target_at, generated_at)
+  }
+}
+
+Table assistant_documents {
+  id uuid [pk, not null]
+  lot_id uuid [note: 'NULL = platform-wide public guide']
+  document_key varchar(128) [not null]
+  revision int [not null]
+  title text [not null]
+  language varchar(10) [not null, default: 'vi']
+  visibility text [not null, default: 'PUBLIC']
+  status text [not null, note: 'DRAFT/PUBLISHED/ARCHIVED']
+  source_reference text [not null, note: 'Approved source reference; never an instruction to fetch a client URL']
+  approved_by uuid
+  published_at timestamptz
+  effective_from timestamptz [not null]
+  effective_until timestamptz
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  version int [not null, default: 1]
+  indexes {
+    (lot_id, document_key, revision) [unique, note: 'SQL requires NULLS NOT DISTINCT for global guides']
+    (lot_id, status, language)
+  }
+}
+
+Table assistant_document_chunks {
+  id uuid [pk, not null]
+  document_id uuid [not null]
+  chunk_index int [not null]
+  section_title text [not null]
+  content text [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  version int [not null, default: 1]
+  indexes {
+    (document_id, chunk_index) [unique]
+  }
+}
+
+Ref: ai_plate_recognitions.lot_id > parking_lots.id
+Ref: ai_plate_recognitions.uploaded_by > app_users.id
+Ref: ai_plate_recognitions.reviewed_by > app_users.id
+Ref: occupancy_snapshots.(lot_id, vehicle_type) > lot_vehicle_policies.(lot_id, vehicle_type)
+Ref: occupancy_forecasts.(lot_id, vehicle_type) > lot_vehicle_policies.(lot_id, vehicle_type)
+Ref: assistant_documents.lot_id > parking_lots.id
+Ref: assistant_documents.approved_by > app_users.id
+Ref: assistant_document_chunks.document_id > assistant_documents.id
+
+TableGroup AI_Extension {
+  ai_plate_recognitions
+  occupancy_snapshots
+  occupancy_forecasts
+  assistant_documents
+  assistant_document_chunks
+}
