@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/Core/" />
+  <Folder Name="/src/Core/Application/">
+    <Project Path="src/Core/Application/ParkingSystem.Application.csproj" />
+  </Folder>
+  <Folder Name="/src/Core/Domain/">
+    <Project Path="src/Core/Domain/ParkingSystem.Domain.csproj" />
+  </Folder>
+  <Folder Name="/src/Infrastructure/">
+    <Project Path="src/Infrastructure/ParkingSystem.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/Presentation/" />
+  <Folder Name="/src/Presentation/WebApi/">
+    <Project Path="src/Presentation/WebApi/ParkingSystem.WebApi.csproj" />
+  </Folder>
+</Solution>
