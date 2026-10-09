@@ -69,3 +69,6 @@ database-backups/
 artifacts/microservices/
 .nuget/
 **/TestResults/
+
+# 9. AI Agent Local Workspace Config & Rules
+.agents/
