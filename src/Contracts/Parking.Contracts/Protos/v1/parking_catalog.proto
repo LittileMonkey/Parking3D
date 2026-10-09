@@ -1,0 +1,6 @@
+syntax = "proto3";
+package parking.catalog.v1;
+option csharp_namespace = "Parking.Contracts.Catalog.V1";
+service ParkingCatalog { rpc LotExists(LotRequest) returns (LotReply); }
+message LotRequest { string lot_id = 1; }
+message LotReply { bool exists = 1; }

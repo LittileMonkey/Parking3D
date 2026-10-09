@@ -1,0 +1,16 @@
+**/bin
+**/obj
+**/node_modules
+**/dist
+.git
+.env
+.env.*
+artifacts
+legacy
+backend-parking-system
+backend_parking_system
+frontend_parking_system
+database-v3
+database-v4
+*.docx
+*.xlsx
