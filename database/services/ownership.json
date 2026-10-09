@@ -1,0 +1,216 @@
+{
+  "originalTables": 47,
+  "owners": {
+    "ai_plate_recognitions": "ai",
+    "app_settings": "parking",
+    "app_users": "identity",
+    "assistant_document_chunks": "ai",
+    "assistant_documents": "ai",
+    "audit_logs": "parking",
+    "auth_tokens": "identity",
+    "billing_accounts": "payment",
+    "billing_lines": "payment",
+    "bookings": "parking",
+    "device_events": "parking",
+    "devices": "parking",
+    "lot_closures": "parking",
+    "lot_gates": "parking",
+    "lot_opening_intervals": "parking",
+    "lot_staff_assignments": "identity",
+    "lot_vehicle_policies": "parking",
+    "map_objects": "parking",
+    "map_versions": "parking",
+    "notifications": "parking",
+    "occupancy_forecasts": "ai",
+    "occupancy_snapshots": "ai",
+    "outbox_events": "parking",
+    "parking_issues": "parking",
+    "parking_levels": "parking",
+    "parking_lots": "parking",
+    "parking_sessions": "parking",
+    "parking_slots": "parking",
+    "payment_attempts": "payment",
+    "payment_webhook_events": "payment",
+    "payments": "payment",
+    "platform_user_roles": "identity",
+    "pricing_plans": "parking",
+    "pricing_rules": "parking",
+    "pricing_snapshots": "parking",
+    "qr_tokens": "parking",
+    "refunds": "payment",
+    "session_slot_assignments": "parking",
+    "slot_feature_links": "parking",
+    "slot_features": "parking",
+    "slot_observations": "parking",
+    "slot_reservations": "parking",
+    "slot_vehicle_types": "parking",
+    "user_vehicle_access": "parking",
+    "vehicle_types": "parking",
+    "vehicles": "parking",
+    "zones": "parking"
+  },
+  "externalReferences": [
+    {
+      "table": "app_settings",
+      "owner": "parking",
+      "statement": "ALTER TABLE public.app_settings ADD CONSTRAINT fk_core_001 FOREIGN KEY (updated_by) REFERENCES public.app_users (id) ON DELETE RESTRICT;",
+      "validation": "Service API/identity or immutable event/quote snapshot; no direct database access."
+    },
+    {
+      "table": "audit_logs",
+      "owner": "parking",
+      "statement": "ALTER TABLE public.audit_logs ADD CONSTRAINT fk_core_002 FOREIGN KEY (actor_user_id) REFERENCES public.app_users (id) ON DELETE RESTRICT;",
+      "validation": "Service API/identity or immutable event/quote snapshot; no direct database access."
+    },
+    {
+      "table": "billing_accounts",
+      "owner": "payment",
+      "statement": "ALTER TABLE public.billing_accounts ADD CONSTRAINT fk_core_005 FOREIGN KEY (booking_id, lot_id, vehicle_id) REFERENCES public.bookings (id, lot_id, vehicle_id) ON DELETE RESTRICT;",
+      "validation": "Service API/identity or immutable event/quote snapshot; no direct database access."
+    },
+    {
+      "table": "billing_accounts",
+      "owner": "payment",
+      "statement": "ALTER TABLE public.billing_accounts ADD CONSTRAINT fk_core_006 FOREIGN KEY (session_id, lot_id, vehicle_id) REFERENCES public.parking_sessions (id, lot_id, vehicle_id) ON DELETE RESTRICT;",
+      "validation": "Service API/identity or immutable event/quote snapshot; no direct database access."
+    },
+    {
+      "table": "billing_lines",
+      "owner": "payment",
+      "statement": "ALTER TABLE public.billing_lines ADD CONSTRAINT fk_core_008 FOREIGN KEY (created_by) REFERENCES public.app_users (id) ON DELETE RESTRICT;",
+      "validation": "Service API/identity or immutable event/quote snapshot; no direct database access."
+    },
+    {
+      "table": "bookings",
+      "owner": "parking",
+      "statement": "ALTER TABLE public.bookings ADD CONSTRAINT fk_core_009 FOREIGN KEY (customer_id) REFERENCES public.app_users (id) ON DELETE RESTRICT;",
+      "validation": "Service API/identity or immutable event/quote snapshot; no direct database access."
+    },
+    {
+      "table": "lot_staff_assignments",
+      "owner": "identity",
+      "statement": "ALTER TABLE public.lot_staff_assignments ADD CONSTRAINT fk_core_021 FOREIGN KEY (lot_id) REFERENCES public.parking_lots (id) ON DELETE RESTRICT;",
+      "validation": "Service API/identity or immutable event/quote snapshot; no direct database access."
+    },
+    {
+      "table": "map_versions",
+      "owner": "parking",
+      "statement": "ALTER TABLE public.map_versions ADD CONSTRAINT fk_core_029 FOREIGN KEY (created_by) REFERENCES public.app_users (id) ON DELETE RESTRICT;",
+      "validation": "Service API/identity or immutable event/quote snapshot; no direct database access."
+    },
+    {
+      "table": "notifications",
+      "owner": "parking",
+      "statement": "ALTER TABLE public.notifications ADD CONSTRAINT fk_core_032 FOREIGN KEY (recipient_user_id) REFERENCES public.app_users (id) ON DELETE RESTRICT;",
+      "validation": "Service API/identity or immutable event/quote snapshot; no direct database access."
+    },
+    {
+      "table": "parking_issues",
+      "owner": "parking",
+      "statement": "ALTER TABLE public.parking_issues ADD CONSTRAINT fk_core_034 FOREIGN KEY (approved_by) REFERENCES public.app_users (id) ON DELETE RESTRICT;",
+      "validation": "Service API/identity or immutable event/quote snapshot; no direct database access."
+    },
+    {
+      "table": "parking_issues",
+      "owner": "parking",
+      "statement": "ALTER TABLE public.parking_issues ADD CONSTRAINT fk_core_038 FOREIGN KEY (reported_by) REFERENCES public.app_users (id) ON DELETE RESTRICT;",
+      "validation": "Service API/identity or immutable event/quote snapshot; no direct database access."
+    },
+    {
+      "table": "parking_sessions",
+      "owner": "parking",
+      "statement": "ALTER TABLE public.parking_sessions ADD CONSTRAINT fk_core_042 FOREIGN KEY (entered_by) REFERENCES public.app_users (id) ON DELETE RESTRICT;",
+      "validation": "Service API/identity or immutable event/quote snapshot; no direct database access."
+    },
+    {
+      "table": "parking_sessions",
+      "owner": "parking",
+      "statement": "ALTER TABLE public.parking_sessions ADD CONSTRAINT fk_core_045 FOREIGN KEY (exited_by) REFERENCES public.app_users (id) ON DELETE RESTRICT;",
+      "validation": "Service API/identity or immutable event/quote snapshot; no direct database access."
+    },
+    {
+      "table": "payments",
+      "owner": "payment",
+      "statement": "ALTER TABLE public.payments ADD CONSTRAINT fk_core_055 FOREIGN KEY (collected_by) REFERENCES public.app_users (id) ON DELETE RESTRICT;",
+      "validation": "Service API/identity or immutable event/quote snapshot; no direct database access."
+    },
+    {
+      "table": "pricing_plans",
+      "owner": "parking",
+      "statement": "ALTER TABLE public.pricing_plans ADD CONSTRAINT fk_core_057 FOREIGN KEY (created_by) REFERENCES public.app_users (id) ON DELETE RESTRICT;",
+      "validation": "Service API/identity or immutable event/quote snapshot; no direct database access."
+    },
+    {
+      "table": "refunds",
+      "owner": "payment",
+      "statement": "ALTER TABLE public.refunds ADD CONSTRAINT fk_core_063 FOREIGN KEY (approved_by) REFERENCES public.app_users (id) ON DELETE RESTRICT;",
+      "validation": "Service API/identity or immutable event/quote snapshot; no direct database access."
+    },
+    {
+      "table": "refunds",
+      "owner": "payment",
+      "statement": "ALTER TABLE public.refunds ADD CONSTRAINT fk_core_065 FOREIGN KEY (requested_by) REFERENCES public.app_users (id) ON DELETE RESTRICT;",
+      "validation": "Service API/identity or immutable event/quote snapshot; no direct database access."
+    },
+    {
+      "table": "session_slot_assignments",
+      "owner": "parking",
+      "statement": "ALTER TABLE public.session_slot_assignments ADD CONSTRAINT fk_core_066 FOREIGN KEY (assigned_by) REFERENCES public.app_users (id) ON DELETE RESTRICT;",
+      "validation": "Service API/identity or immutable event/quote snapshot; no direct database access."
+    },
+    {
+      "table": "slot_observations",
+      "owner": "parking",
+      "statement": "ALTER TABLE public.slot_observations ADD CONSTRAINT fk_core_073 FOREIGN KEY (verified_by) REFERENCES public.app_users (id) ON DELETE RESTRICT;",
+      "validation": "Service API/identity or immutable event/quote snapshot; no direct database access."
+    },
+    {
+      "table": "user_vehicle_access",
+      "owner": "parking",
+      "statement": "ALTER TABLE public.user_vehicle_access ADD CONSTRAINT fk_core_078 FOREIGN KEY (user_id) REFERENCES public.app_users (id) ON DELETE RESTRICT;",
+      "validation": "Service API/identity or immutable event/quote snapshot; no direct database access."
+    },
+    {
+      "table": "ai_plate_recognitions",
+      "owner": "ai",
+      "references": "parking_lots",
+      "validation": "External ID; service authorization/snapshot required."
+    },
+    {
+      "table": "ai_plate_recognitions",
+      "owner": "ai",
+      "references": "app_users",
+      "validation": "External ID; service authorization/snapshot required."
+    },
+    {
+      "table": "ai_plate_recognitions",
+      "owner": "ai",
+      "references": "app_users",
+      "validation": "External ID; service authorization/snapshot required."
+    },
+    {
+      "table": "occupancy_snapshots",
+      "owner": "ai",
+      "references": "lot_vehicle_policies",
+      "validation": "External ID; service authorization/snapshot required."
+    },
+    {
+      "table": "occupancy_forecasts",
+      "owner": "ai",
+      "references": "lot_vehicle_policies",
+      "validation": "External ID; service authorization/snapshot required."
+    },
+    {
+      "table": "assistant_documents",
+      "owner": "ai",
+      "references": "parking_lots",
+      "validation": "External ID; service authorization/snapshot required."
+    },
+    {
+      "table": "assistant_documents",
+      "owner": "ai",
+      "references": "app_users",
+      "validation": "External ID; service authorization/snapshot required."
+    }
+  ]
+}
