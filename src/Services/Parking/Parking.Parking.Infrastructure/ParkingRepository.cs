@@ -136,4 +136,309 @@ public sealed class ParkingRepository(NpgsqlDataSource db) : IParkingRepository
         {dedupe.Parameters.AddWithValue("id",requestId);dedupe.Parameters.AddWithValue("hash",fingerprint);dedupe.Parameters.AddWithValue("outcome",JsonSerializer.Serialize(result));await dedupe.ExecuteNonQueryAsync(ct);}
         await tx.CommitAsync(ct);return result;
     }
+
+    public async Task<LotAvailabilityView> GetLotAvailabilityAsync(
+        Guid lotId,
+        DateTimeOffset? startTime,
+        DateTimeOffset? endTime,
+        string? vehicleType,
+        Guid? levelId,
+        CancellationToken ct)
+    {
+        var queryStart = startTime ?? DateTimeOffset.UtcNow;
+        var queryEnd = endTime ?? queryStart.AddMinutes(60);
+
+        if (queryEnd <= queryStart)
+            throw new ServiceException(400, "EndTime must be greater than StartTime");
+
+        // 1. Verify Parking Lot exists & get details
+        await using var lotCmd = db.CreateCommand("SELECT code, name, timezone, status FROM parking_lots WHERE id = @lot");
+        lotCmd.Parameters.AddWithValue("lot", lotId);
+        await using var lotReader = await lotCmd.ExecuteReaderAsync(ct);
+        if (!await lotReader.ReadAsync(ct))
+            throw new ServiceException(404, "Parking lot not found");
+
+        var lotCode = lotReader.GetString(0);
+        var lotStatus = lotReader.GetString(3);
+        if (lotStatus != "ACTIVE")
+            throw new ServiceException(400, "Parking lot is inactive or closed");
+
+        var tzName = lotReader.GetString(2);
+        TimeZoneInfo tz;
+        try { tz = TimeZoneInfo.FindSystemTimeZoneById(tzName); }
+        catch { tz = TimeZoneInfo.Utc; }
+        await lotReader.CloseAsync();
+
+        // 2. Query all levels for this lot
+        var levelsMap = new Dictionary<Guid, (string Code, string Name, int Order, List<SlotAvailabilityItem> Slots)>();
+        await using var lvlCmd = db.CreateCommand("SELECT id, code, name, display_order FROM parking_levels WHERE lot_id = @lot ORDER BY display_order");
+        lvlCmd.Parameters.AddWithValue("lot", lotId);
+        await using var lvlReader = await lvlCmd.ExecuteReaderAsync(ct);
+        while (await lvlReader.ReadAsync(ct))
+        {
+            var lId = lvlReader.GetGuid(0);
+            levelsMap[lId] = (lvlReader.GetString(1), lvlReader.GetString(2), lvlReader.GetInt32(3), new List<SlotAvailabilityItem>());
+        }
+        await lvlReader.CloseAsync();
+
+        // 3. Query slots and determine availability status
+        var targetType = string.IsNullOrWhiteSpace(vehicleType) ? null : vehicleType.Trim();
+        var sql = """
+            SELECT 
+                s.id,
+                s.code,
+                s.level_id,
+                z.code AS zone_code,
+                s.operational_status::text,
+                COALESCE((
+                    SELECT array_agg(vt.vehicle_type_code) 
+                    FROM slot_vehicle_types vt 
+                    WHERE vt.slot_id = s.id
+                ), ARRAY['Car']::text[]) AS supported_types,
+                COALESCE((
+                    SELECT array_agg(sf.feature_code) 
+                    FROM slot_feature_links fl 
+                    JOIN slot_features sf ON sf.id = fl.feature_id 
+                    WHERE fl.slot_id = s.id
+                ), ARRAY[]::text[]) AS features,
+                EXISTS(
+                    SELECT 1 FROM session_slot_assignments sa 
+                    WHERE sa.slot_id = s.id AND sa.vacated_at IS NULL
+                ) AS is_physically_occupied,
+                EXISTS(
+                    SELECT 1 FROM slot_reservations sr
+                    JOIN bookings b ON b.id = sr.booking_id
+                    WHERE sr.slot_id = s.id 
+                      AND sr.status IN ('HELD', 'CONFIRMED')
+                      AND b.status IN ('PENDING_PAYMENT', 'CONFIRMED')
+                      AND NOT (sr.ends_at <= @start OR sr.starts_at >= @end)
+                ) AS is_reserved
+            FROM parking_slots s
+            LEFT JOIN zones z ON z.id = s.zone_id
+            WHERE s.lot_id = @lot
+              AND (@levelId IS NULL OR s.level_id = @levelId)
+            ORDER BY s.code
+            """;
+
+        await using var slotCmd = db.CreateCommand(sql);
+        slotCmd.Parameters.AddWithValue("lot", lotId);
+        slotCmd.Parameters.AddWithValue("levelId", (object?)levelId ?? DBNull.Value);
+        slotCmd.Parameters.AddWithValue("start", queryStart.UtcDateTime);
+        slotCmd.Parameters.AddWithValue("end", queryEnd.UtcDateTime);
+
+        int totalSlots = 0;
+        int availableCount = 0;
+        int heldCount = 0;
+        int occupiedCount = 0;
+        int maintenanceCount = 0;
+
+        await using var r = await slotCmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            var sId = r.GetGuid(0);
+            var sCode = r.GetString(1);
+            var sLevelId = r.GetGuid(2);
+            var zCode = r.IsDBNull(3) ? "UNZONED" : r.GetString(3);
+            var opStatus = r.GetString(4);
+            var supportedTypes = (string[])r.GetValue(5);
+            var features = (string[])r.GetValue(6);
+            var isPhysicallyOccupied = r.GetBoolean(7);
+            var isReserved = r.GetBoolean(8);
+
+            // Filter vehicle type if provided
+            if (targetType != null && !supportedTypes.Any(t => string.Equals(t, targetType, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            totalSlots++;
+
+            string finalStatus;
+            if (opStatus != "ACTIVE")
+            {
+                finalStatus = "MAINTENANCE";
+                maintenanceCount++;
+            }
+            else if (isPhysicallyOccupied)
+            {
+                finalStatus = "OCCUPIED";
+                occupiedCount++;
+            }
+            else if (isReserved)
+            {
+                finalStatus = "HELD";
+                heldCount++;
+            }
+            else
+            {
+                finalStatus = "AVAILABLE";
+                availableCount++;
+            }
+
+            var item = new SlotAvailabilityItem(sId, sCode, zCode, supportedTypes, features, finalStatus);
+            if (levelsMap.TryGetValue(sLevelId, out var levelGroup))
+            {
+                levelGroup.Slots.Add(item);
+            }
+        }
+
+        var resultLevels = levelsMap
+            .OrderBy(kv => kv.Value.Order)
+            .Select(kv => new LevelAvailabilityItem(
+                kv.Key,
+                kv.Value.Code,
+                kv.Value.Name,
+                kv.Value.Slots
+            ))
+            .ToList();
+
+        return new LotAvailabilityView(
+            lotId,
+            lotCode,
+            new QueryTimeRange(queryStart, queryEnd),
+            totalSlots,
+            availableCount,
+            heldCount,
+            occupiedCount,
+            maintenanceCount,
+            resultLevels
+        );
+    }
+
+    public async Task<BookingDetailView> GetBookingDetailAsync(
+        Guid bookingId,
+        Guid requestingUserId,
+        CancellationToken ct)
+    {
+        await using var conn = await db.OpenConnectionAsync(ct);
+        var sql = """
+            SELECT 
+                b.id,
+                b.code,
+                b.lot_id,
+                p.name AS lot_name,
+                b.customer_id,
+                sr.slot_id,
+                s.code AS slot_code,
+                b.plate_snapshot,
+                b.vehicle_type,
+                b.starts_at,
+                b.ends_at,
+                b.hold_expires_at,
+                b.arrival_deadline,
+                b.status::text,
+                b.estimated_amount,
+                qt.token AS qr_token,
+                b.created_at
+            FROM bookings b
+            JOIN parking_lots p ON p.id = b.lot_id
+            LEFT JOIN slot_reservations sr ON sr.booking_id = b.id AND sr.status IN ('HELD', 'CONFIRMED')
+            LEFT JOIN parking_slots s ON s.id = sr.slot_id
+            LEFT JOIN qr_tokens qt ON qt.booking_id = b.id AND qt.status = 'ACTIVE'
+            WHERE b.id = @bookingId
+            """;
+
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("bookingId", bookingId);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+
+        if (!await r.ReadAsync(ct))
+            throw new ServiceException(404, "Booking not found");
+
+        var bId = r.GetGuid(0);
+        var bCode = r.GetString(1);
+        var lotId = r.GetGuid(2);
+        var lotName = r.GetString(3);
+        var customerId = r.IsDBNull(4) ? (Guid?)null : r.GetGuid(4);
+        var slotId = r.IsDBNull(5) ? (Guid?)null : r.GetGuid(5);
+        var slotCode = r.IsDBNull(6) ? null : r.GetString(6);
+        var plate = r.GetString(7);
+        var vehicleType = r.GetString(8);
+        var startsAt = new DateTimeOffset(r.GetDateTime(9), TimeSpan.Zero);
+        var endsAt = new DateTimeOffset(r.GetDateTime(10), TimeSpan.Zero);
+        var holdExpiresAt = r.IsDBNull(11) ? (DateTimeOffset?)null : new DateTimeOffset(r.GetDateTime(11), TimeSpan.Zero);
+        var arrivalDeadline = new DateTimeOffset(r.GetDateTime(12), TimeSpan.Zero);
+        var status = r.GetString(13);
+        var amount = r.GetInt64(14);
+        var qrToken = r.IsDBNull(15) ? null : r.GetString(15);
+        var createdAt = new DateTimeOffset(r.GetDateTime(16), TimeSpan.Zero);
+        await r.CloseAsync();
+
+        // Facility-Scoped RBAC & Resource Ownership Check
+        bool isOwner = customerId.HasValue && customerId.Value == requestingUserId;
+        if (!isOwner)
+        {
+            // Check if Staff assigned to this specific lot
+            await using var staffCmd = new NpgsqlCommand("""
+                SELECT 1 FROM lot_staff_assignments 
+                WHERE lot_id = @lot AND user_id = @user 
+                  AND revoked_at IS NULL 
+                  AND (valid_until IS NULL OR valid_until > now())
+                """, conn);
+            staffCmd.Parameters.AddWithValue("lot", lotId);
+            staffCmd.Parameters.AddWithValue("user", requestingUserId);
+            var isStaff = await staffCmd.ExecuteScalarAsync(ct) != null;
+
+            if (!isStaff)
+                throw new ServiceException(403, "Forbidden: Resource ownership or facility scope violation");
+        }
+
+        return new BookingDetailView(
+            bId,
+            bCode,
+            lotId,
+            lotName,
+            slotId,
+            slotCode,
+            plate,
+            vehicleType,
+            startsAt,
+            endsAt,
+            holdExpiresAt,
+            arrivalDeadline,
+            status,
+            amount,
+            qrToken,
+            createdAt
+        );
+    }
+
+    public async Task<int> ExpireHoldsAsync(CancellationToken ct)
+    {
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await using var tx = await conn.BeginTransactionAsync(ct);
+
+        // Core Invariants:
+        // 1. Do not release slot if vehicle is physically occupying slot (session_slot_assignments.vacated_at IS NULL)
+        // 2. Only release HELD reservations for PENDING_PAYMENT bookings where hold_expires_at <= now()
+        var sql = """
+            WITH expired_candidates AS (
+                SELECT b.id AS booking_id, sr.slot_id
+                FROM bookings b
+                JOIN slot_reservations sr ON sr.booking_id = b.id
+                WHERE b.status = 'PENDING_PAYMENT'
+                  AND b.hold_expires_at <= now()
+                  AND sr.status = 'HELD'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM session_slot_assignments sa 
+                      WHERE sa.slot_id = sr.slot_id AND sa.vacated_at IS NULL
+                  )
+            ),
+            released_reservations AS (
+                UPDATE slot_reservations sr
+                SET status = 'RELEASED', released_at = now(), release_reason = 'HOLD_EXPIRED'
+                FROM expired_candidates ec
+                WHERE sr.booking_id = ec.booking_id AND sr.slot_id = ec.slot_id
+                RETURNING sr.booking_id
+            )
+            UPDATE bookings b
+            SET status = 'EXPIRED', version = version + 1
+            FROM (SELECT DISTINCT booking_id FROM released_reservations) rr
+            WHERE b.id = rr.booking_id;
+            """;
+
+        await using var cmd = new NpgsqlCommand(sql, conn, tx);
+        var affected = await cmd.ExecuteNonQueryAsync(ct);
+        await tx.CommitAsync(ct);
+        return affected;
+    }
 }
+

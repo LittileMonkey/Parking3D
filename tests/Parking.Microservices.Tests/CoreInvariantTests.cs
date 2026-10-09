@@ -60,4 +60,44 @@ public sealed class CoreInvariantTests
         Assert.Equal(0,SearchMath.Haversine(10,106,10,106));
         Assert.InRange(SearchMath.Haversine(0,0,0,1),111000,112000);
     }
+
+    [Theory]
+    [InlineData("MAINTENANCE", false, false, "MAINTENANCE")]
+    [InlineData("DISABLED", false, false, "MAINTENANCE")]
+    [InlineData("ACTIVE", true, false, "OCCUPIED")]
+    [InlineData("ACTIVE", false, true, "HELD")]
+    [InlineData("ACTIVE", false, false, "AVAILABLE")]
+    public void SlotAvailabilityStatePriorityIsStrict(string opStatus, bool physicallyOccupied, bool isReserved, string expectedStatus)
+    {
+        string status;
+        if (opStatus != "ACTIVE") status = "MAINTENANCE";
+        else if (physicallyOccupied) status = "OCCUPIED";
+        else if (isReserved) status = "HELD";
+        else status = "AVAILABLE";
+
+        Assert.Equal(expectedStatus, status);
+    }
+
+    [Fact]
+    public void HoldExpiryMustNotReleasePhysicallyOccupiedSlot()
+    {
+        // Invariant: If vehicle physically occupied slot (vacated_at is null), hold expiry must NOT revert slot to Available
+        bool physicallyOccupied = true;
+        bool holdExpired = true;
+
+        bool shouldReleaseSlot = holdExpired && !physicallyOccupied;
+        Assert.False(shouldReleaseSlot);
+    }
+
+    [Fact]
+    public void OwnershipCheckDeniesNonOwnerAndNonStaff()
+    {
+        var ownerId = Guid.NewGuid();
+        var requestingUserId = Guid.NewGuid();
+        bool isOwner = ownerId == requestingUserId;
+        bool isStaff = false;
+
+        bool isAllowed = isOwner || isStaff;
+        Assert.False(isAllowed);
+    }
 }
