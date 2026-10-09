@@ -1,8 +1,19 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
   <ItemGroup>
-    <ProjectReference Include="../Parking.Identity.Application/Parking.Identity.Application.csproj" />
-    <ProjectReference Include="../../../BuildingBlocks/Parking.ServiceDefaults/Parking.ServiceDefaults.csproj" />
-    <ProjectReference Include="../../../Contracts/Parking.Contracts/Parking.Contracts.csproj" />
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="10.0.12" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Identity.Application\Parking.Identity.Application.csproj" />
+    <ProjectReference Include="..\Parking.Identity.Application\Parking.Identity.Application.csproj" />
+    <ProjectReference Include="..\Parking.Identity.Domain\Parking.Identity.Domain.csproj" />
+  </ItemGroup>
+
 </Project>
