@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -23,28 +23,99 @@ namespace Parking.Parking.Api.Middleware
         public string ErrorCode { get; set; } = string.Empty;
         public string ErrorField { get; set; } = string.Empty;
     }
-    // 2. Lớp xử lý phân loại lỗi (Của Mentor)
+    // 2. Lớp xử lý phân loại lỗi (Theo đúng chuẩn mẫu của Mentor)
     public class ErrorExceptionHandler
     {
+        private readonly Dictionary<Type, Func<Exception, ErrorMessage>> ExceptionHandling;
+
+        public ErrorExceptionHandler()
+        {
+            this.ExceptionHandling = new Dictionary<Type, Func<Exception, ErrorMessage>>
+            {
+                { typeof(ValidationException), HandleValidationException },
+                { typeof(NotImplementedException), HandleNotImplementedException },
+                { typeof(Exception), HandleGenericException }
+            };
+        }
+
         public (int, ErrorMessage) HandleException(Exception exception)
         {
-            if (exception is ValidationException validationException)
+            var statusCode = GetStatusCode(exception);
+            var errorMessage = new ErrorMessage();
+
+            if (this.ExceptionHandling.TryGetValue(exception.GetType(), out var handler))
             {
-                var listError = validationException.Errors.Select(error => new ErrorDetail
-                {
-                    ErrorMessage = error.ErrorMessage,
-                    ErrorCode = error.ErrorCode,
-                    ErrorField = error.PropertyName,
-                }).ToList();
-                return (StatusCodes.Status400BadRequest, new ErrorMessage { Message = "Dữ liệu không hợp lệ", ErrorDetails = listError });
+                errorMessage = handler(exception);
+            }
+            else
+            {
+                errorMessage = HandleGenericException(exception);
             }
 
-            // Bắt lỗi chung chung (500 Server Error)
-            return (StatusCodes.Status500InternalServerError, new ErrorMessage
+            return (statusCode, errorMessage);
+        }
+
+        private static int GetStatusCode(Exception exception)
+        {
+            return exception switch
             {
-                Message = "Lỗi hệ thống",
-                ErrorDetails = new List<ErrorDetail> { new ErrorDetail { ErrorMessage = exception.Message } }
-            });
+                ValidationException => StatusCodes.Status400BadRequest,
+                NotImplementedException => StatusCodes.Status501NotImplemented,
+                _ => StatusCodes.Status500InternalServerError
+            };
+        }
+
+        private ErrorMessage HandleValidationException(Exception exception)
+        {
+            var validationException = exception as ValidationException;
+            ArgumentNullException.ThrowIfNull(validationException);
+
+            var listError = validationException.Errors.Select(error => new ErrorDetail
+            {
+                ErrorMessage = error.ErrorMessage,
+                ErrorCode = error.ErrorCode,
+                ErrorField = error.PropertyName
+            }).ToList();
+
+            return new ErrorMessage
+            {
+                Message = "Dữ liệu không hợp lệ.",
+                ErrorDetails = listError
+            };
+        }
+
+        private ErrorMessage HandleNotImplementedException(Exception exception)
+        {
+            return new ErrorMessage
+            {
+                Message = "Chức năng chưa được triển khai.",
+                ErrorDetails = new List<ErrorDetail>
+                {
+                    new()
+                    {
+                        ErrorMessage = exception.Message,
+                        ErrorCode = "NotImplemented",
+                        ErrorField = string.Empty
+                    }
+                }
+            };
+        }
+
+        private ErrorMessage HandleGenericException(Exception exception)
+        {
+            return new ErrorMessage
+            {
+                Message = "Đã xảy ra lỗi hệ thống.",
+                ErrorDetails = new List<ErrorDetail>
+                {
+                    new()
+                    {
+                        ErrorMessage = exception.Message,
+                        ErrorCode = "InternalServerError",
+                        ErrorField = exception.Source ?? string.Empty
+                    }
+                }
+            };
         }
     }
     // 3. Lớp Middleware đứng chặn ở cổng Server (Của Mentor)
