@@ -11,10 +11,11 @@ import {
   Clock,
   Cpu,
   CreditCard,
+  Droplets,
   FileText,
+  Flame,
   LogOut,
   MapPin,
-  Menu,
   Navigation,
   ParkingCircle,
   Radio,
@@ -22,12 +23,15 @@ import {
   Search,
   ShieldCheck,
   SlidersHorizontal,
+  Sun,
   User,
+  Wind,
   X,
   Zap,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { api, type ParkingSlot } from "../services/api";
+import { useLanguage } from "../context/LanguageContext";
+import { api, type BuildingEnvironment, type ParkingSlot } from "../services/api";
 
 const parkingPhotos = [
   {
@@ -50,12 +54,12 @@ const parkingPhotos = [
   },
 ];
 
-function slotStatus(status: string) {
+function slotStatus(status: string, lang: string = "vi") {
   const normalized = status.toLowerCase();
-  if (normalized.includes("available")) return { className: "available", label: "Còn chỗ" };
-  if (normalized.includes("reserved")) return { className: "reserved", label: "Đã giữ" };
-  if (normalized.includes("occupied")) return { className: "occupied", label: "Đang có xe" };
-  return { className: "maintenance", label: status || "Không rõ" };
+  if (normalized.includes("available")) return { className: "available", label: lang === "en" ? "Available" : "Còn chỗ" };
+  if (normalized.includes("reserved")) return { className: "reserved", label: lang === "en" ? "Reserved" : "Đã giữ" };
+  if (normalized.includes("occupied")) return { className: "occupied", label: lang === "en" ? "Occupied" : "Đang có xe" };
+  return { className: "maintenance", label: status || (lang === "en" ? "Unknown" : "Không rõ") };
 }
 
 const SOLUTIONS = [
@@ -99,27 +103,51 @@ const SOLUTIONS = [
 
 export default function Home() {
   const { user, isAuthenticated, logout } = useAuth();
+  const { lang, setLang, t } = useLanguage();
   const [slots, setSlots] = useState<ParkingSlot[]>([]);
   const [apiState, setApiState] = useState<"loading" | "online" | "offline">("loading");
   const [showLogout, setShowLogout] = useState(false);
   const [mobileMenu, setMobileMenu] = useState(false);
-  const [activeFilter, setActiveFilter] = useState("Gần tôi");
+  const [activeFilter, setActiveFilter] = useState("filter.near");
   const [mapTab, setMapTab] = useState<"map" | "satellite" | "3d">("map");
+
+  const [envData, setEnvData] = useState<BuildingEnvironment>({
+    smokeDensity: "0.014 mg/m³",
+    smokeStatus: "AN TOÀN",
+    airQualityIndex: 42,
+    airQualityStatus: "TỐT (AQI)",
+    co2Level: "415 ppm",
+    temperature: "29°C",
+    weatherCondition: "Nắng nhẹ • Gió 8 km/h",
+    humidity: "65%",
+    city: "TP. HỒ CHÍ MINH",
+    updatedAt: "15:20",
+  });
 
   useEffect(() => {
     let active = true;
-    Promise.all([api.checkHealth(), api.getSlots()])
-      .then(([healthy, items]) => {
+    Promise.all([api.checkHealth(), api.getSlots(), api.getBuildingEnvironment()])
+      .then(([healthy, items, env]) => {
         if (!active) return;
         setSlots(items);
         setApiState(healthy ? "online" : "offline");
+        if (env) setEnvData(env);
       })
       .catch(() => {
         if (!active) return;
         setApiState("offline");
       });
+
+    // định kỳ 15s cập nhật telemetry mock
+    const timer = setInterval(() => {
+      api.getBuildingEnvironment().then((env) => {
+        if (active && env) setEnvData(env);
+      });
+    }, 15000);
+
     return () => {
       active = false;
+      clearInterval(timer);
     };
   }, []);
 
@@ -129,32 +157,58 @@ export default function Home() {
   };
 
   const filterPills = [
-    "Gần tôi",
-    "Còn chỗ trống",
-    "Giá tốt nhất",
-    "Có chỗ sạc",
-    "Trạm sạc EV",
-    "Mở cửa 24/7",
-    "Ô tô 4-7 chỗ",
+    { key: "filter.near", fallback: "Gần tôi" },
+    { key: "filter.available", fallback: "Còn chỗ trống" },
+    { key: "filter.best_price", fallback: "Giá tốt nhất" },
+    { key: "filter.has_charge", fallback: "Có chỗ sạc" },
+    { key: "filter.ev", fallback: "Trạm sạc EV" },
+    { key: "filter.open_247", fallback: "Mở cửa 24/7" },
+    { key: "filter.car_type", fallback: "Ô tô 4-7 chỗ" },
   ];
+
+  const marqueeTelemetryItems = (
+    <>
+      <span className="telemetry-item">
+        <span className="live-dot-green" /> <strong>{t("topbar.infra")}</strong> {t("topbar.active")}
+      </span>
+      <span className="bar-divider">•</span>
+
+      <span className="telemetry-item smoke-item">
+        <Flame size={14} className="text-amber-500 mr-1" />
+        {t("topbar.smoke")} <strong className="val-highlight">{envData.smokeDensity}</strong> ({envData.smokeStatus === "AN TOÀN" ? t("topbar.safe") : t("topbar.warning")})
+      </span>
+      <span className="bar-divider">•</span>
+
+      <span className="telemetry-item aqi-item">
+        <Wind size={14} className="text-teal-600 mr-1" />
+        {t("topbar.air")} <strong className="val-highlight">AQI {envData.airQualityIndex}</strong> - {envData.airQualityIndex <= 50 ? t("topbar.good") : t("topbar.moderate")} | CO₂: {envData.co2Level}
+      </span>
+      <span className="bar-divider">•</span>
+
+      <span className="telemetry-item weather-item">
+        <Sun size={14} className="text-yellow-500 mr-1" />
+        {t("topbar.weather")} <strong>{lang === "en" ? t("topbar.city") : envData.city} {envData.temperature}</strong> ({lang === "en" ? t("topbar.weather_desc") : envData.weatherCondition})
+      </span>
+      <span className="bar-divider">•</span>
+
+      <span className="telemetry-item humidity-item">
+        <Droplets size={14} className="text-cyan-500 mr-1" />
+        {t("topbar.humidity")} <strong>{envData.humidity}</strong>
+      </span>
+      <span className="bar-divider">•</span>
+    </>
+  );
 
   return (
     <div className="site-shell light-theme">
-      {/* ── 1. Top Status Banner ── */}
-      <div className="top-status-bar">
-        <div className="page-width status-bar-inner">
-          <div className="status-left">
-            <span className="live-status-pill">
-              <span className="live-dot-green" /> HẠ TẦNG GIÁO SÁT QUỐC GIA: 100% HOẠT ĐỘNG
-            </span>
-            <span className="bar-divider">|</span>
-
-            <span className="bar-divider">|</span>
+      {/* ── 1. Top Status Banner (Animated Ticker: Trượt từ phải sang trái liên tục) ── */}
+      <div className="top-status-bar marquee-status-bar" aria-label="Bảng tin môi trường và cảm biến bãi đỗ xe trực tuyến">
+        <div className="marquee-track">
+          <div className="marquee-content">
+            {marqueeTelemetryItems}
           </div>
-          <div className="status-right">
-
-            <span className="bar-divider">|</span>
-            <span className="location-weather">TP. HỒ CHÍ MINH • 29°C</span>
+          <div className="marquee-content" aria-hidden="true">
+            {marqueeTelemetryItems}
           </div>
         </div>
       </div>
@@ -176,24 +230,38 @@ export default function Home() {
 
           <nav className={`main-nav-light ${mobileMenu ? "is-open" : ""}`} aria-label="Điều hướng chính">
             <a href="#gis-section" onClick={() => setMobileMenu(false)} className="nav-item">
-              Tìm Bãi Đỗ
+              {t("nav.find")}
             </a>
             <a href="#gis-section" onClick={() => setMobileMenu(false)} className="nav-item">
-              Sơ Đồ &amp; Đặt Chỗ
+              {t("nav.map")}
             </a>
             <a href="#solutions" onClick={() => setMobileMenu(false)} className="nav-item">
-              Giải Pháp
+              {t("nav.solutions")}
             </a>
             <a href="#about" onClick={() => setMobileMenu(false)} className="nav-item">
-              Hạ Tầng
+              {t("nav.infrastructure")}
             </a>
           </nav>
 
           <div className="header-actions-light">
-            <div className="lang-switcher">
-              <span className="active-lang">VN</span>
+            <div className="lang-switcher" role="group" aria-label="Chọn ngôn ngữ">
+              <button
+                type="button"
+                className={`lang-btn ${lang === "vi" ? "active" : ""}`}
+                onClick={() => setLang("vi")}
+                title="Tiếng Việt"
+              >
+                VN
+              </button>
               <span className="lang-sep">|</span>
-              <span className="inactive-lang">EN</span>
+              <button
+                type="button"
+                className={`lang-btn ${lang === "en" ? "active" : ""}`}
+                onClick={() => setLang("en")}
+                title="English"
+              >
+                EN
+              </button>
             </div>
 
             <button className="icon-btn" aria-label="Thông báo">
@@ -207,53 +275,54 @@ export default function Home() {
                 </div>
                 <div className="user-info-text">
                   <span className="user-name">{user?.fullName || user?.userName}</span>
-                  <span className="user-role">Khách hàng VIP</span>
+                  <span className="user-role">{t("nav.vip")}</span>
                 </div>
-                <button className="logout-icon-btn" title="Đăng xuất" onClick={() => setShowLogout(true)}>
+                <button className="logout-icon-btn" title={t("nav.logout")} onClick={() => setShowLogout(true)}>
                   <LogOut size={15} />
                 </button>
               </div>
             ) : (
               <div className="auth-btns">
-                <Link className="login-link-light" to="/login">
-                  Đăng Nhập
+                <Link className="login-btn-black header-auth-btn" to="/login">
+                  {t("nav.login")}
                 </Link>
-                <Link className="button button-primary-cyan" to="/register">
-                  Đăng Ký Nhanh
+                <Link className="register-btn-cyan header-auth-btn" to="/register">
+                  {t("nav.register")}
                 </Link>
               </div>
             )}
-
-            <button
-              className="menu-toggle-light"
-              aria-label={mobileMenu ? "Đóng menu" : "Mở menu"}
-              onClick={() => setMobileMenu(!mobileMenu)}
-            >
-              {mobileMenu ? <X size={22} /> : <Menu size={22} />}
-            </button>
           </div>
         </div>
       </header>
 
       <main>
         {/* ── 3. Light Hero Section ── */}
-        <section className="hero-light-section">
-          <div className="hero-bg-gradient" />
+        <section className="hero-light-section hero-animated-parking-bg">
+          {/* Animated Parking Layer */}
+          <div className="parking-motion-bg">
+            <div className="parking-neon-grid" />
+            <div className="parking-laser-scanner" />
+            <div className="parking-traffic-stream">
+              <span className="car-pulse car-pulse-1" />
+              <span className="car-pulse car-pulse-2" />
+              <span className="car-pulse car-pulse-3" />
+            </div>
+            <div className="hero-bg-overlay-glass" />
+          </div>
           <div className="page-width hero-light-content">
             <div className="hero-pill-badge">
               <span className="pill-dot" />
-              MẠNG LƯỚI HẠ TẦNG GIÁO SÁT QUỐC GIA • LIVE TELEMETRY V4 URBAN MOBILITY ENGINE
+              {t("hero.badge")}
             </div>
 
             <h1 className="hero-light-title">
-              Tìm Chỗ Đỗ Xe Thông Minh,
+              {t("hero.title_part1")}
               <br />
-              Nhanh <span className="text-gradient-cyan">Chóng &amp; Chuẩn Xác</span>
+              {t("hero.title_part2")} <span className="text-gradient-cyan">{t("hero.title_part3")}</span>
             </h1>
 
             <p className="hero-light-desc">
-              Khám phá các bãi đỗ xe gần bạn, kiểm tra tình trạng chỗ trống theo thời gian thực và đặt
-              trước vị trí với công nghệ IoT, GIS và ANPR.
+              {t("hero.desc")}
             </p>
 
             {/* Floating Glass Search Container */}
@@ -261,50 +330,50 @@ export default function Home() {
               <div className="search-grid-inputs">
                 <div className="search-input-col">
                   <label>
-                    <MapPin size={14} className="input-icon text-cyan-600" /> CỬA ĐIỂM CẦN ĐẾN
+                    <MapPin size={14} className="input-icon text-cyan-600" /> {t("search.destination")}
                   </label>
                   <div className="select-box">
-                    <span>Quận 1, TP. Hồ Chí Minh</span>
+                    <span>{t("search.destination_val")}</span>
                     <ChevronDown size={15} className="text-gray-400" />
                   </div>
                 </div>
 
                 <div className="search-input-col">
                   <label>
-                    <Clock size={14} className="input-icon text-cyan-600" /> THỜI GIAN ĐẾN
+                    <Clock size={14} className="input-icon text-cyan-600" /> {t("search.time")}
                   </label>
                   <div className="select-box">
-                    <span>Hôm nay, 14:00 - 17:00</span>
+                    <span>{t("search.time_val")}</span>
                     <ChevronDown size={15} className="text-gray-400" />
                   </div>
                 </div>
 
                 <div className="search-input-col">
                   <label>
-                    <Car size={14} className="input-icon text-cyan-600" /> LOẠI PHƯƠNG TIỆN
+                    <Car size={14} className="input-icon text-cyan-600" /> {t("search.vehicle")}
                   </label>
                   <div className="select-box">
-                    <span>Ô tô 4 - 7 chỗ</span>
+                    <span>{t("search.vehicle_val")}</span>
                     <ChevronDown size={15} className="text-gray-400" />
                   </div>
                 </div>
 
                 <button className="search-submit-btn">
-                  <Search size={18} /> Tìm Bãi Đỗ Xe
+                  <Search size={18} /> {t("search.submit")}
                 </button>
               </div>
 
               {/* Quick Filters Row */}
               <div className="search-filter-row">
-                <span className="filter-title">Bộ lọc nhanh:</span>
+                <span className="filter-title">{t("search.filter_label")}</span>
                 <div className="filter-chips">
                   {filterPills.map((pill) => (
                     <button
-                      key={pill}
-                      className={`chip ${activeFilter === pill ? "active" : ""}`}
-                      onClick={() => setActiveFilter(pill)}
+                      key={pill.key}
+                      className={`chip ${activeFilter === pill.key ? "active" : ""}`}
+                      onClick={() => setActiveFilter(pill.key)}
                     >
-                      {pill}
+                      {t(pill.key)}
                     </button>
                   ))}
                 </div>
@@ -314,13 +383,13 @@ export default function Home() {
             {/* Under Search Badges */}
             <div className="hero-trust-bar">
               <div className="trust-item">
-                <BadgeCheck size={16} className="text-cyan-600" /> Chứng nhận ANPR chuẩn Quốc gia
+                <BadgeCheck size={16} className="text-cyan-600" /> {t("hero.trust_1")}
               </div>
               <div className="trust-item">
-                <ShieldCheck size={16} className="text-cyan-600" /> Bàn giao lưới thời gian thực GiST/Spatial
+                <ShieldCheck size={16} className="text-cyan-600" /> {t("hero.trust_2")}
               </div>
               <div className="trust-item">
-                <Zap size={16} className="text-cyan-600" /> Tự động thanh toán chạm &amp; đi Mobile
+                <Zap size={16} className="text-cyan-600" /> {t("hero.trust_3")}
               </div>
             </div>
           </div>
@@ -331,68 +400,68 @@ export default function Home() {
           <div className="page-width stats-grid-4">
             <div className="stat-card-white">
               <div className="stat-card-header">
-                <span className="stat-label">TỔNG CƠ SỞ</span>
+                <span className="stat-label">{t("stat.facilities")}</span>
                 <div className="stat-icon-box bg-cyan-light">
                   <ParkingCircle size={20} className="text-cyan-600" />
                 </div>
               </div>
               <div className="stat-number">1,450+</div>
-              <div className="stat-subtitle">Bãi đỗ xe đối tác</div>
+              <div className="stat-subtitle">{t("stat.facilities_sub")}</div>
               <div className="stat-card-footer">
-                <span>Đồng bộ liên tục qua mạng IoT GIS</span>
+                <span>{t("stat.facilities_desc")}</span>
                 <a href="#gis-section" className="stat-link">
-                  Phủ khắp 63 tỉnh thành | TOÀN QUỐC →
+                  {t("stat.facilities_link")}
                 </a>
               </div>
             </div>
 
             <div className="stat-card-white">
               <div className="stat-card-header">
-                <span className="stat-label">ĐỘ CHÍNH XÁC</span>
+                <span className="stat-label">{t("stat.accuracy")}</span>
                 <div className="stat-icon-box bg-cyan-light">
                   <Scan size={20} className="text-cyan-600" />
                 </div>
               </div>
               <div className="stat-number">99.4%</div>
-              <div className="stat-subtitle">Độ chính xác cảm biến</div>
+              <div className="stat-subtitle">{t("stat.accuracy_sub")}</div>
               <div className="stat-card-footer">
-                <span>Cảm biến kép Siêu âm &amp; Từ trường</span>
+                <span>{t("stat.accuracy_desc")}</span>
                 <a href="#gis-section" className="stat-link">
-                  Xác minh độ rộng | ĐỘ RỘNG →
+                  {t("stat.accuracy_link")}
                 </a>
               </div>
             </div>
 
             <div className="stat-card-white">
               <div className="stat-card-header">
-                <span className="stat-label">LƯU LƯỢNG NGÀY</span>
+                <span className="stat-label">{t("stat.traffic")}</span>
                 <div className="stat-icon-box bg-cyan-light">
                   <Car size={20} className="text-cyan-600" />
                 </div>
               </div>
               <div className="stat-number">32,000+</div>
-              <div className="stat-subtitle">Lượt gửi xe / ngày</div>
+              <div className="stat-subtitle">{t("stat.traffic_sub")}</div>
               <div className="stat-card-footer">
-                <span>Lưu lượng phương tiện gửi/rút</span>
+                <span>{t("stat.traffic_desc")}</span>
                 <a href="#gis-section" className="stat-link">
-                  Giám sát 450 Trung tâm thương mại | HIỆN TẠI →
+                  {t("stat.traffic_link")}
                 </a>
               </div>
             </div>
 
             <div className="stat-card-white">
               <div className="stat-card-header">
-                <span className="stat-label">QUY TRÌNH TỰ ĐỘNG</span>
+                <span className="stat-label">{t("stat.auto")}</span>
                 <div className="stat-icon-box bg-cyan-light">
                   <Cpu size={20} className="text-cyan-600" />
                 </div>
               </div>
               <div className="stat-number">100%</div>
-              <div className="stat-subtitle">Tự động hóa số</div>
+              <div className="stat-subtitle">{t("stat.auto_sub")}</div>
               <div className="stat-card-footer">
-                <span>Không dừng ANPR Barie mở &lt;0.3s</span>
+                <span>{t("stat.auto_desc")}</span>
                 <a href="#gis-section" className="stat-link">
-                  AI Edge xử lý tại chỗ 50ms | TỰ ĐỘNG XỨ LÝ →
+                  {t("stat.auto_link")}
                 </a>
               </div>
             </div>
@@ -404,10 +473,10 @@ export default function Home() {
           <div className="page-width">
             <div className="gis-top-header">
               <div>
-                <span className="section-pill-tag">SPATIAL TELEMETRY HUB</span>
-                <h2 className="section-title-light">Trung Tâm Bản Đồ Không Gian GIS</h2>
+                <span className="section-pill-tag">{t("gis.hub")}</span>
+                <h2 className="section-title-light">{t("gis.title")}</h2>
                 <p className="section-sub-light">
-                  Mạng lưới định vị vệ tinh và vận hành toàn bãi xe thời gian thực TP. Hồ Chí Minh
+                  {t("gis.desc")}
                 </p>
               </div>
 
@@ -416,19 +485,19 @@ export default function Home() {
                   className={`map-tab ${mapTab === "map" ? "active" : ""}`}
                   onClick={() => setMapTab("map")}
                 >
-                  Bản đồ
+                  {t("gis.map")}
                 </button>
                 <button
                   className={`map-tab ${mapTab === "satellite" ? "active" : ""}`}
                   onClick={() => setMapTab("satellite")}
                 >
-                  Vệ tinh
+                  {t("gis.satellite")}
                 </button>
                 <button
                   className={`map-tab ${mapTab === "3d" ? "active" : ""}`}
                   onClick={() => setMapTab("3d")}
                 >
-                  Lớp 3D
+                  {t("gis.3d")}
                 </button>
                 <button className="map-icon-btn" title="Chế độ xem lưới">
                   <SlidersHorizontal size={16} />
@@ -467,19 +536,19 @@ export default function Home() {
                 {/* Left Live Overlay Widget */}
                 <div className="gis-overlay-widget">
                   <div className="widget-header">
-                    <span className="dot-live" /> Khu Vực 1 Quận 1
+                    <span className="dot-live" /> {t("gis.hub_title")}
                     <span className="live-hub-tag">LIVE HUB</span>
                   </div>
                   <div className="widget-stat-row">
-                    <span>Tổng số chỗ đang mở:</span>
-                    <strong>62 điểm</strong>
+                    <span>{t("gis.hub_open")}</span>
+                    <strong>{t("gis.hub_open_val")}</strong>
                   </div>
                   <div className="widget-stat-row">
-                    <span>Chỗ trống thực tế:</span>
-                    <strong className="text-emerald-600">887 chỗ</strong>
+                    <span>{t("gis.hub_avail")}</span>
+                    <strong className="text-emerald-600">{t("gis.hub_avail_val")}</strong>
                   </div>
                   <div className="widget-stat-row">
-                    <span>Mức độ lấp đầy:</span>
+                    <span>{t("gis.hub_fill")}</span>
                     <strong>84.2%</strong>
                   </div>
                   <div className="mini-chart">
@@ -492,37 +561,41 @@ export default function Home() {
                 {/* Map Pins / Callouts */}
                 <div className="map-pin-badge pin-1" style={{ top: "25%", left: "32%" }}>
                   <div className="pin-badge-header">
-                    <span className="badge-status-dot green" /> SAIGON CENTRE
-                    <span className="badge-tag-green">125 chỗ trống</span>
+                    <span className="badge-status-dot green" /> {t("gis.pin1_name")}
+                    <span className="badge-tag-green">{t("gis.pin1_tag")}</span>
                   </div>
                   <div className="pin-badge-body">
-                    <strong>35.000đ/h</strong> · 0.8 km · <a href="#gis-section">Chi tiết →</a>
+                    <strong>35.000đ/h</strong> · 0.8 km · <a href="#gis-section">{t("gis.view_detail")}</a>
                   </div>
                 </div>
 
                 <div className="map-pin-badge pin-2" style={{ top: "18%", left: "55%" }}>
                   <div className="pin-badge-header">
-                    <span className="badge-status-dot green" /> SKYVIEW GRAND TOWER
-                    <span className="badge-tag-green">64 chỗ trống</span>
+                    <span className="badge-status-dot green" /> {t("gis.pin2_name")}
+                    <span className="badge-tag-green">{t("gis.pin2_tag")}</span>
                   </div>
                   <div className="pin-badge-body">
-                    <strong>20.000đ/h</strong> · 1.2 km · <a href="#gis-section">Chi tiết →</a>
+                    <strong>20.000đ/h</strong> · 1.2 km · <a href="#gis-section">{t("gis.view_detail")}</a>
                   </div>
                 </div>
 
                 <div className="map-pin-badge pin-3 offline-pin" style={{ top: "52%", left: "62%" }}>
                   <div className="pin-badge-header">
-                    <span className="badge-status-dot red" /> NHÀ BÈ ĐỒNG DIỄN
-                    <span className="badge-tag-red">Mất kết nối</span>
+                    <span className="badge-status-dot red" /> {t("gis.pin3_name")}
+                    <span className="badge-tag-red">{t("gis.pin3_tag")}</span>
                   </div>
                   <div className="pin-badge-body">
-                    <strong>100% Tải trọng</strong> · Tạm ngừng nhận · <span>15 chỗ trống chờ xe</span>
+                    {lang === "en" ? (
+                      <><strong>100% Load</strong> · Suspended · <span>15 slots holding</span></>
+                    ) : (
+                      <><strong>100% Tải trọng</strong> · Tạm ngừng nhận · <span>15 chỗ trống chờ xe</span></>
+                    )}
                   </div>
                 </div>
 
                 <div className="map-pin-user" style={{ top: "72%", left: "24%" }}>
                   <div className="user-pin-bubble">
-                    <Navigation size={14} className="text-white fill-current" /> Vị trí của bạn
+                    <Navigation size={14} className="text-white fill-current" /> {t("gis.user_pos")}
                   </div>
                 </div>
 
@@ -537,13 +610,13 @@ export default function Home() {
                   {apiState === "online" && slots.length > 0 ? (
                     <div className="popup-slots-mini">
                       {slots.slice(0, 4).map((slot) => {
-                        const st = slotStatus(slot.status);
+                        const st = slotStatus(slot.status, lang);
                         return (
                           <div className="slot-mini-row" key={slot.slotId}>
                             <span className={`slot-dot ${st.className}`} />
                             <span className="slot-code">{slot.slotId}</span>
                             <span className="slot-loc">
-                              Tầng {slot.floor} - {slot.zone}
+                              {lang === "en" ? `Floor ${slot.floor} - ${slot.zone}` : `Tầng ${slot.floor} - ${slot.zone}`}
                             </span>
                             <span className={`slot-st-text ${st.className}`}>{st.label}</span>
                           </div>
@@ -552,7 +625,7 @@ export default function Home() {
                     </div>
                   ) : (
                     <div className="popup-empty-state">
-                      {apiState === "loading" ? "Đang đồng bộ dữ liệu bãi đỗ..." : "Dữ liệu API chưa khả dụng"}
+                      {apiState === "loading" ? t("gis.api_syncing") : t("gis.api_empty")}
                     </div>
                   )}
                 </div>
@@ -560,19 +633,19 @@ export default function Home() {
 
               {/* Map Legend Footer */}
               <div className="gis-legend-bar">
-                <span className="legend-label">Hiển thị nhanh:</span>
+                <span className="legend-label">{t("gis.legend")}</span>
                 <div className="legend-items">
                   <span className="legend-item">
-                    <span className="dot green" /> Còn chỗ (&gt;20)
+                    <span className="dot green" /> {t("gis.legend_green")}
                   </span>
                   <span className="legend-item">
-                    <span className="dot yellow" /> Sắp đầy (1-19)
+                    <span className="dot yellow" /> {t("gis.legend_yellow")}
                   </span>
                   <span className="legend-item">
-                    <span className="dot red" /> Hết chỗ (0)
+                    <span className="dot red" /> {t("gis.legend_red")}
                   </span>
                   <span className="legend-item">
-                    <span className="dot cyan" /> Trạm EV
+                    <span className="dot cyan" /> {t("gis.legend_cyan")}
                   </span>
                 </div>
               </div>
@@ -584,11 +657,10 @@ export default function Home() {
         <section className="solutions-light-section" id="solutions">
           <div className="page-width">
             <div className="text-center max-w-2xl mx-auto mb-12">
-              <span className="section-pill-tag">CÔNG NGHỆ ĐIỀU PHỐI ĐÔ THỊ</span>
-              <h2 className="section-title-light mt-2">Giải Pháp Toàn Diện Cho Đô Thị Thông Minh</h2>
+              <span className="section-pill-tag">{t("sol.tag")}</span>
+              <h2 className="section-title-light mt-2">{t("sol.title")}</h2>
               <p className="section-sub-light mt-2">
-                Số hóa toàn bộ quy trình gửi xe từ tìm kiếm, dẫn đường, giữ chỗ cho tới nhận diện biển số
-                tự động và thanh toán không tiền mặt.
+                {t("sol.desc")}
               </p>
             </div>
 
@@ -596,10 +668,10 @@ export default function Home() {
               {SOLUTIONS.map((s, i) => (
                 <div className="solution-card-white" key={i}>
                   <div className="solution-icon-wrap">{s.icon}</div>
-                  <h3 className="solution-card-title">{s.title}</h3>
-                  <p className="solution-card-desc">{s.desc}</p>
+                  <h3 className="solution-card-title">{t(`sol.s${i + 1}_title`)}</h3>
+                  <p className="solution-card-desc">{t(`sol.s${i + 1}_desc`)}</p>
                   <div className="solution-card-footer">
-                    <span className="tag-pill">{s.tag}</span>
+                    <span className="tag-pill">{t(`sol.s${i + 1}_tag`)}</span>
                     <ArrowRight size={14} className="text-cyan-600 hover-arrow" />
                   </div>
                 </div>
@@ -631,37 +703,36 @@ export default function Home() {
             <div className="cta-dark-card">
               <div className="cta-card-content">
                 <div className="cta-badge">
-                  <span className="live-dot-green" /> HỆ THỐNG ĐIỀU PHỐI SỐ THÔNG MINH
+                  <span className="live-dot-green" /> {t("cta.badge")}
                 </div>
                 <h2 className="cta-dark-title">
-                  Sẵn sàng nâng tầm trải nghiệm đỗ xe thông minh cùng ParkMatrix?
+                  {t("cta.title")}
                 </h2>
                 <p className="cta-dark-desc">
-                  Kết nối trực tiếp vào mạng lưới hạ tầng điều phối thông minh, loại bỏ hoàn toàn nỗi
-                  lo kẹt xe tìm chỗ tại các khu trung tâm thương mại và đô thị phức hợp.
+                  {t("cta.desc")}
                 </p>
 
                 <div className="cta-metrics-row">
                   <span>
-                    <span className="dot-green" /> Độ trễ lệnh: <strong>28.4ms</strong>
+                    <span className="dot-green" /> {t("cta.metric_latency")} <strong>28.4ms</strong>
                   </span>
                   <span className="sep">•</span>
                   <span>
-                    <span className="dot-green" /> Thời gian Uptime: <strong>99.98% / 30 ngày</strong>
+                    <span className="dot-green" /> {t("cta.metric_uptime")} <strong>99.98% / 30d</strong>
                   </span>
                   <span className="sep">•</span>
                   <span>
-                    <span className="dot-green" /> Định kỳ cập nhật: <strong>1.2s</strong>
+                    <span className="dot-green" /> {t("cta.metric_interval")} <strong>1.2s</strong>
                   </span>
                 </div>
               </div>
 
               <div className="cta-card-actions">
                 <Link className="button button-cyan-solid" to="/register">
-                  📱 Đặt Chỗ Ngay
+                  {t("cta.btn_book")}
                 </Link>
                 <a className="button button-glass-outline" href="#gis-section">
-                  🛠 Tìm Hiểu Công Nghệ GIS
+                  {t("cta.btn_gis")}
                 </a>
               </div>
             </div>
@@ -685,52 +756,51 @@ export default function Home() {
               </div>
             </Link>
             <p className="footer-desc mt-4">
-              Nền tảng quản lý bãi đỗ xe thông minh, đa cơ sở hàng đầu Việt Nam. Tích hợp IoT, AI ANPR
-              và bản đồ số GIS thời gian thực.
+              {t("footer.desc")}
             </p>
           </div>
 
           <div className="footer-col">
-            <h4 className="footer-col-title">Trung Tâm Hỗ Trợ</h4>
+            <h4 className="footer-col-title">{t("footer.support")}</h4>
             <ul className="footer-links">
-              <li><a href="#gis-section">Hướng dẫn đặt chỗ</a></li>
-              <li><a href="#solutions">Quy định bãi đỗ</a></li>
-              <li><a href="#solutions">Trạm sạc EV</a></li>
-              <li><a href="mailto:support@parkmatrix.vn">Báo sự cố 24/7</a></li>
+              <li><a href="#gis-section">{lang === "en" ? "Booking Guide" : "Hướng dẫn đặt chỗ"}</a></li>
+              <li><a href="#solutions">{lang === "en" ? "Parking Rules" : "Quy định bãi đỗ"}</a></li>
+              <li><a href="#solutions">{lang === "en" ? "EV Charging Station" : "Trạm sạc EV"}</a></li>
+              <li><a href="mailto:support@parkmatrix.vn">{lang === "en" ? "Report Incident 24/7" : "Báo sự cố 24/7"}</a></li>
               <li><a href="#gis-section">API Integration Docs</a></li>
             </ul>
           </div>
 
           <div className="footer-col">
-            <h4 className="footer-col-title">Độ Phủ Hạ Tầng</h4>
+            <h4 className="footer-col-title">{lang === "en" ? "Infrastructure Coverage" : "Độ Phủ Hạ Tầng"}</h4>
             <ul className="footer-links">
-              <li><a href="#gis-section">TP. Hồ Chí Minh (62 bãi)</a></li>
-              <li><a href="#gis-section">Hà Nội (48 bãi)</a></li>
-              <li><a href="#gis-section">Đà Nẵng (24 bãi)</a></li>
-              <li><a href="#gis-section">Bình Dương (18 bãi)</a></li>
-              <li><a href="#gis-section">Hải Phòng (12 bãi)</a></li>
+              <li><a href="#gis-section">{lang === "en" ? "Ho Chi Minh City (62 hubs)" : "TP. Hồ Chí Minh (62 bãi)"}</a></li>
+              <li><a href="#gis-section">{lang === "en" ? "Hanoi (48 hubs)" : "Hà Nội (48 bãi)"}</a></li>
+              <li><a href="#gis-section">{lang === "en" ? "Da Nang (24 hubs)" : "Đà Nẵng (24 bãi)"}</a></li>
+              <li><a href="#gis-section">{lang === "en" ? "Binh Duong (18 hubs)" : "Bình Dương (18 bãi)"}</a></li>
+              <li><a href="#gis-section">{lang === "en" ? "Hai Phong (12 hubs)" : "Hải Phòng (12 bãi)"}</a></li>
             </ul>
           </div>
 
           <div className="footer-col">
-            <h4 className="footer-col-title">Dành Cho Doanh Nghiệp</h4>
+            <h4 className="footer-col-title">{lang === "en" ? "For Enterprise" : "Dành Cho Doanh Nghiệp"}</h4>
             <ul className="footer-links">
-              <li><a href="#solutions">Chủ bãi đỗ xe</a></li>
-              <li><a href="#solutions">Tích hợp VMS Platform</a></li>
-              <li><a href="#solutions">Hợp tác Camera ANPR AI</a></li>
-              <li><a href="/register">Đăng ký Đối tác</a></li>
+              <li><a href="#solutions">{lang === "en" ? "Parking Lot Owners" : "Chủ bãi đỗ xe"}</a></li>
+              <li><a href="#solutions">{lang === "en" ? "VMS Platform Integration" : "Tích hợp VMS Platform"}</a></li>
+              <li><a href="#solutions">{lang === "en" ? "AI ANPR Camera Partner" : "Hợp tác Camera ANPR AI"}</a></li>
+              <li><a href="/register">{lang === "en" ? "Partner Registration" : "Đăng ký Đối tác"}</a></li>
             </ul>
           </div>
         </div>
 
         <div className="page-width footer-bottom-dark">
-          <span>© 2026 ParkMatrix System. All rights reserved.</span>
+          <span>{t("footer.rights")}</span>
           <div className="footer-bottom-links">
-            <a href="#">Bảo mật thông tin</a>
+            <a href="#">{t("footer.privacy")}</a>
             <span>•</span>
-            <a href="#">Điều khoản sử dụng</a>
+            <a href="#">{t("footer.terms")}</a>
             <span>•</span>
-            <a href="mailto:supporttotrieutien@gmail.com">totrieutien@gmail.com</a>
+            <a href="mailto:support@parkmatrix.vn">Support: support@parkmatrix.vn</a>
           </div>
         </div>
       </footer>
@@ -752,7 +822,7 @@ export default function Home() {
           >
             <button
               className="modal-close"
-              aria-label="Đóng"
+              aria-label={lang === "en" ? "Close" : "Đóng"}
               onClick={() => setShowLogout(false)}
             >
               <X size={18} />
@@ -760,14 +830,20 @@ export default function Home() {
             <span className="modal-icon">
               <LogOut size={20} />
             </span>
-            <h2 id="logout-title">Đăng xuất khỏi tài khoản?</h2>
-            <p>Phiên đăng nhập trên thiết bị này sẽ được kết thúc.</p>
+            <h2 id="logout-title">
+              {lang === "en" ? "Log out of your account?" : "Đăng xuất khỏi tài khoản?"}
+            </h2>
+            <p>
+              {lang === "en"
+                ? "Your active session on this device will be terminated."
+                : "Phiên đăng nhập trên thiết bị này sẽ được kết thúc."}
+            </p>
             <div className="modal-actions">
               <button className="button button-light" onClick={() => setShowLogout(false)}>
-                Ở lại
+                {lang === "en" ? "Stay" : "Ở lại"}
               </button>
               <button className="button button-dark" onClick={handleLogout}>
-                <Check size={16} /> Đăng xuất
+                <Check size={16} /> {lang === "en" ? "Log Out" : "Đăng xuất"}
               </button>
             </div>
           </section>

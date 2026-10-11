@@ -1,10 +1,9 @@
 import { useState, type FormEvent } from "react";
-import { ArrowLeft, Eye, EyeOff } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, LockKeyhole, Mail, ParkingCircle, Phone, UserRound } from "lucide-react";
+import { Link } from "react-router-dom";
 import { ApiError, api } from "../services/api";
 
 export default function Register() {
-  const navigate = useNavigate();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -12,7 +11,7 @@ export default function Register() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
-  const [googleNotice, setGoogleNotice] = useState("");
+  const [complete, setComplete] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -29,22 +28,17 @@ export default function Register() {
 
     setLoading(true);
     try {
-      const normalizedEmail = email.trim();
-      const response = await api.register({
-        userName: normalizedEmail,
-        email: normalizedEmail,
+      await api.register({
+        userName: email.trim(),
+        email: email.trim(),
         fullName: fullName.trim(),
         phoneNumber: phoneNumber.trim(),
         password,
       });
-      const parsedExpiry = response.expiresAt ? Date.parse(response.expiresAt) : Number.NaN;
-      const expiresAt = Number.isFinite(parsedExpiry) ? parsedExpiry : Date.now() + 60_000;
-      sessionStorage.setItem("parking.pendingVerificationEmail", normalizedEmail);
-      sessionStorage.setItem("parking.emailOtpExpiresAt", String(expiresAt));
-      navigate("/verify-email", { state: { email: normalizedEmail } });
+      setComplete(true);
     } catch (cause) {
       if (cause instanceof ApiError && (cause.status === 404 || cause.status === 405)) {
-        setError("Backend chưa hỗ trợ đăng ký và gửi mã xác thực email. Cần triển khai POST /api/v1/auth/register.");
+        setError("Backend hiện chưa có API đăng ký. Màn hình đã sẵn sàng tích hợp tại POST /api/v1/auth/register.");
       } else {
         setError(cause instanceof Error ? cause.message : "Đăng ký chưa thành công. Vui lòng kiểm tra lại thông tin.");
       }
@@ -53,111 +47,40 @@ export default function Register() {
     }
   };
 
+  if (complete) {
+    return <main className="auth-page register-page"><section className="auth-visual-panel register-visual"><Link className="brand auth-brand" to="/"><span className="brand-mark"><ParkingCircle size={23} /><i /></span><span className="brand-copy"><strong>Park<span>Matrix</span></strong><small>SMART PARKING PLATFORM</small></span></Link><div className="auth-visual-content"><span className="eyebrow"><span className="eyebrow-rule" /> BẮT ĐẦU HÀNH TRÌNH</span><h1>Không gian đỗ xe,<br />gần bạn hơn.</h1><p>Tài khoản của bạn đã được gửi đến hệ thống để xử lý.</p></div><div className="auth-visual-photo" /><Link className="auth-back-link" to="/"><ArrowLeft size={16} /> Quay về trang chủ</Link></section><section className="auth-form-panel"><div className="auth-form-wrap completion-wrap"><span className="completion-icon"><Check size={25} /></span><span className="auth-step">YÊU CẦU ĐÃ GỬI</span><h2>Kiểm tra email của bạn</h2><p>Hệ thống đã nhận thông tin đăng ký cho <strong>{email}</strong>. Nếu backend yêu cầu xác minh, hãy làm theo hướng dẫn được gửi qua email.</p><Link className="button button-dark auth-submit" to="/login">Đi đến đăng nhập <ArrowRight size={17} /></Link></div><Link className="auth-mobile-back" to="/"><ArrowLeft size={15} /> Trang chủ</Link></section></main>;
+  }
+
   return (
-    <main className="simple-auth-page">
-      <Link className="simple-auth-back" to="/">
-        <ArrowLeft size={16} /> Quay về trang chủ
-      </Link>
-
-      <section className="simple-auth-card simple-register-card" aria-labelledby="register-title">
-        <header className="simple-auth-heading">
-          <h1 id="register-title">Tạo tài khoản</h1>
-          <p>Điền thông tin để đăng ký ParkMatrix</p>
-        </header>
-
-        <form className="simple-auth-form simple-register-form" onSubmit={submit}>
-          {error && <div className="simple-auth-alert" role="alert">{error}</div>}
-          <label htmlFor="register-name">Họ và tên</label>
-          <input
-            id="register-name"
-            autoComplete="name"
-            value={fullName}
-            onChange={(event) => setFullName(event.target.value)}
-            placeholder="Nguyễn Văn An"
-            required
-            disabled={loading}
-          />
-
-          <label htmlFor="register-email">Email</label>
-          <input
-            id="register-email"
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder="name@example.com"
-            required
-            disabled={loading}
-          />
-
-          <label htmlFor="register-phone">Số điện thoại</label>
-          <input
-            id="register-phone"
-            type="tel"
-            autoComplete="tel"
-            inputMode="tel"
-            pattern="[+]?[0-9]{9,15}"
-            value={phoneNumber}
-            onChange={(event) => setPhoneNumber(event.target.value)}
-            placeholder="0901234567"
-            required
-            disabled={loading}
-          />
-
-          <label htmlFor="register-password">Mật khẩu</label>
-          <div className="simple-auth-password">
-            <input
-              id="register-password"
-              type={showPassword ? "text" : "password"}
-              autoComplete="new-password"
-              minLength={8}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="Ít nhất 8 ký tự"
-              required
-              disabled={loading}
-            />
-            <button
-              type="button"
-              aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
-              onClick={() => setShowPassword(!showPassword)}
-            >
-              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-          </div>
-
-          <label htmlFor="register-confirm">Xác nhận mật khẩu</label>
-          <input
-            id="register-confirm"
-            type={showPassword ? "text" : "password"}
-            autoComplete="new-password"
-            minLength={8}
-            value={confirmPassword}
-            onChange={(event) => setConfirmPassword(event.target.value)}
-            placeholder="Nhập lại mật khẩu"
-            required
-            disabled={loading}
-          />
-
-          <button className="simple-auth-submit" type="submit" disabled={loading}>
-            {loading ? "Đang tạo tài khoản..." : "Tạo tài khoản"}
-          </button>
-        </form>
-
-        <div className="simple-auth-divider"><span>hoặc</span></div>
-        <button
-          className="simple-auth-google"
-          type="button"
-          onClick={() => setGoogleNotice("Đăng ký Google chưa được kết nối. Cần cấu hình OAuth ở backend.")}
-        >
-          <span className="google-mark" aria-hidden="true">G</span>
-          Đăng ký với Google
-        </button>
-        {googleNotice && <p className="simple-auth-notice" role="status">{googleNotice}</p>}
-
-        <p className="simple-auth-switch">
-          Đã có tài khoản? <Link to="/login">Đăng nhập</Link>
-        </p>
+    <main className="auth-page register-page">
+      <section className="auth-visual-panel register-visual">
+        <Link className="brand auth-brand" to="/"><span className="brand-mark"><ParkingCircle size={23} /><i /></span><span className="brand-copy"><strong>Park<span>Matrix</span></strong><small>SMART PARKING PLATFORM</small></span></Link>
+        <div className="auth-visual-content"><span className="eyebrow"><span className="eyebrow-rule" /> BẮT ĐẦU HÀNH TRÌNH</span><h1>Đỗ xe gọn hơn,<br />mỗi ngày.</h1><p>Tạo tài khoản để kết nối với các tiện ích đỗ xe trên nền tảng.</p><div className="auth-visual-meta"><span><Check size={15} /> Đăng ký tài khoản khách hàng</span><span>02 <i>/ 02</i></span></div></div>
+        <div className="auth-visual-photo" />
+        <Link className="auth-back-link" to="/"><ArrowLeft size={16} /> Quay về trang chủ</Link>
+      </section>
+      <section className="auth-form-panel register-form-panel">
+        <div className="auth-form-wrap">
+          <div className="mobile-auth-brand"><Link className="brand" to="/"><span className="brand-mark"><ParkingCircle size={22} /><i /></span><span className="brand-copy"><strong>Park<span>Matrix</span></strong><small>SMART PARKING PLATFORM</small></span></Link></div>
+          <div className="auth-heading"><span className="auth-step">TÀI KHOẢN KHÁCH HÀNG <span>02 / 02</span></span><h2>Tạo tài khoản</h2><p>Điền thông tin cơ bản để đăng ký tham gia.</p></div>
+          <form className="auth-form register-form" onSubmit={submit}>
+            {error && <div className="form-alert" role="alert">{error}</div>}
+            <label className="field-label" htmlFor="register-name">Họ và tên</label>
+            <div className="input-wrap"><UserRound size={17} /><input id="register-name" autoComplete="name" value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Nguyễn Văn An" required disabled={loading} /></div>
+            <label className="field-label" htmlFor="register-email">Email</label>
+            <div className="input-wrap"><Mail size={17} /><input id="register-email" autoComplete="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="ban@example.com" required disabled={loading} /></div>
+            <label className="field-label" htmlFor="register-phone">Số điện thoại</label>
+            <div className="input-wrap"><Phone size={17} /><input id="register-phone" autoComplete="tel" type="tel" inputMode="tel" pattern="[+]?[0-9]{9,15}" value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} placeholder="0901234567" required disabled={loading} /></div>
+            <div className="register-password-grid">
+              <div><label className="field-label" htmlFor="register-password">Mật khẩu</label><div className="input-wrap"><LockKeyhole size={17} /><input id="register-password" autoComplete="new-password" type={showPassword ? "text" : "password"} minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Ít nhất 8 ký tự" required disabled={loading} /><button className="input-action" type="button" aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"} onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div></div>
+              <div><label className="field-label" htmlFor="register-confirm">Xác nhận mật khẩu</label><div className="input-wrap"><LockKeyhole size={17} /><input id="register-confirm" autoComplete="new-password" type={showPassword ? "text" : "password"} minLength={8} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Nhập lại mật khẩu" required disabled={loading} /></div></div>
+            </div>
+            <button className="button button-dark auth-submit" type="submit" disabled={loading}>{loading ? "Đang gửi yêu cầu…" : <>Tạo tài khoản <ArrowRight size={17} /></>}</button>
+          </form>
+          <p className="auth-switch">Đã có tài khoản? <Link to="/login">Đăng nhập</Link></p>
+          <div className="auth-security"><LockKeyhole size={14} /> Thông tin được gửi trực tiếp đến máy chủ xác thực.</div>
+        </div>
+        <Link className="auth-mobile-back" to="/"><ArrowLeft size={15} /> Trang chủ</Link>
       </section>
     </main>
   );
