@@ -16,6 +16,11 @@ namespace Parking.Identity.Application.UseCase.Authentication.Logout
         }
         public async Task Handle(LogoutCommand request, CancellationToken cancellationToken)
         {
+            if (string.IsNullOrWhiteSpace(request.RefreshToken))
+            {
+                throw new AppException(ErrorCode.Unauthorized, "Refresh token không hợp lệ.");
+            }
+
             // Hash Refresh Token
             var tokenHash = accessToken.HashToken(request.RefreshToken);
 

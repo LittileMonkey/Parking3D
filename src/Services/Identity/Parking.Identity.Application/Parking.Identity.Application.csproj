@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
@@ -15,7 +15,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Identity.Domain\Parking.Identity.Domain.csproj" />
     <ProjectReference Include="..\Parking.Identity.Domain\Parking.Identity.Domain.csproj" />
   </ItemGroup>
 

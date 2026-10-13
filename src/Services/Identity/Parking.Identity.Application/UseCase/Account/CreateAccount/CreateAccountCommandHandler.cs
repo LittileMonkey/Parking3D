@@ -22,6 +22,11 @@ namespace Parking.Identity.Application.UseCase.Account.CreateAccount
         }
         public async Task<AppUserDto> Handle(CreateAccountCommand request, CancellationToken cancellationToken)
         {
+            if (string.IsNullOrWhiteSpace(request.EmailNormalized) || string.IsNullOrWhiteSpace(request.PhoneE164))
+            {
+                throw new AppException(ErrorCode.InvalidRequest, "Email and phone number are required.");
+            }
+
             var existingEmail = await repository.GetUserByEmail(request.EmailNormalized);
 
             if(existingEmail != null)

@@ -2,7 +2,10 @@ using System.Text;
 using Microsoft.Extensions.Configuration;
 using Parking.AI.Domain;
 using Parking.AI.Infrastructure;
-using Parking.Identity.Infrastructure;
+using Identity.Infrastructure.Service.PasswordHash;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging.Abstractions;
+using Parking.Identity.Domain.Entities;
 using Parking.Parking.Domain;
 using Parking.ServiceDefaults;
 using Xunit;
@@ -36,9 +39,15 @@ public sealed class CoreInvariantTests
     [Fact]
     public void PasswordIsSaltedAndVerifiedWithoutPlaintext()
     {
-        var one=PasswordHash.Create("test-secret-Password1");var two=PasswordHash.Create("test-secret-Password1");
-        Assert.NotEqual(one,two);Assert.True(PasswordHash.Verify("test-secret-Password1",one));Assert.False(PasswordHash.Verify("wrong",one));
-        Assert.False(PasswordHash.Verify("wrong","malformed"));Assert.DoesNotContain("test-secret-Password1",one);
+        var user = new AppUser();
+        var hasher = new PasswordHasherService(new PasswordHasher<AppUser>(), NullLogger<PasswordHasherService>.Instance);
+        var one = hasher.HashPassword(user, "test-secret-Password1");
+        var two = hasher.HashPassword(user, "test-secret-Password1");
+        Assert.NotEqual(one, two);
+        Assert.True(hasher.VerifiedPassword(user, "test-secret-Password1", one));
+        Assert.False(hasher.VerifiedPassword(user, "wrong", one));
+        Assert.False(hasher.VerifiedPassword(user, "wrong", string.Empty));
+        Assert.DoesNotContain("test-secret-Password1", one);
     }
     [Fact]
     public void ImagesMustMatchSupportedMagicAndSize()

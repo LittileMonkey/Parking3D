@@ -229,6 +229,9 @@ export default function Home() {
           </Link>
 
           <nav className={`main-nav-light ${mobileMenu ? "is-open" : ""}`} aria-label="Điều hướng chính">
+            <Link to="/booking" onClick={() => setMobileMenu(false)} className="nav-item">
+              {lang === "en" ? "Book a slot" : "Đặt chỗ 3D"}
+            </Link>
             <a href="#gis-section" onClick={() => setMobileMenu(false)} className="nav-item">
               {t("nav.find")}
             </a>
