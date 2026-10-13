@@ -1,6 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="../Parking.Payment.Domain/Parking.Payment.Domain.csproj" />
+    <ProjectReference Include="..\..\Parking\Parking.Parking.Api\Parking.Parking.Api.csproj" />
     
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FluentValidation" Version="12.2.0" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.2.0" />
+    <PackageReference Include="MediatR" Version="14.2.0" />
   </ItemGroup>
 </Project>
