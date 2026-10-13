@@ -32,12 +32,12 @@ Tài liệu này đặc tả các API liên quan đến quy trình thanh toán b
   "message": "Retrieved payment status successfully."
 }
 ```
-## 3.API 2: Staff Xác nhận Thu Tiền Mặt (Confirm CASH)
+## 3. API 2: Staff Xác nhận Thu Tiền Mặt (Confirm CASH)
 - **Method:** `POST`
 - **URL Endpoint:** `/api/v1/payments/cash/confirm`
 - **Permission:** `PARKING_STAFF` hoặc `PARKING_MANAGER` (Kèm Facility-Scoped RBAC).
 ### 3.1. Request Sample
-``` json
+```json
 {
   "bookingId": "c9a01234-5678-90ab-cdef-1234567890ab",
   "staffReason": "Khách thanh toán bằng tiền mặt tại cổng OUT",
