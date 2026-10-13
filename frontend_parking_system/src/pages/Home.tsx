@@ -235,6 +235,9 @@ export default function Home() {
             <a href="#about" onClick={() => setMobileMenu(false)} className="nav-item">
               {t("nav.infrastructure")}
             </a>
+            <Link to="/staff/dashboard" onClick={() => setMobileMenu(false)} className="nav-item" style={{ color: "var(--teal)", fontWeight: 700 }}>
+              {lang === "en" ? "Staff Portal" : "Cổng Vận Hành"}
+            </Link>
           </nav>
 
           <div className="header-actions-light">
