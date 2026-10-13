@@ -1,12 +1,11 @@
 import { useState, type FormEvent } from "react";
-import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, LockKeyhole, Mail, ParkingCircle, Phone, UserRound } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, LockKeyhole, Mail, ParkingCircle, UserRound } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ApiError, api } from "../services/api";
 
 export default function Register() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -29,10 +28,8 @@ export default function Register() {
     setLoading(true);
     try {
       await api.register({
-        userName: email.trim(),
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         fullName: fullName.trim(),
-        phoneNumber: phoneNumber.trim(),
         password,
       });
       setComplete(true);
@@ -69,8 +66,6 @@ export default function Register() {
             <div className="input-wrap"><UserRound size={17} /><input id="register-name" autoComplete="name" value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Nguyễn Văn An" required disabled={loading} /></div>
             <label className="field-label" htmlFor="register-email">Email</label>
             <div className="input-wrap"><Mail size={17} /><input id="register-email" autoComplete="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="ban@example.com" required disabled={loading} /></div>
-            <label className="field-label" htmlFor="register-phone">Số điện thoại</label>
-            <div className="input-wrap"><Phone size={17} /><input id="register-phone" autoComplete="tel" type="tel" inputMode="tel" pattern="[+]?[0-9]{9,15}" value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} placeholder="0901234567" required disabled={loading} /></div>
             <div className="register-password-grid">
               <div><label className="field-label" htmlFor="register-password">Mật khẩu</label><div className="input-wrap"><LockKeyhole size={17} /><input id="register-password" autoComplete="new-password" type={showPassword ? "text" : "password"} minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Ít nhất 8 ký tự" required disabled={loading} /><button className="input-action" type="button" aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"} onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div></div>
               <div><label className="field-label" htmlFor="register-confirm">Xác nhận mật khẩu</label><div className="input-wrap"><LockKeyhole size={17} /><input id="register-confirm" autoComplete="new-password" type={showPassword ? "text" : "password"} minLength={8} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Nhập lại mật khẩu" required disabled={loading} /></div></div>
