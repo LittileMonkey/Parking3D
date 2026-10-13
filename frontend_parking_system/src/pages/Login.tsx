@@ -7,7 +7,7 @@ import { useAuth } from "../context/AuthContext";
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [userName, setUserName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -18,7 +18,7 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      await login(userName.trim(), password);
+      await login(email.trim().toLowerCase(), password);
       navigate("/");
     } catch (cause) {
       if (cause instanceof ApiError && (cause.status === 404 || cause.status === 405)) {
@@ -67,15 +67,14 @@ export default function Login() {
             <span className="gradient-teal">nâng tầm giá trị.</span>
           </h1>
           <p className="slogan-sub">
-            Hệ thống giám sát không gian đỗ xe 3D đa cơ sở theo thời gian thực, điều phối thông minh và bảo mật tuyệt đối.
+            Tìm bãi đỗ phù hợp, xem tình trạng chỗ và quản lý đặt chỗ trên nền tảng ParkMatrix.
           </p>
 
           {/* Dynamic LED Slot Status Overlay Widgets */}
           <div className="live-slots-widget">
             <div className="widget-header">
               <div className="live-tag">
-                <span className="live-led-dot" />
-                <span>LIVE SYSTEM STATUS</span>
+                <span>PARKING LAYOUT PREVIEW</span>
               </div>
               <Activity size={16} className="widget-icon" />
             </div>
@@ -102,8 +101,8 @@ export default function Login() {
               </div>
             </div>
             <div className="widget-footer">
-              <span><strong className="text-teal">142</strong> / 180 Ô trống khả dụng</span>
-              <span className="widget-facility">Cơ sở: Tòa nhà Central Hub</span>
+              <span>Minh họa trạng thái chỗ đỗ</span>
+              <span className="widget-facility">Không phải dữ liệu thời gian thực</span>
             </div>
           </div>
         </div>
@@ -112,7 +111,7 @@ export default function Login() {
         <div className="login-banner-bottom">
           <div className="security-tag">
             <ShieldCheck size={16} />
-            <span>PostgreSQL Advisory Lock Protocol Guard Enabled</span>
+            <span>Đăng nhập qua nền tảng ParkMatrix</span>
           </div>
         </div>
       </div>
@@ -133,16 +132,16 @@ export default function Login() {
             )}
 
             <div className="form-group">
-              <label htmlFor="login-username">Tên đăng nhập hoặc Email</label>
+              <label htmlFor="login-email">Email</label>
               <div className="input-field-wrapper">
                 <UserRound size={18} className="field-icon" />
                 <input
-                  id="login-username"
-                  type="text"
-                  autoComplete="username"
-                  value={userName}
-                  onChange={(e) => setUserName(e.target.value)}
-                  placeholder="Nhập tên đăng nhập hoặc email"
+                  id="login-email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="ban@example.com"
                   required
                   disabled={loading}
                 />
