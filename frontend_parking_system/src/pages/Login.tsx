@@ -152,6 +152,7 @@ export default function Login() {
             <div className="form-group">
               <div className="label-row">
                 <label htmlFor="login-password">Mật khẩu</label>
+                <Link className="forgot-password-link" to="/forgot-password">Quên mật khẩu?</Link>
               </div>
               <div className="input-field-wrapper">
                 <LockKeyhole size={18} className="field-icon" />
