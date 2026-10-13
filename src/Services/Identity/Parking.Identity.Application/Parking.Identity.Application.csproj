@@ -15,7 +15,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Identity.Domain\Parking.Identity.Domain.csproj" />
     <ProjectReference Include="..\Parking.Identity.Domain\Parking.Identity.Domain.csproj" />
   </ItemGroup>
 

@@ -4,6 +4,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>2fbf46e8-3980-4631-b076-d17e3a8a5b55</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,10 +16,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Identity.Application\Parking.Identity.Application.csproj" />
-    <ProjectReference Include="..\Identity.Domain\Parking.Identity.Domain.csproj" />
-    <ProjectReference Include="..\Identity.Infrastructure\Parking.Identity.Infrastructure.csproj" />
-    <ProjectReference Include="..\Identity.Persistence\Parking.Identity.Persistence.csproj" />
     <ProjectReference Include="..\Parking.Identity.Application\Parking.Identity.Application.csproj" />
     <ProjectReference Include="..\Parking.Identity.Domain\Parking.Identity.Domain.csproj" />
     <ProjectReference Include="..\Parking.Identity.Infrastructure\Parking.Identity.Infrastructure.csproj" />

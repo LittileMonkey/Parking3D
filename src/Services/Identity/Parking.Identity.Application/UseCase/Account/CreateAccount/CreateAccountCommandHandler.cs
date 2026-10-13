@@ -65,7 +65,7 @@ namespace Parking.Identity.Application.UseCase.Account.CreateAccount
                 FullName = request.FullName,
                 EmailNormalized = request.EmailNormalized,
                 PhoneE164 = request.PhoneE164,
-                Status = "Active",
+                Status = AppUserStatus.Active,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };

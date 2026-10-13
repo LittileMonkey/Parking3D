@@ -30,7 +30,7 @@ namespace Parking.Identity.Application.UseCase.Authentication.Login
                 throw new AppException(ErrorCode.Unauthorized, "Email or password is incorrect.");
             }
 
-            if (user.Status != "Active")
+            if (user.Status != "ACTIVE")
             {
                 throw new AppException(ErrorCode.Unauthorized, "User is inactive.");
             }

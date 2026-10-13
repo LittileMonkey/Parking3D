@@ -7,11 +7,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Google.Apis.Auth" Version="1.77.0" />
     <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="10.0.12" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Identity.Application\Parking.Identity.Application.csproj" />
     <ProjectReference Include="..\Parking.Identity.Application\Parking.Identity.Application.csproj" />
     <ProjectReference Include="..\Parking.Identity.Domain\Parking.Identity.Domain.csproj" />
   </ItemGroup>
