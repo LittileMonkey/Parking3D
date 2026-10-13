@@ -1,4 +1,4 @@
-﻿using Parking.Identity.Application.Common.AppException;
+using Parking.Identity.Application.Common.AppException;
 using Parking.Identity.Application.Common.Enum;
 using Parking.Identity.Application.Common.Interface;
 using Parking.Identity.Application.DTOs;
@@ -23,6 +23,11 @@ namespace Parking.Identity.Application.UseCase.Authentication.Login
         }
         async Task<AuthenticationResponseDto> IRequestHandler<LoginCommand, AuthenticationResponseDto>.Handle(LoginCommand request, CancellationToken cancellationToken)
         {
+            if (string.IsNullOrWhiteSpace(request.emailNormalized) || string.IsNullOrWhiteSpace(request.password))
+            {
+                throw new AppException(ErrorCode.Unauthorized, "Email or password is incorrect.");
+            }
+
             var user = await accountRepository.GetUserByEmail(request.emailNormalized);
 
             if (user == null)
@@ -33,6 +38,11 @@ namespace Parking.Identity.Application.UseCase.Authentication.Login
             if (user.Status != "ACTIVE")
             {
                 throw new AppException(ErrorCode.Unauthorized, "User is inactive.");
+            }
+
+            if (string.IsNullOrWhiteSpace(user.PasswordHash))
+            {
+                throw new AppException(ErrorCode.Unauthorized, "Email or password is incorrect.");
             }
 
             var passwordValid = hasherService.VerifiedPassword(user, request.password, user.PasswordHash);
@@ -67,7 +77,7 @@ namespace Parking.Identity.Application.UseCase.Authentication.Login
             {
                 UserId = user.Id,
                 FullName = user.FullName,
-                EmailNormalized = user.EmailNormalized,
+                EmailNormalized = user.EmailNormalized ?? request.emailNormalized,
                 Status = user.Status,
 
 

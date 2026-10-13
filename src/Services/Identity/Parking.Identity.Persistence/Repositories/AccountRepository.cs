@@ -36,7 +36,7 @@ namespace Parking.Identity.Persistence.Repositories
             return await _context.AppUsers.AsNoTracking().Include(r => r.PlatformUserRoles).ToListAsync();
         }
 
-        public async Task<AppUser> GetUserByEmail(string email)
+        public async Task<AppUser?> GetUserByEmail(string email)
         {
             return await _context.AppUsers
                 .AsNoTracking()
@@ -44,14 +44,14 @@ namespace Parking.Identity.Persistence.Repositories
                 .FirstOrDefaultAsync(e => e.EmailNormalized == email);
         }
 
-        public async Task<AppUser> GetUserByIdAsync(Guid userId, CancellationToken cancellationToken)
+        public async Task<AppUser?> GetUserByIdAsync(Guid userId, CancellationToken cancellationToken)
         {
             return await _context.AppUsers
                 .Include(r => r.PlatformUserRoles)
                 .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
         }
 
-        public async Task<AppUser> GetUserByPhone(string phone)
+        public async Task<AppUser?> GetUserByPhone(string phone)
         {
             return await _context.AppUsers
                  .AsNoTracking()

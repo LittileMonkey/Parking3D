@@ -33,7 +33,8 @@ namespace Parking.Identity.Persistence
                     options.TokenValidationParameters = new TokenValidationParameters
                     {
                         ValidateIssuerSigningKey = true,
-                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["Jwt:Key"])),
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(
+                            configuration["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key is required."))),
 
                         ValidateIssuer = true,
                         ValidIssuer = configuration["Jwt:Issuer"],
