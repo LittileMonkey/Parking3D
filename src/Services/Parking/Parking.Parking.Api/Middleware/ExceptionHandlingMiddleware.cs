@@ -9,6 +9,8 @@ using System.Net;
 using System.Text.Json;
 
 
+using Parking.Parking.Application.Exceptions;
+
 namespace Parking.Parking.Api.Middleware
 {
     // 1. Lớp cấu trúc trả về lỗi (Của Mentor)
@@ -33,6 +35,8 @@ namespace Parking.Parking.Api.Middleware
             this.ExceptionHandling = new Dictionary<Type, Func<Exception, ErrorMessage>>
             {
                 { typeof(ValidationException), HandleValidationException },
+                { typeof(NotFoundException), HandleNotFoundException },
+                { typeof(ForbiddenAccessException), HandleForbiddenAccessException },
                 { typeof(NotImplementedException), HandleNotImplementedException },
                 { typeof(Exception), HandleGenericException }
             };
@@ -60,8 +64,44 @@ namespace Parking.Parking.Api.Middleware
             return exception switch
             {
                 ValidationException => StatusCodes.Status400BadRequest,
+                NotFoundException => StatusCodes.Status404NotFound,
+                ForbiddenAccessException => StatusCodes.Status403Forbidden,
                 NotImplementedException => StatusCodes.Status501NotImplemented,
                 _ => StatusCodes.Status500InternalServerError
+            };
+        }
+
+        private ErrorMessage HandleNotFoundException(Exception exception)
+        {
+            return new ErrorMessage
+            {
+                Message = exception.Message,
+                ErrorDetails = new List<ErrorDetail>
+                {
+                    new()
+                    {
+                        ErrorMessage = exception.Message,
+                        ErrorCode = "NotFound",
+                        ErrorField = string.Empty
+                    }
+                }
+            };
+        }
+
+        private ErrorMessage HandleForbiddenAccessException(Exception exception)
+        {
+            return new ErrorMessage
+            {
+                Message = exception.Message,
+                ErrorDetails = new List<ErrorDetail>
+                {
+                    new()
+                    {
+                        ErrorMessage = exception.Message,
+                        ErrorCode = "Forbidden",
+                        ErrorField = string.Empty
+                    }
+                }
             };
         }
 

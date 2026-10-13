@@ -2,8 +2,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Parking.Parking.Application;
 
-namespace Parking.Parking.Infrastructure;
+namespace Parking.Parking.Infrastructure.BackgroundServices;
 
+// Worker định kỳ quét và giải phóng các đặt chỗ quá hạn thanh toán
 public sealed class HoldExpiryWorker(IParkingRepository repo, ILogger<HoldExpiryWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

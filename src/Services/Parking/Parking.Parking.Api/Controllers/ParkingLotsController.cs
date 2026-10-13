@@ -1,4 +1,4 @@
-﻿using MediatR;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Parking.Parking.Api.Common;
 using Parking.Parking.Application.DTOs;
@@ -34,6 +34,28 @@ namespace Parking.Parking.Api.Controllers
             var response = new ApiResponse<SearchParkingLotsResultDto>(resultDto, "Search completed successfully.");
             // 3. Trả về HTTP 200 OK
             return Ok(response);
+        }
+
+        // Endpoint GET: /api/v1/parking-lots/{lotId}/availability
+        [HttpGet("{lotId:guid}/availability")]
+        public async Task<IActionResult> GetAvailability(
+            [FromRoute] Guid lotId,
+            [FromQuery] DateTimeOffset? startTime,
+            [FromQuery] DateTimeOffset? endTime,
+            [FromQuery] string? vehicleType,
+            [FromQuery] Guid? levelId,
+            CancellationToken cancellationToken)
+        {
+            var query = new GetLotAvailabilityQuery
+            {
+                LotId = lotId,
+                StartTime = startTime,
+                EndTime = endTime,
+                VehicleType = vehicleType,
+                LevelId = levelId
+            };
+            var result = await _mediator.Send(query, cancellationToken);
+            return Ok(new ApiResponse<LotAvailabilityDto>(result, "Lot availability retrieved successfully."));
         }
     }
 }
