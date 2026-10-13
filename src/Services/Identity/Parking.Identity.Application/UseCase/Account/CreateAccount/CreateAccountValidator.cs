@@ -12,7 +12,7 @@ namespace Parking.Identity.Application.UseCase.Account.CreateAccount
                 .WithMessage("Email must not exceed 255 characters.")
                 .EmailAddress()
                 .WithMessage("Invalid email format.")
-                .Must(email => !email.Contains(' '))
+                .Must(email => email is not null && !email.Contains(' '))
                 .WithMessage("Email must not contain spaces.");
 
             RuleFor(x => x.FullName).NotEmpty().WithMessage("Full name is required.")

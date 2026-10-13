@@ -19,20 +19,12 @@ namespace Identity.Infrastructure.Service.PasswordHash
         {
             var hash = passwordHasher.HashPassword(appUser, password);
 
-            log.LogInformation("Generated password hash: {Hash}", hash);
-            log.LogInformation("Generated hash length: {Length}", hash.Length);
-
-            var result = passwordHasher.VerifyHashedPassword(appUser, hash, password);
-
-            log.LogInformation("Self password verification result: {Result}", result);
-
             return hash;
         }
 
         public bool VerifiedPassword(AppUser appUser, string password, string passwordHash)
         {
-            log.LogInformation("PASSWORD HASH = {Hash}", passwordHash);
-            log.LogInformation("PASSWORD HASH LENGTH = {Length}", passwordHash?.Length);
+            if (string.IsNullOrWhiteSpace(passwordHash)) return false;
 
             var result = passwordHasher.VerifyHashedPassword(appUser, passwordHash, password);
 

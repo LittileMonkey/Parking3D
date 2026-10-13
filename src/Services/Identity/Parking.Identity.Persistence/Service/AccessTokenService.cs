@@ -52,7 +52,9 @@ namespace Parking.Identity.Persistence.Service
                 issuer: issuer,
                 audience: audience,
                 claims: claim,
-                expires: DateTime.UtcNow.AddMinutes(double.Parse(jwt["AccessTokenExpirationMinutes"])),
+                expires: DateTime.UtcNow.AddMinutes(double.Parse(
+                    jwt["AccessTokenExpirationMinutes"] ?? throw new InvalidOperationException("Jwt:AccessTokenExpirationMinutes is required."),
+                    System.Globalization.CultureInfo.InvariantCulture)),
                 signingCredentials: credentials
             );
 

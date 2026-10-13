@@ -60,7 +60,7 @@ namespace Parking.Identity.Application.UseCase.Authentication.TokenRefresh
 
             var user = await accountRepository.GetUserByIdAsync(authToken.UserId, cancellationToken);
 
-            if (user != null)
+            if (user == null)
             {
                 throw new AppException(ErrorCode.AccountNotFound, "User does not exist.");
             }
@@ -115,7 +115,7 @@ namespace Parking.Identity.Application.UseCase.Authentication.TokenRefresh
 
                 FullName = user.FullName,
 
-                EmailNormalized = user.EmailNormalized,
+                EmailNormalized = user.EmailNormalized ?? string.Empty,
 
                 Role = user.PlatformUserRoles.FirstOrDefault()?.RoleCode ?? string.Empty,
 
