@@ -10,6 +10,7 @@ using System.Text;
 
 using TokenValidationParameters = Microsoft.IdentityModel.Tokens.TokenValidationParameters;
 using Parking.Identity.Persistence.Service;
+using Parking.Identity.Persistence.Service.Google;
 
 namespace Parking.Identity.Persistence
 {
@@ -24,6 +25,7 @@ namespace Parking.Identity.Persistence
             services.AddScoped<IUnitOfWork, UnitOfWork>();
             services.AddScoped<IAccessTokenService, AccessTokenService>();
             services.AddScoped<IAuthTokenRepository, AuthTokenRepository>();
+            services.AddScoped<IAssignedLotRepository, AssignedLotRepository>();
 
             services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(options =>
@@ -45,6 +47,8 @@ namespace Parking.Identity.Persistence
 
                     };
                 });
+
+            services.AddScoped<IGoogleSubjectLogin, GoogleSubjectLogin>();
 
             return services;
         }

@@ -75,6 +75,9 @@ public partial class ParkingDatabaseV4Context : DbContext
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("now()")
                 .HasColumnName("updated_at");
+            entity.Property(e => e.GoogleSubject)
+                .HasMaxLength(255)
+                .HasColumnName("google_subject");
         });
 
         modelBuilder.Entity<AuditLog>(entity =>

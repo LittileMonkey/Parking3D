@@ -39,8 +39,6 @@ namespace Parking.Identity.Infrastructure.Initializer
             {
                 return;
             }
-
-
             var userId = Guid.NewGuid();
             var appUserAdmin = new AppUser
             {
@@ -63,6 +61,47 @@ namespace Parking.Identity.Infrastructure.Initializer
             appUserAdmin.PasswordHash = passwordHasher.HashPassword(appUserAdmin, password);
 
             await accountRepository.Register(appUserAdmin);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+
+        public async Task SeedParkingStaff(CancellationToken cancellationToken = default)
+        {
+            var seedStaff = configuration.GetSection("SeedStaff");
+
+            var email = seedStaff["Email"];
+            var password = seedStaff["Password"];
+            var fullName = seedStaff["FullName"];
+
+            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password) || string.IsNullOrWhiteSpace(fullName))
+            {
+                throw new InvalidOperationException("Have not config account Staff yet!!!.");
+            }
+
+            var existingEmail = await accountRepository.GetUserByEmail(email);
+            if(existingEmail != null)
+            {
+                return;
+            }
+
+            var userId = Guid.NewGuid();
+            var appUser = new AppUser
+            {
+                Id = userId,
+                FullName = fullName,
+                EmailNormalized = email,
+                PhoneE164 = "+84339603819",
+                Status = "Active",
+                PlatformUserRoles = new List<PlatformUserRole> {
+                    new PlatformUserRole
+                    {
+                        RoleCode = AppUserRoles.Staff,
+                        UserId = userId
+                    }
+                }
+            };
+
+            appUser.PasswordHash =  passwordHasher.HashPassword(appUser, password);
+            await accountRepository.Register(appUser);
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
         }
