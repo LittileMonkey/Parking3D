@@ -8,8 +8,8 @@ INSERT INTO parking_lots(id,code,name,address,latitude,longitude,timezone,status
  ('22222222-2222-4222-8222-222222222222','DEMO-B','Bãi demo B','Địa chỉ demo B',10.790,106.710,'Asia/Ho_Chi_Minh','ACTIVE',now(),now());
 INSERT INTO lot_vehicle_policies(lot_id,vehicle_type,guest_booking_enabled,dynamic_multiplier_cap,hold_minutes,min_booking_minutes,max_booking_minutes,
  early_arrival_minutes,late_arrival_minutes,warning_percent,admission_percent,reserved_capacity,cancellation_refund_cutoff_minutes) VALUES
- ('11111111-1111-4111-8111-111111111111','CAR',false,2,15,30,1440,15,30,80,100,0,120),
- ('22222222-2222-4222-8222-222222222222','MOTORBIKE',false,2,15,30,1440,15,30,80,100,0,120);
+ ('11111111-1111-4111-8111-111111111111','CAR',false,2,5,30,1440,15,30,80,100,0,120),
+ ('22222222-2222-4222-8222-222222222222','MOTORBIKE',false,2,5,30,1440,15,30,80,100,0,120);
 INSERT INTO lot_opening_intervals(id,lot_id,start_minute,end_minute) VALUES
  (gen_random_uuid(),'11111111-1111-4111-8111-111111111111',0,10080),(gen_random_uuid(),'22222222-2222-4222-8222-222222222222',0,10080);
 INSERT INTO parking_levels(id,lot_id,code,name,level_kind,elevation_m,display_order) VALUES

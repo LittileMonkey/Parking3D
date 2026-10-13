@@ -14,7 +14,7 @@ Tài liệu này đặc tả chi tiết kiến trúc kỹ thuật cho User Story
    - *Nguyên tắc cốt lõi:* Dữ liệu trả về chỉ mang tính tham khảo (Snapshot View). Mọi thao tác ghi (`Write Booking`) bắt buộc phải re-check trong Transaction với **PostgreSQL Advisory Lock** và **GiST Overlap Exclusion Constraint**.
 2. **API Tra cứu Chi tiết Đơn đặt chỗ (Booking Detail Lookup):** Cung cấp dữ liệu chi tiết booking cho giao diện người dùng (Customer App) và nhân viên cổng (Staff UI).
    - *Bảo mật & Phân quyền:* Áp dụng chặt chẽ **Facility-Scoped RBAC & Resource Ownership**. Khách chỉ được xem vé của mình; Staff chỉ được xem vé của bãi mình phụ trách. Bất kỳ vi phạm nào đều trả về lỗi `403 Forbidden`.
-3. **Background Worker Quét Hết Hạn Giữ Chỗ (Hold Expiry Worker):** Dịch vụ chạy ngầm định kỳ (chu kỳ 10 giây) tự động quét và giải phóng các booking `PENDING_PAYMENT` đã quá hạn 15 phút.
+3. **Background Worker Quét Hết Hạn Giữ Chỗ (Hold Expiry Worker):** Dịch vụ chạy ngầm định kỳ (chu kỳ 10 giây) tự động quét và giải phóng các booking `PENDING_PAYMENT` đã quá hạn giữ chỗ (mặc định 5 phút).
    - *Bất biến sống còn (Invariants):* 
      - Tuyệt đối không giải phóng slot nếu xe vật lý đang chiếm chỗ thực tế (`session_slot_assignments.vacated_at IS NULL`).
      - Tuyệt đối không tự ý đổi đơn `CONFIRMED` sang `AVAILABLE` ngầm.
@@ -135,7 +135,7 @@ Khung phản hồi chuẩn bọc trong `ApiResponse<BookingDetailViewDto>`:
 ## 4. Background Service: Hold Expiry Worker
 
 - **Kiểu Service:** `BackgroundService` (.NET 9) sử dụng `PeriodicTimer(TimeSpan.FromSeconds(10))`.
-- **Mục đích:** Tự động thu hồi slot từ các đơn đặt chỗ quá hạn giữ chỗ 15 phút (`hold_expires_at <= now()`) mà khách chưa thanh toán.
+- **Mục đích:** Tự động thu hồi slot từ các đơn đặt chỗ quá hạn giữ chỗ (`hold_expires_at <= now()`, mặc định 5 phút) mà khách chưa thanh toán.
 
 ### 4.1. Thứ tự Khóa Tài nguyên (Lock Order Invariant)
 Để tránh Deadlock giữa Worker chạy ngầm và luồng Đặt chỗ / Thanh toán, thứ tự khóa bắt buộc là:
@@ -172,7 +172,7 @@ WHERE status = 'PENDING_PAYMENT'
 
 -- 3. Ghi vết kiểm toán tự động (Audit Log)
 INSERT INTO audit_logs (id, lot_id, actor_type, action, entity_type, entity_id, reason, created_at)
-SELECT gen_random_uuid(), lot_id, 'SYSTEM', 'EXPIRE_HOLD', 'BOOKING', id::text, 'Hold 15m timeout', now()
+SELECT gen_random_uuid(), lot_id, 'SYSTEM', 'EXPIRE_HOLD', 'BOOKING', id::text, 'Hold 5m timeout', now()
 FROM bookings 
 WHERE status = 'EXPIRED' AND updated_at = now();
 ```

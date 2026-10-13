@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Npgsql;
 using Parking.Parking.Application;
+using Parking.Parking.Application.DTOs;
 using Parking.Parking.Domain;
 using Parking.ServiceDefaults;
 
@@ -137,7 +138,7 @@ public sealed class ParkingRepository(NpgsqlDataSource db) : IParkingRepository
         await tx.CommitAsync(ct);return result;
     }
 
-    public async Task<LotAvailabilityView> GetLotAvailabilityAsync(
+    public async Task<LotAvailabilityDto> GetLotAvailabilityAsync(
         Guid lotId,
         DateTimeOffset? startTime,
         DateTimeOffset? endTime,
@@ -170,14 +171,14 @@ public sealed class ParkingRepository(NpgsqlDataSource db) : IParkingRepository
         await lotReader.CloseAsync();
 
         // 2. Query all levels for this lot
-        var levelsMap = new Dictionary<Guid, (string Code, string Name, int Order, List<SlotAvailabilityItem> Slots)>();
+        var levelsMap = new Dictionary<Guid, (string Code, string Name, int Order, List<SlotAvailabilityItemDto> Slots)>();
         await using var lvlCmd = db.CreateCommand("SELECT id, code, name, display_order FROM parking_levels WHERE lot_id = @lot ORDER BY display_order");
         lvlCmd.Parameters.AddWithValue("lot", lotId);
         await using var lvlReader = await lvlCmd.ExecuteReaderAsync(ct);
         while (await lvlReader.ReadAsync(ct))
         {
             var lId = lvlReader.GetGuid(0);
-            levelsMap[lId] = (lvlReader.GetString(1), lvlReader.GetString(2), lvlReader.GetInt32(3), new List<SlotAvailabilityItem>());
+            levelsMap[lId] = (lvlReader.GetString(1), lvlReader.GetString(2), lvlReader.GetInt32(3), new List<SlotAvailabilityItemDto>());
         }
         await lvlReader.CloseAsync();
 
@@ -273,7 +274,7 @@ public sealed class ParkingRepository(NpgsqlDataSource db) : IParkingRepository
                 availableCount++;
             }
 
-            var item = new SlotAvailabilityItem(sId, sCode, zCode, supportedTypes, features, finalStatus);
+            var item = new SlotAvailabilityItemDto(sId, sCode, zCode, supportedTypes, features, finalStatus);
             if (levelsMap.TryGetValue(sLevelId, out var levelGroup))
             {
                 levelGroup.Slots.Add(item);
@@ -282,7 +283,7 @@ public sealed class ParkingRepository(NpgsqlDataSource db) : IParkingRepository
 
         var resultLevels = levelsMap
             .OrderBy(kv => kv.Value.Order)
-            .Select(kv => new LevelAvailabilityItem(
+            .Select(kv => new LevelAvailabilityItemDto(
                 kv.Key,
                 kv.Value.Code,
                 kv.Value.Name,
@@ -290,10 +291,10 @@ public sealed class ParkingRepository(NpgsqlDataSource db) : IParkingRepository
             ))
             .ToList();
 
-        return new LotAvailabilityView(
+        return new LotAvailabilityDto(
             lotId,
             lotCode,
-            new QueryTimeRange(queryStart, queryEnd),
+            new QueryTimeRangeDto(queryStart, queryEnd),
             totalSlots,
             availableCount,
             heldCount,
@@ -303,9 +304,8 @@ public sealed class ParkingRepository(NpgsqlDataSource db) : IParkingRepository
         );
     }
 
-    public async Task<BookingDetailView> GetBookingDetailAsync(
+    public async Task<(BookingDetailDto Detail, Guid? CustomerId, Guid LotId)?> GetBookingDetailAsync(
         Guid bookingId,
-        Guid requestingUserId,
         CancellationToken ct)
     {
         await using var conn = await db.OpenConnectionAsync(ct);
@@ -341,7 +341,7 @@ public sealed class ParkingRepository(NpgsqlDataSource db) : IParkingRepository
         await using var r = await cmd.ExecuteReaderAsync(ct);
 
         if (!await r.ReadAsync(ct))
-            throw new ServiceException(404, "Booking not found");
+            return null;
 
         var bId = r.GetGuid(0);
         var bCode = r.GetString(1);
@@ -362,26 +362,7 @@ public sealed class ParkingRepository(NpgsqlDataSource db) : IParkingRepository
         var createdAt = new DateTimeOffset(r.GetDateTime(16), TimeSpan.Zero);
         await r.CloseAsync();
 
-        // Facility-Scoped RBAC & Resource Ownership Check
-        bool isOwner = customerId.HasValue && customerId.Value == requestingUserId;
-        if (!isOwner)
-        {
-            // Check if Staff assigned to this specific lot
-            await using var staffCmd = new NpgsqlCommand("""
-                SELECT 1 FROM lot_staff_assignments 
-                WHERE lot_id = @lot AND user_id = @user 
-                  AND revoked_at IS NULL 
-                  AND (valid_until IS NULL OR valid_until > now())
-                """, conn);
-            staffCmd.Parameters.AddWithValue("lot", lotId);
-            staffCmd.Parameters.AddWithValue("user", requestingUserId);
-            var isStaff = await staffCmd.ExecuteScalarAsync(ct) != null;
-
-            if (!isStaff)
-                throw new ServiceException(403, "Forbidden: Resource ownership or facility scope violation");
-        }
-
-        return new BookingDetailView(
+        var detail = new BookingDetailDto(
             bId,
             bCode,
             lotId,
@@ -399,6 +380,22 @@ public sealed class ParkingRepository(NpgsqlDataSource db) : IParkingRepository
             qrToken,
             createdAt
         );
+
+        return (detail, customerId, lotId);
+    }
+
+    public async Task<bool> IsStaffAssignedAsync(Guid lotId, Guid userId, CancellationToken ct)
+    {
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await using var staffCmd = new NpgsqlCommand("""
+            SELECT 1 FROM lot_staff_assignments 
+            WHERE lot_id = @lot AND user_id = @user 
+              AND revoked_at IS NULL 
+              AND (valid_until IS NULL OR valid_until > now())
+            """, conn);
+        staffCmd.Parameters.AddWithValue("lot", lotId);
+        staffCmd.Parameters.AddWithValue("user", userId);
+        return await staffCmd.ExecuteScalarAsync(ct) != null;
     }
 
     public async Task<int> ExpireHoldsAsync(CancellationToken ct)
@@ -406,12 +403,18 @@ public sealed class ParkingRepository(NpgsqlDataSource db) : IParkingRepository
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
 
+        // Lock worker task to prevent concurrency conflict between worker instances
+        await using (var lockCmd = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended('HOLD_EXPIRY_WORKER', 0))", conn, tx))
+        {
+            await lockCmd.ExecuteNonQueryAsync(ct);
+        }
+
         // Core Invariants:
         // 1. Do not release slot if vehicle is physically occupying slot (session_slot_assignments.vacated_at IS NULL)
         // 2. Only release HELD reservations for PENDING_PAYMENT bookings where hold_expires_at <= now()
         var sql = """
             WITH expired_candidates AS (
-                SELECT b.id AS booking_id, sr.slot_id
+                SELECT b.id AS booking_id, sr.slot_id, b.lot_id
                 FROM bookings b
                 JOIN slot_reservations sr ON sr.booking_id = b.id
                 WHERE b.status = 'PENDING_PAYMENT'
@@ -428,11 +431,17 @@ public sealed class ParkingRepository(NpgsqlDataSource db) : IParkingRepository
                 FROM expired_candidates ec
                 WHERE sr.booking_id = ec.booking_id AND sr.slot_id = ec.slot_id
                 RETURNING sr.booking_id
+            ),
+            updated_bookings AS (
+                UPDATE bookings b
+                SET status = 'EXPIRED', version = version + 1
+                FROM (SELECT DISTINCT booking_id FROM released_reservations) rr
+                WHERE b.id = rr.booking_id
+                RETURNING b.id, b.lot_id
             )
-            UPDATE bookings b
-            SET status = 'EXPIRED', version = version + 1
-            FROM (SELECT DISTINCT booking_id FROM released_reservations) rr
-            WHERE b.id = rr.booking_id;
+            INSERT INTO audit_logs (id, lot_id, actor_type, action, entity_type, entity_id, reason, created_at)
+            SELECT gen_random_uuid(), lot_id, 'SYSTEM', 'EXPIRE_HOLD', 'BOOKING', id::text, 'Hold 5m timeout', now()
+            FROM updated_bookings;
             """;
 
         await using var cmd = new NpgsqlCommand(sql, conn, tx);

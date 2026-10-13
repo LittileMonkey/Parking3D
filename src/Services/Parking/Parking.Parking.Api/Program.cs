@@ -2,7 +2,11 @@ using Microsoft.AspNetCore.Mvc;
 using Parking.Contracts.AI.V1;
 using Parking.Contracts.Identity.V1;
 using Parking.Parking.Application;
+using Parking.Parking.Application.Interfaces;
 using Parking.Parking.Infrastructure;
+using Parking.Parking.Infrastructure.BackgroundServices;
+using Parking.Parking.Infrastructure.Repositories;
+using Parking.Parking.Infrastructure.Services;
 using Parking.ServiceDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,6 +19,10 @@ builder.Services.AddScoped<IRecognitionClient, RecognitionClient>();
 builder.Services.AddScoped<IParkingRepository, ParkingRepository>();
 builder.Services.AddHostedService<OccupancyWorker>();
 builder.Services.AddHostedService<HoldExpiryWorker>();
+builder.Services.AddScoped<IParkingLotRepository, ParkingLotRepository>();
+builder.Services.AddScoped<IEstimatedPriceService, FakeEstimatedPriceService>();
+builder.Services.AddApplicationServices();
+builder.Services.AddControllers();
 
 var app = builder.Build();
 app.UseParkingDefaults("parking");
@@ -24,32 +32,6 @@ app.MapGrpcService<PaymentEventsGrpc>();
 
 app.MapGet("/api/v1/parking-lots", async (IParkingRepository repo, CancellationToken ct) => 
     Responses.Ok(await repo.ListLotsAsync(ct)));
-
-// SCRUM-48: S2-04 Availability Lookup API
-app.MapGet("/api/v1/parking-lots/{lotId:guid}/availability", async (
-    Guid lotId,
-    [FromQuery] DateTimeOffset? startTime,
-    [FromQuery] DateTimeOffset? endTime,
-    [FromQuery] string? vehicleType,
-    [FromQuery] Guid? levelId,
-    IParkingRepository repo,
-    CancellationToken ct) =>
-{
-    var view = await repo.GetLotAvailabilityAsync(lotId, startTime, endTime, vehicleType, levelId, ct);
-    return Responses.Ok(view);
-});
-
-// SCRUM-48: S2-04 Booking Detail Lookup API (Facility-Scoped & Resource Ownership Protected)
-app.MapGet("/api/v1/bookings/{bookingId:guid}", async (
-    Guid bookingId,
-    HttpContext context,
-    IParkingRepository repo,
-    CancellationToken ct) =>
-{
-    var userId = context.User.Subject();
-    var detail = await repo.GetBookingDetailAsync(bookingId, userId, ct);
-    return Responses.Ok(detail);
-}).RequireAuthorization();
 
 app.MapPost("/api/v1/bookings", async (BookingRequest request, HttpContext context, IFacilityAccess access, IParkingRepository repo, CancellationToken ct) =>
 {
@@ -64,6 +46,7 @@ app.MapPost("/api/v1/parking-lots/{lotId:guid}/plate-recognitions", async (Guid 
     if (!await repo.LotExistsAsync(lotId, ct)) return Responses.Error(404, "Lot not found");
     return Responses.Ok(await client.RecognizeAsync(actor, lotId, context.Request.Headers["Idempotency-Key"].ToString(), request, ct));
 }).RequireAuthorization();
+app.MapControllers();
 
 await app.RunAsync();
 

@@ -57,7 +57,7 @@
 | **BR-05** | **Slot Time-Window Overlap** | Nghiêm cấm 2 booking có khoảng thời gian giữ chỗ `[StartAt, EndAt)` chồng lấn nhau trên cùng một `ParkingSlot`. |
 | **BR-06** | **Vehicle Overlap Guard** | Một phương tiện (`Vehicle` / `NormalizedPlate`) không được có các booking `CONFIRMED` hoặc `PENDING_PAYMENT` có khung thời gian chồng lấn nhau (vẫn cho phép đặt nhiều booking trong ngày nếu các khung giờ tách biệt). |
 | **BR-07** | **Atomic Availability Re-check** | Trước khi chuyển trạng thái booking sang `CONFIRMED`, hệ thống bắt buộc phải kiểm tra lại tính khả dụng của slot trong cùng một Database Transaction có khóa Advisory Lock. |
-| **BR-08** | **Hold Window Policy** | Thời gian giữ chỗ chờ thanh toán (`PendingPayment`) mặc định là **15 phút** theo chuẩn SRS Mentor (có thể cấu hình theo `ParkingPolicy`). |
+| **BR-08** | **Hold Window Policy** | Thời gian giữ chỗ chờ thanh toán (`PendingPayment`) mặc định là **5 phút** (cấu hình linh hoạt theo `lot_vehicle_policies.hold_minutes`). |
 | **BR-09** | **Booking Duration Bounds** | Thời lượng đặt chỗ hợp lệ: Tối thiểu **30 phút**, tối đa **24 giờ** cho mỗi lượt đặt đơn lẻ (có thể cấu hình). |
 | **BR-10** | **Confirmed Resource Invariant** | Một booking đã ở trạng thái `CONFIRMED` là cam kết tài nguyên bất biến, không một người dùng nào khác (kể cả Customer hay Guest) được phép ghi đè. |
 | **BR-11** | **Check-in Validation** | Check-in chỉ thành công khi xe đến đúng bãi xe, đúng phương tiện và trong khung giờ cho phép (ví dụ: đến sớm tối đa 15 phút, trễ tối đa 30 phút). Nếu có sai khác, phải có Staff xác minh và ghi vết Audit. |
