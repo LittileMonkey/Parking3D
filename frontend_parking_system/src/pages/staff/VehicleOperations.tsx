@@ -4,6 +4,7 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Car,
+  Bike,
   QrCode,
   Search,
   CheckCircle2,
@@ -13,6 +14,10 @@ import {
   RotateCcw,
   Sparkles,
   Layers,
+  Camera,
+  ShieldCheck,
+  Video,
+  Maximize2,
 } from "lucide-react";
 import { staffApi } from "../../services/staff/staffApi";
 import type {
@@ -32,6 +37,9 @@ export default function VehicleOperations() {
   const [filterQuery, setFilterQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
 
+  // Vehicle Category for Dynamic Camera Layout: "Motorcycle" | "Car"
+  const [cameraVehicleCategory, setCameraVehicleCategory] = useState<"Car" | "Motorcycle">("Car");
+
   // Check-In Form State
   const [checkInPlate, setCheckInPlate] = useState(initialPlate);
   const [checkInBooking, setCheckInBooking] = useState("");
@@ -49,6 +57,27 @@ export default function VehicleOperations() {
   const [checkOutSuccess, setCheckOutSuccess] = useState<{ message: string; receiptNumber: string } | null>(null);
   const [onlinePaymentStatus, setOnlinePaymentStatus] = useState<string | null>(null);
   const [checkingOnlinePayment, setCheckingOnlinePayment] = useState(false);
+
+  // Sync category when user changes vehicle type in form
+  const handleVehicleTypeChange = (vt: VehicleType) => {
+    setCheckInVehicleType(vt);
+    if (vt === "Motorcycle") {
+      setCameraVehicleCategory("Motorcycle");
+    } else {
+      setCameraVehicleCategory("Car");
+    }
+  };
+
+  const handleCameraCategoryToggle = (category: "Car" | "Motorcycle") => {
+    setCameraVehicleCategory(category);
+    if (category === "Motorcycle") {
+      setCheckInVehicleType("Motorcycle");
+      setCheckInPlate("59-P1 982.14");
+    } else {
+      setCheckInVehicleType("Car");
+      setCheckInPlate("51K-892.45");
+    }
+  };
 
   const handleCheckOnlinePayment = async () => {
     if (!feeInfo?.bookingId) {
@@ -156,41 +185,28 @@ export default function VehicleOperations() {
   };
 
   return (
-    <div>
-      {/* Header */}
-      <div className="staff-page-header">
+    <div className="pm-operations-container">
+      {/* ─── 1. Header Row ─────────────────────────────────────────────────── */}
+      <div className="pm-header-row">
         <div>
-          <h1 className="staff-page-title">
-            <Car size={24} color="var(--teal)" />
-            Điều phối Xe Vào & Xe Ra
+          <h1 className="pm-section-title" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Car size={26} color="var(--pm-teal)" />
+            <span>Điều phối Xe Vào &amp; Xe Ra</span>
           </h1>
-          <p className="staff-page-desc">
-            Xử lý tiếp nhận tại cổng vào, kiểm tra mã đặt chỗ QR, tính phí xuất bến và mở Barrier
+          <p className="pm-section-subtitle">
+            Xử lý tiếp nhận tại cổng vào, kiểm tra mã đặt chỗ QR, tính phí xuất bến và điều khiển Barrier tự động
           </p>
         </div>
 
         {/* Tab Switcher */}
-        <div style={{ display: "flex", background: "#e2e8f0", padding: 3, borderRadius: 10 }}>
+        <div className="pm-tab-switcher">
           <button
             type="button"
             onClick={() => {
               setActiveTab("checkin");
               setCheckInSuccess(null);
             }}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "8px 16px",
-              borderRadius: 8,
-              border: "none",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-              background: activeTab === "checkin" ? "var(--teal)" : "transparent",
-              color: activeTab === "checkin" ? "white" : "var(--muted)",
-              transition: "all 0.15s ease",
-            }}
+            className={`pm-tab-btn ${activeTab === "checkin" ? "active" : ""}`}
           >
             <ArrowDownLeft size={16} />
             <span>CỔNG VÀO (CHECK-IN)</span>
@@ -201,20 +217,7 @@ export default function VehicleOperations() {
               setActiveTab("checkout");
               setCheckOutSuccess(null);
             }}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "8px 16px",
-              borderRadius: 8,
-              border: "none",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-              background: activeTab === "checkout" ? "var(--teal)" : "transparent",
-              color: activeTab === "checkout" ? "white" : "var(--muted)",
-              transition: "all 0.15s ease",
-            }}
+            className={`pm-tab-btn ${activeTab === "checkout" ? "active" : ""}`}
           >
             <ArrowUpRight size={16} />
             <span>CỔNG RA (CHECK-OUT)</span>
@@ -222,456 +225,510 @@ export default function VehicleOperations() {
         </div>
       </div>
 
-      {/* Main Operations Split Panes */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 24, marginBottom: 24 }}>
-        {/* TAB 1: CỔNG VÀO (CHECK-IN) */}
-        {activeTab === "checkin" && (
-          <div className="staff-card" style={{ marginBottom: 0 }}>
-            <div className="staff-card-header" style={{ background: "#f0fdf4" }}>
-              <h2 className="staff-card-title" style={{ color: "#166534" }}>
-                <ArrowDownLeft size={18} />
-                Tiếp nhận Xe vào Cổng
-              </h2>
-              <span className="staff-badge badge-available">Barrier G1 Sẵn sàng</span>
-            </div>
-            <div className="staff-card-body">
-              <form onSubmit={handleCheckIn} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                <div className="staff-form-group">
-                  <label className="staff-label">Biển số xe nhận diện (hoặc nhập thủ công):</label>
-                  <input
-                    type="text"
-                    required
-                    className="staff-input"
-                    style={{ fontSize: 16, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}
-                    placeholder="VD: 51K-892.45"
-                    value={checkInPlate}
-                    onChange={(e) => setCheckInPlate(e.target.value)}
-                  />
+      {/* ─── 2. Main Two-Column Operations Layout ───────────────────────────── */}
+      <div className="pm-operations-grid">
+        {/* LEFT COLUMN: Check-In or Check-Out Form Card */}
+        <div className="pm-op-card">
+          {activeTab === "checkin" ? (
+            <>
+              <div className="pm-op-card-header checkin-accent">
+                <div className="pm-card-title-group">
+                  <ArrowDownLeft size={19} className="pm-icon-teal" />
+                  <h2 className="pm-op-card-title">Tiếp nhận Xe vào Cổng</h2>
                 </div>
+                <span className="pm-badge-success">Barrier G1 Sẵn sàng</span>
+              </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  <div className="staff-form-group">
-                    <label className="staff-label">Mã đặt chỗ (nếu có):</label>
+              <div className="pm-op-card-body">
+                <form onSubmit={handleCheckIn} className="pm-form-stack">
+                  <div className="pm-form-field">
+                    <label className="pm-form-label">
+                      Biển số xe nhận diện (hoặc nhập thủ công) <span className="pm-required">*</span>:
+                    </label>
                     <input
                       type="text"
-                      className="staff-input"
-                      placeholder="BK-2026..."
-                      value={checkInBooking}
-                      onChange={(e) => setCheckInBooking(e.target.value)}
+                      required
+                      className="pm-form-input pm-plate-input"
+                      placeholder="VD: 51K-892.45"
+                      value={checkInPlate}
+                      onChange={(e) => setCheckInPlate(e.target.value)}
                     />
                   </div>
 
-                  <div className="staff-form-group">
-                    <label className="staff-label">Loại xe:</label>
+                  <div className="pm-form-row">
+                    <div className="pm-form-field">
+                      <label className="pm-form-label">Mã đặt chỗ (nếu có):</label>
+                      <input
+                        type="text"
+                        className="pm-form-input"
+                        placeholder="BK-2026..."
+                        value={checkInBooking}
+                        onChange={(e) => setCheckInBooking(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="pm-form-field">
+                      <label className="pm-form-label">Loại xe:</label>
+                      <select
+                        className="pm-form-select"
+                        value={checkInVehicleType}
+                        onChange={(e) => handleVehicleTypeChange(e.target.value as VehicleType)}
+                      >
+                        <option value="Car">Ô tô (4-7 chỗ)</option>
+                        <option value="Motorcycle">Xe máy</option>
+                        <option value="EV">Xe điện (EV)</option>
+                        <option value="Truck">Xe tải nhẹ</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="pm-form-field">
+                    <label className="pm-form-label">Cổng vào chỉ định:</label>
                     <select
-                      className="staff-select"
-                      value={checkInVehicleType}
-                      onChange={(e) => setCheckInVehicleType(e.target.value as VehicleType)}
+                      className="pm-form-select"
+                      value={checkInGate}
+                      onChange={(e) => setCheckInGate(e.target.value)}
                     >
-                      <option value="Car">Ô tô (4-7 chỗ)</option>
-                      <option value="Motorcycle">Xe máy</option>
-                      <option value="EV">Xe điện (EV)</option>
-                      <option value="Truck">Xe tải nhẹ</option>
+                      <option value="Cổng Vào G1">Cổng Vào G1 (Mặt đường Lê Lợi - Ô tô &amp; EV)</option>
+                      <option value="Cổng Vào G2">Cổng Vào G2 (Làn chuyên dụng Xe máy)</option>
                     </select>
                   </div>
-                </div>
 
-                <div className="staff-form-group">
-                  <label className="staff-label">Cổng vào chỉ định:</label>
-                  <select
-                    className="staff-select"
-                    value={checkInGate}
-                    onChange={(e) => setCheckInGate(e.target.value)}
-                  >
-                    <option value="Cổng Vào G1">Cổng Vào G1 (Mặt đường Lê Lợi)</option>
-                    <option value="Cổng Vào G2">Cổng Vào G2 (Làn xe máy)</option>
-                  </select>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={checkInLoading}
-                  className="staff-quick-btn staff-btn-primary"
-                  style={{ width: "100%", justifyContent: "center", padding: "12px", fontSize: 14, marginTop: 4 }}
-                >
-                  {checkInLoading ? "Đang xử lý..." : "Xác nhận Check-in & Mở Barrier Cổng"}
-                </button>
-              </form>
-
-              {/* Check-In Success Ticket */}
-              {checkInSuccess && (
-                <div
-                  style={{
-                    marginTop: 18,
-                    padding: 16,
-                    borderRadius: 10,
-                    background: "#ecfdf5",
-                    border: "1.5px dashed #34d399",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 10,
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#065f46", fontWeight: 700 }}>
-                    <CheckCircle2 size={20} />
-                    <span>Check-in Thành công • Barrier Đã Mở</span>
-                  </div>
-                  <div style={{ fontSize: 13, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    <div>Biển số: <strong>{checkInSuccess.licensePlate}</strong></div>
-                    <div>Vị trí gán: <strong style={{ color: "var(--teal)", fontSize: 15 }}>{checkInSuccess.slotCode}</strong></div>
-                    <div>Tầng: <strong>{checkInSuccess.levelName}</strong></div>
-                    <div>Giờ vào: <strong>{new Date(checkInSuccess.checkinAt).toLocaleTimeString("vi-VN")}</strong></div>
-                  </div>
                   <button
-                    type="button"
-                    onClick={() => window.print()}
-                    className="staff-quick-btn staff-btn-secondary"
-                    style={{ alignSelf: "flex-start", fontSize: 12, padding: "6px 12px" }}
+                    type="submit"
+                    disabled={checkInLoading}
+                    className="pm-cta-btn pm-btn-teal"
                   >
-                    <Printer size={14} />
-                    In Vé Giấy Cho Khách
+                    <CheckCircle2 size={18} />
+                    <span>{checkInLoading ? "Đang xử lý..." : "Xác nhận Check-in & Mở Barrier"}</span>
                   </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+                </form>
 
-        {/* TAB 2: CỔNG RA (CHECK-OUT) */}
-        {activeTab === "checkout" && (
-          <div className="staff-card" style={{ marginBottom: 0 }}>
-            <div className="staff-card-header" style={{ background: "#f0f9ff" }}>
-              <h2 className="staff-card-title" style={{ color: "#0369a1" }}>
-                <ArrowUpRight size={18} />
-                Tính phí & Xử lý Xe Ra
-              </h2>
-              <span className="staff-badge badge-available">Cổng Ra G3 Online</span>
-            </div>
-            <div className="staff-card-body">
-              <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-                <input
-                  type="text"
-                  className="staff-input"
-                  style={{ flex: 1, textTransform: "uppercase", fontWeight: 600 }}
-                  placeholder="Nhập Biển số xe hoặc Mã phiên..."
-                  value={checkOutQuery}
-                  onChange={(e) => setCheckOutQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleLookupFee()}
-                />
-                <button
-                  type="button"
-                  onClick={() => handleLookupFee()}
-                  disabled={calculatingFee}
-                  className="staff-quick-btn staff-btn-primary"
-                >
-                  <Search size={16} />
-                  <span>{calculatingFee ? "Đang tìm..." : "Tra cứu"}</span>
-                </button>
+                {/* Check-In Success Box */}
+                {checkInSuccess && (
+                  <div className="pm-success-box">
+                    <div className="pm-success-header">
+                      <CheckCircle2 size={20} color="#10b981" />
+                      <span>Check-in Thành công • Barrier Đã Mở</span>
+                    </div>
+                    <div className="pm-success-details">
+                      <div>Biển số: <strong>{checkInSuccess.licensePlate}</strong></div>
+                      <div>Vị trí gán: <strong className="pm-slot-highlight">{checkInSuccess.slotCode}</strong></div>
+                      <div>Tầng: <strong>{checkInSuccess.levelName}</strong></div>
+                      <div>Giờ vào: <strong>{new Date(checkInSuccess.checkinAt).toLocaleTimeString("vi-VN")}</strong></div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="pm-print-btn"
+                    >
+                      <Printer size={15} />
+                      <span>In Vé Giấy Cho Khách</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              {/* CHECK-OUT TAB */}
+              <div className="pm-op-card-header checkout-accent">
+                <div className="pm-card-title-group">
+                  <ArrowUpRight size={19} className="pm-icon-blue" />
+                  <h2 className="pm-op-card-title">Tính phí &amp; Xử lý Xe Ra</h2>
+                </div>
+                <span className="pm-badge-success">Cổng Ra G3 Online</span>
               </div>
 
-              {/* Fee Information Breakdown */}
-              {feeInfo && (
-                <div style={{ padding: 16, background: "#f8fafc", borderRadius: 10, border: "1px solid var(--line)" }}>
-                  <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: "var(--ink)" }}>
-                    Bảng kê Chi tiết Thu phí Xuất bến
-                  </h3>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span style={{ color: "var(--muted)" }}>Biển số xe:</span>
-                      <strong style={{ fontSize: 15 }}>{feeInfo.licensePlate}</strong>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span style={{ color: "var(--muted)" }}>Vị trí đã đỗ:</span>
-                      <strong>{feeInfo.slotCode}</strong>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span style={{ color: "var(--muted)" }}>Thời gian vào:</span>
-                      <span>{new Date(feeInfo.checkinAt).toLocaleTimeString("vi-VN")}</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span style={{ color: "var(--muted)" }}>Tổng thời lượng:</span>
-                      <strong>{Math.floor(feeInfo.durationMinutes / 60)} giờ {feeInfo.durationMinutes % 60} phút</strong>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span style={{ color: "var(--muted)" }}>Gói cước áp dụng:</span>
-                      <span>{feeInfo.pricingPlanName}</span>
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        paddingTop: 10,
-                        borderTop: "1px dashed var(--line)",
-                        fontSize: 16,
-                      }}
-                    >
-                      <strong style={{ color: "var(--ink)" }}>TỔNG TIỀN PHẢI THU:</strong>
-                      <strong style={{ color: "var(--teal)", fontSize: 18 }}>
-                        {feeInfo.estimatedFee.toLocaleString("vi-VN")} {feeInfo.currency}
-                      </strong>
-                    </div>
-                  </div>
+              <div className="pm-op-card-body">
+                <div className="pm-lookup-row">
+                  <input
+                    type="text"
+                    className="pm-form-input pm-plate-input"
+                    style={{ flex: 1 }}
+                    placeholder="Nhập Biển số xe hoặc Mã phiên..."
+                    value={checkOutQuery}
+                    onChange={(e) => setCheckOutQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleLookupFee()}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleLookupFee()}
+                    disabled={calculatingFee}
+                    className="pm-search-action-btn"
+                  >
+                    <Search size={16} />
+                    <span>{calculatingFee ? "Đang tìm..." : "Tra cứu"}</span>
+                  </button>
+                </div>
 
-                  {/* Payment Method Selector */}
-                  <div style={{ marginTop: 16 }}>
-                    <label className="staff-label" style={{ marginBottom: 8, display: "block" }}>
-                      Hình thức thanh toán:
-                    </label>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-                      <button
-                        type="button"
-                        onClick={() => setCheckOutMethod("Cash")}
-                        style={{
-                          padding: 10,
-                          borderRadius: 8,
-                          border: "1px solid",
-                          borderColor: checkOutMethod === "Cash" ? "var(--teal)" : "var(--line)",
-                          background: checkOutMethod === "Cash" ? "#eff9f7" : "white",
-                          color: checkOutMethod === "Cash" ? "var(--teal)" : "var(--ink)",
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "center",
-                          gap: 4,
-                          cursor: "pointer",
-                          fontWeight: 600,
-                          fontSize: 12,
-                        }}
-                      >
-                        <Banknote size={18} />
-                        <span>Tiền mặt</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCheckOutMethod("Card")}
-                        style={{
-                          padding: 10,
-                          borderRadius: 8,
-                          border: "1px solid",
-                          borderColor: checkOutMethod === "Card" ? "var(--teal)" : "var(--line)",
-                          background: checkOutMethod === "Card" ? "#eff9f7" : "white",
-                          color: checkOutMethod === "Card" ? "var(--teal)" : "var(--ink)",
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "center",
-                          gap: 4,
-                          cursor: "pointer",
-                          fontWeight: 600,
-                          fontSize: 12,
-                        }}
-                      >
-                        <CreditCard size={18} />
-                        <span>Thẻ POS</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCheckOutMethod("Wallet")}
-                        style={{
-                          padding: 10,
-                          borderRadius: 8,
-                          border: "1px solid",
-                          borderColor: checkOutMethod === "Wallet" ? "var(--teal)" : "var(--line)",
-                          background: checkOutMethod === "Wallet" ? "#eff9f7" : "white",
-                          color: checkOutMethod === "Wallet" ? "var(--teal)" : "var(--ink)",
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "center",
-                          gap: 4,
-                          cursor: "pointer",
-                          fontWeight: 600,
-                          fontSize: 12,
-                        }}
-                      >
-                        <QrCode size={18} />
-                        <span>VietQR</span>
-                      </button>
+                {/* Fee Information Breakdown */}
+                {feeInfo && (
+                  <div className="pm-fee-card">
+                    <h3 className="pm-fee-title">Bảng kê Chi tiết Thu phí Xuất bến</h3>
+                    <div className="pm-fee-lines">
+                      <div className="pm-fee-line">
+                        <span className="pm-text-muted">Biển số xe:</span>
+                        <strong className="pm-text-white">{feeInfo.licensePlate}</strong>
+                      </div>
+                      <div className="pm-fee-line">
+                        <span className="pm-text-muted">Vị trí đã đỗ:</span>
+                        <strong className="pm-text-teal">{feeInfo.slotCode}</strong>
+                      </div>
+                      <div className="pm-fee-line">
+                        <span className="pm-text-muted">Thời gian vào:</span>
+                        <span>{new Date(feeInfo.checkinAt).toLocaleTimeString("vi-VN")}</span>
+                      </div>
+                      <div className="pm-fee-line">
+                        <span className="pm-text-muted">Tổng thời lượng:</span>
+                        <strong>{Math.floor(feeInfo.durationMinutes / 60)} giờ {feeInfo.durationMinutes % 60} phút</strong>
+                      </div>
+                      <div className="pm-fee-line">
+                        <span className="pm-text-muted">Gói cước áp dụng:</span>
+                        <span>{feeInfo.pricingPlanName}</span>
+                      </div>
+                      <div className="pm-fee-total-row">
+                        <span>TỔNG TIỀN PHẢI THU:</span>
+                        <strong className="pm-fee-total-amount">
+                          {feeInfo.estimatedFee.toLocaleString("vi-VN")} {feeInfo.currency}
+                        </strong>
+                      </div>
                     </div>
-                  </div>
 
-                  {feeInfo.bookingId && (
-                    <div style={{ marginTop: 12, padding: "10px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid var(--line)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={{ fontSize: 12, color: "var(--ink-light)" }}>Kiểm tra thanh toán online qua cổng:</span>
+                    {/* Payment Method Selector */}
+                    <div className="pm-payment-section">
+                      <label className="pm-form-label">Hình thức thanh toán:</label>
+                      <div className="pm-payment-options">
                         <button
                           type="button"
-                          onClick={handleCheckOnlinePayment}
-                          disabled={checkingOnlinePayment}
-                          className="staff-quick-btn"
-                          style={{ padding: "4px 8px", fontSize: 11 }}
+                          onClick={() => setCheckOutMethod("Cash")}
+                          className={`pm-pay-method-btn ${checkOutMethod === "Cash" ? "active" : ""}`}
                         >
-                          {checkingOnlinePayment ? "Đang kiểm tra..." : "Tra cứu thanh toán"}
+                          <Banknote size={20} />
+                          <span>Tiền mặt</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCheckOutMethod("Card")}
+                          className={`pm-pay-method-btn ${checkOutMethod === "Card" ? "active" : ""}`}
+                        >
+                          <CreditCard size={20} />
+                          <span>Thẻ POS</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCheckOutMethod("Wallet")}
+                          className={`pm-pay-method-btn ${checkOutMethod === "Wallet" ? "active" : ""}`}
+                        >
+                          <QrCode size={20} />
+                          <span>VietQR</span>
                         </button>
                       </div>
-                      {onlinePaymentStatus && (
-                        <div style={{ marginTop: 6, fontSize: 12, fontWeight: 600, color: "var(--teal)" }}>
-                          {onlinePaymentStatus}
-                        </div>
-                      )}
                     </div>
-                  )}
 
-                  <button
-                    type="button"
-                    onClick={handleCheckOut}
-                    disabled={checkOutProcessing}
-                    className="staff-quick-btn staff-btn-primary"
-                    style={{ width: "100%", justifyContent: "center", padding: "12px", marginTop: 16, fontSize: 14 }}
-                  >
-                    {checkOutProcessing ? "Đang ghi nhận..." : "Xác nhận Đã Thu Tiền & Mở Barrier Ra"}
-                  </button>
-                </div>
-              )}
+                    {/* Online payment check */}
+                    {feeInfo.bookingId && (
+                      <div className="pm-online-check-box">
+                        <div className="pm-online-row">
+                          <span className="pm-text-muted">Kiểm tra thanh toán online qua cổng:</span>
+                          <button
+                            type="button"
+                            onClick={handleCheckOnlinePayment}
+                            disabled={checkingOnlinePayment}
+                            className="pm-btn-secondary-sm"
+                          >
+                            {checkingOnlinePayment ? "Đang kiểm tra..." : "Tra cứu thanh toán"}
+                          </button>
+                        </div>
+                        {onlinePaymentStatus && (
+                          <div className="pm-online-status-text">{onlinePaymentStatus}</div>
+                        )}
+                      </div>
+                    )}
 
-              {/* Check-Out Success */}
-              {checkOutSuccess && (
-                <div
-                  style={{
-                    padding: 16,
-                    borderRadius: 10,
-                    background: "#ecfdf5",
-                    border: "1px solid #34d399",
-                    color: "#065f46",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700 }}>
-                    <CheckCircle2 size={18} />
-                    <span>{checkOutSuccess.message}</span>
+                    <button
+                      type="button"
+                      onClick={handleCheckOut}
+                      disabled={checkOutProcessing}
+                      className="pm-cta-btn pm-btn-teal"
+                      style={{ marginTop: 18 }}
+                    >
+                      <CheckCircle2 size={18} />
+                      <span>{checkOutProcessing ? "Đang ghi nhận..." : "Xác nhận Đã Thu Tiền & Mở Barrier Ra"}</span>
+                    </button>
                   </div>
-                  <div style={{ fontSize: 13 }}>
-                    Số biên lai: <strong>{checkOutSuccess.receiptNumber}</strong>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => window.print()}
-                    className="staff-quick-btn staff-btn-secondary"
-                    style={{ alignSelf: "flex-start", fontSize: 12, padding: "4px 10px" }}
-                  >
-                    <Printer size={14} />
-                    In Hoá đơn GTGT
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+                )}
 
-        {/* Live Camera & Gate Sensor Preview Mock */}
-        <div className="staff-card" style={{ marginBottom: 0 }}>
-          <div className="staff-card-header">
-            <h2 className="staff-card-title">
-              <Sparkles size={16} color="var(--teal)" />
-              Hình ảnh Camera ANPR Giám sát Làn xe
-            </h2>
-            <span className="live-indicator">
-              <span className="live-dot" /> LIVE 30 FPS
-            </span>
-          </div>
-          <div className="staff-card-body">
-            <div
-              style={{
-                width: "100%",
-                height: 200,
-                background: "#0f172a",
-                borderRadius: 8,
-                position: "relative",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#64748b",
-                overflow: "hidden",
-                border: "1px solid #334155",
-              }}
-            >
-              <div
-                style={{
-                  position: "absolute",
-                  top: 10,
-                  left: 12,
-                  color: "#22c55e",
-                  fontSize: 11,
-                  fontFamily: "monospace",
-                }}
-              >
-                CAM-IN-01 • 1080P • AI PLATE RECOGNITION OK
+                {/* Check-Out Success Ticket */}
+                {checkOutSuccess && (
+                  <div className="pm-success-box">
+                    <div className="pm-success-header">
+                      <CheckCircle2 size={20} color="#10b981" />
+                      <span>{checkOutSuccess.message}</span>
+                    </div>
+                    <div className="pm-success-details">
+                      <div>Số biên lai: <strong>{checkOutSuccess.receiptNumber}</strong></div>
+                      <div>Barrier: <strong>Đã tự động mở cho xe xuất bến</strong></div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="pm-print-btn"
+                    >
+                      <Printer size={15} />
+                      <span>In Hoá đơn GTGT</span>
+                    </button>
+                  </div>
+                )}
               </div>
-              <div
-                style={{
-                  border: "2px dashed #06b6d4",
-                  padding: "16px 28px",
-                  borderRadius: 6,
-                  textAlign: "center",
-                }}
-              >
-                <div style={{ color: "#38bdf8", fontSize: 18, fontWeight: 700, fontFamily: "monospace" }}>
-                  [ 51K - 892.45 ]
-                </div>
-                <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 4 }}>
-                  Độ chính xác: 99.4% • Toyota Corolla Cross
-                </div>
-              </div>
-              <div
-                style={{
-                  position: "absolute",
-                  bottom: 10,
-                  right: 12,
-                  color: "#cbd5e1",
-                  fontSize: 10,
-                  fontFamily: "monospace",
-                }}
-              >
-                {new Date().toLocaleTimeString("vi-VN")}
-              </div>
+            </>
+          )}
+        </div>
+
+        {/* RIGHT COLUMN: 2. DYNAMIC CAMERA & ANPR MONITORING PANEL */}
+        <div className="pm-op-card">
+          <div className="pm-op-card-header">
+            <div className="pm-card-title-group">
+              <Camera size={19} className="pm-icon-teal" />
+              <h2 className="pm-op-card-title">Camera ANPR Giám sát Làn xe</h2>
             </div>
 
-            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+            {/* Vehicle Type Toggle: Motorcycle (2 Cams) vs Car (4 Cams) */}
+            <div className="pm-cam-type-toggle">
               <button
                 type="button"
-                className="staff-quick-btn staff-btn-secondary"
-                style={{ flex: 1, fontSize: 12 }}
-                onClick={() => setCheckInPlate("51K-892.45")}
+                onClick={() => handleCameraCategoryToggle("Motorcycle")}
+                className={`pm-cam-toggle-btn ${cameraVehicleCategory === "Motorcycle" ? "active" : ""}`}
+                title="Giám sát 2 camera (Mặt trước & Mặt sau)"
               >
-                Điền Biển số từ Cam vào Form
+                <Bike size={14} />
+                <span>Xe máy (2 Cam)</span>
               </button>
               <button
                 type="button"
-                className="staff-quick-btn staff-btn-secondary"
-                style={{ fontSize: 12 }}
-                onClick={() => alert("Đã gửi lệnh chụp lại ảnh từ camera ANPR")}
+                onClick={() => handleCameraCategoryToggle("Car")}
+                className={`pm-cam-toggle-btn ${cameraVehicleCategory === "Car" ? "active" : ""}`}
+                title="Giám sát 4 camera đa góc (Trước, Sau, Sườn T/P)"
               >
-                <RotateCcw size={14} /> Chụp lại
+                <Car size={14} />
+                <span>Ô tô / Xe lớn (4 Cam)</span>
               </button>
             </div>
+          </div>
+
+          <div className="pm-op-card-body">
+            {/* IF MOTORCYCLE: 2-Camera Grid Layout */}
+            {cameraVehicleCategory === "Motorcycle" ? (
+              <div className="pm-cam-grid-2">
+                {/* Cam 1: Mặt trước (Front Plate / Face) */}
+                <div className="pm-cam-stream-box">
+                  <div className="pm-cam-top-bar">
+                    <span className="pm-cam-badge live">
+                      <span className="pm-cam-dot" /> LIVE 30 FPS
+                    </span>
+                    <span className="pm-cam-name">Cam 1: Mặt trước (Toàn cảnh &amp; Người lái)</span>
+                    <span className="pm-cam-res">1080P</span>
+                  </div>
+                  <div className="pm-cam-viewport">
+                    <div className="pm-cam-crosshair" />
+                    <div className="pm-cam-tag-box">
+                      <ShieldCheck size={14} color="#10b981" />
+                      <span>Mũ bảo hiểm OK • Người điều khiển rõ nét</span>
+                    </div>
+                    <div className="pm-cam-time">{new Date().toLocaleTimeString("vi-VN")}</div>
+                  </div>
+                  <div className="pm-cam-footer">
+                    <span className="pm-cam-status-label">Làn xe máy G2 • Cảm biến vòng từ kích hoạt</span>
+                    <button
+                      type="button"
+                      className="pm-cam-retake-btn"
+                      onClick={() => alert("Đã gửi lệnh chụp lại Cam 1 (Mặt trước)")}
+                    >
+                      <RotateCcw size={13} /> Chụp lại
+                    </button>
+                  </div>
+                </div>
+
+                {/* Cam 2: Mặt sau (Rear Plate with ANPR Bounding Box) */}
+                <div className="pm-cam-stream-box">
+                  <div className="pm-cam-top-bar">
+                    <span className="pm-cam-badge live">
+                      <span className="pm-cam-dot" /> LIVE 30 FPS
+                    </span>
+                    <span className="pm-cam-name">Cam 2: Mặt sau (ANPR Biển số xe máy)</span>
+                    <span className="pm-cam-res">1080P</span>
+                  </div>
+                  <div className="pm-cam-viewport">
+                    <div className="pm-cam-anpr-bounding-box">
+                      <div className="pm-anpr-plate">[ 59-P1 982.14 ]</div>
+                      <div className="pm-anpr-confidence">Độ chính xác: 99.2% • Honda AirBlade</div>
+                    </div>
+                    <div className="pm-cam-time">{new Date().toLocaleTimeString("vi-VN")}</div>
+                  </div>
+                  <div className="pm-cam-footer">
+                    <button
+                      type="button"
+                      className="pm-cam-fill-btn"
+                      onClick={() => setCheckInPlate("59-P1 982.14")}
+                    >
+                      Điền Biển số vào Form
+                    </button>
+                    <button
+                      type="button"
+                      className="pm-cam-retake-btn"
+                      onClick={() => alert("Đã gửi lệnh chụp lại Cam 2 (Mặt sau)")}
+                    >
+                      <RotateCcw size={13} /> Chụp lại
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* IF CAR / TRUCK: 4-Camera Grid Layout (2x2 Grid) */
+              <div className="pm-cam-grid-4">
+                {/* Cam 1: Mặt trước (Front Plate) */}
+                <div className="pm-cam-stream-box compact">
+                  <div className="pm-cam-top-bar">
+                    <span className="pm-cam-badge live">
+                      <span className="pm-cam-dot" /> LIVE
+                    </span>
+                    <span className="pm-cam-name">Cam 1: Mặt trước (Front Plate)</span>
+                  </div>
+                  <div className="pm-cam-viewport compact">
+                    <div className="pm-cam-anpr-bounding-box">
+                      <div className="pm-anpr-plate">[ 51K - 892.45 ]</div>
+                      <div className="pm-anpr-confidence">AI: 99.4% • Toyota Cross</div>
+                    </div>
+                  </div>
+                  <div className="pm-cam-footer compact">
+                    <button
+                      type="button"
+                      className="pm-cam-fill-btn compact"
+                      onClick={() => setCheckInPlate("51K-892.45")}
+                    >
+                      Điền vào Form
+                    </button>
+                    <button
+                      type="button"
+                      className="pm-cam-retake-btn compact"
+                      onClick={() => alert("Đã gửi lệnh chụp lại Cam 1 (Mặt trước)")}
+                    >
+                      <RotateCcw size={12} /> Chụp lại
+                    </button>
+                  </div>
+                </div>
+
+                {/* Cam 2: Mặt sau (Rear Plate) */}
+                <div className="pm-cam-stream-box compact">
+                  <div className="pm-cam-top-bar">
+                    <span className="pm-cam-badge live">
+                      <span className="pm-cam-dot" /> LIVE
+                    </span>
+                    <span className="pm-cam-name">Cam 2: Mặt sau (Rear Plate)</span>
+                  </div>
+                  <div className="pm-cam-viewport compact">
+                    <div className="pm-cam-anpr-bounding-box">
+                      <div className="pm-anpr-plate">[ 51K - 892.45 ]</div>
+                      <div className="pm-anpr-confidence">AI: 98.9% • Khớp biển trước</div>
+                    </div>
+                  </div>
+                  <div className="pm-cam-footer compact">
+                    <button
+                      type="button"
+                      className="pm-cam-fill-btn compact"
+                      onClick={() => setCheckInPlate("51K-892.45")}
+                    >
+                      Điền vào Form
+                    </button>
+                    <button
+                      type="button"
+                      className="pm-cam-retake-btn compact"
+                      onClick={() => alert("Đã gửi lệnh chụp lại Cam 2 (Mặt sau)")}
+                    >
+                      <RotateCcw size={12} /> Chụp lại
+                    </button>
+                  </div>
+                </div>
+
+                {/* Cam 3: Sườn trái (Left Side) */}
+                <div className="pm-cam-stream-box compact">
+                  <div className="pm-cam-top-bar">
+                    <span className="pm-cam-badge live">
+                      <span className="pm-cam-dot" /> LIVE
+                    </span>
+                    <span className="pm-cam-name">Cam 3: Sườn trái (Left Side)</span>
+                  </div>
+                  <div className="pm-cam-viewport compact">
+                    <div className="pm-cam-tag-box">
+                      <ShieldCheck size={14} color="#10b981" />
+                      <span>Thân xe &amp; Gương trái OK</span>
+                    </div>
+                  </div>
+                  <div className="pm-cam-footer compact">
+                    <span className="pm-cam-status-label">Không vết trầy xước</span>
+                    <button
+                      type="button"
+                      className="pm-cam-retake-btn compact"
+                      onClick={() => alert("Đã gửi lệnh chụp lại Cam 3 (Sườn trái)")}
+                    >
+                      <RotateCcw size={12} /> Chụp lại
+                    </button>
+                  </div>
+                </div>
+
+                {/* Cam 4: Sườn phải (Right Side) */}
+                <div className="pm-cam-stream-box compact">
+                  <div className="pm-cam-top-bar">
+                    <span className="pm-cam-badge live">
+                      <span className="pm-cam-dot" /> LIVE
+                    </span>
+                    <span className="pm-cam-name">Cam 4: Sườn phải (Right Side)</span>
+                  </div>
+                  <div className="pm-cam-viewport compact">
+                    <div className="pm-cam-tag-box">
+                      <ShieldCheck size={14} color="#10b981" />
+                      <span>Thân xe &amp; Gương phải OK</span>
+                    </div>
+                  </div>
+                  <div className="pm-cam-footer compact">
+                    <span className="pm-cam-status-label">Không vết trầy xước</span>
+                    <button
+                      type="button"
+                      className="pm-cam-retake-btn compact"
+                      onClick={() => alert("Đã gửi lệnh chụp lại Cam 4 (Sườn phải)")}
+                    >
+                      <RotateCcw size={12} /> Chụp lại
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Recent Sessions Table */}
-      <div className="staff-card">
-        <div className="staff-card-header">
-          <h2 className="staff-card-title">
-            <Layers size={16} color="var(--teal)" />
-            Danh sách Xe trong Bãi & Lịch sử trong Ca
-          </h2>
+      {/* ─── 4. IN-LOT VEHICLE & SHIFT HISTORY TABLE (SLEEK DARK THEME) ────── */}
+      <div className="pm-op-card">
+        <div className="pm-op-card-header">
+          <div className="pm-card-title-group">
+            <Layers size={19} className="pm-icon-teal" />
+            <h2 className="pm-op-card-title">Danh sách Xe trong Bãi &amp; Lịch sử trong Ca</h2>
+          </div>
 
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <div style={{ position: "relative" }}>
+          <div className="pm-table-filters">
+            <div className="pm-filter-search">
+              <Search size={14} className="pm-filter-icon" />
               <input
                 type="text"
-                className="staff-input"
-                style={{ paddingLeft: 30, fontSize: 12, height: 32 }}
+                className="pm-filter-input"
                 placeholder="Lọc theo biển số..."
                 value={filterQuery}
                 onChange={(e) => setFilterQuery(e.target.value)}
               />
-              <Search size={14} style={{ position: "absolute", left: 10, top: 9, color: "var(--muted)" }} />
             </div>
 
             <select
-              className="staff-select"
-              style={{ fontSize: 12, height: 32, padding: "4px 8px" }}
+              className="pm-filter-select"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
@@ -682,8 +739,8 @@ export default function VehicleOperations() {
           </div>
         </div>
 
-        <div className="staff-table-wrap">
-          <table className="staff-table">
+        <div className="pm-table-wrapper">
+          <table className="pm-dark-table">
             <thead>
               <tr>
                 <th>MÃ PHIÊN</th>
@@ -699,33 +756,35 @@ export default function VehicleOperations() {
             <tbody>
               {sessions.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: "center", color: "var(--muted)", padding: 24 }}>
+                  <td colSpan={8} className="pm-table-empty">
                     Không có lượt xe nào phù hợp.
                   </td>
                 </tr>
               ) : (
                 sessions.map((s) => (
-                  <tr key={s.sessionId}>
+                  <tr key={s.sessionId} className="pm-table-row">
                     <td>
-                      <span style={{ fontFamily: "monospace", fontWeight: 600 }}>{s.sessionId}</span>
+                      <span className="pm-session-code">{s.sessionId}</span>
                       {s.bookingCode && (
-                        <div style={{ fontSize: 10, color: "var(--teal)" }}>{s.bookingCode}</div>
+                        <div className="pm-booking-sub">{s.bookingCode}</div>
                       )}
                     </td>
                     <td>
-                      <strong style={{ fontSize: 14 }}>{s.licensePlate}</strong>
+                      <span className="pm-plate-cell">{s.licensePlate}</span>
                     </td>
-                    <td>{s.vehicleType}</td>
                     <td>
-                      <span style={{ fontWeight: 600, color: "var(--teal)" }}>{s.slotCode}</span>
-                      <div style={{ fontSize: 11, color: "var(--muted)" }}>{s.levelName}</div>
+                      <span className="pm-vehicle-type-tag">{s.vehicleType}</span>
                     </td>
-                    <td>{new Date(s.checkinAt).toLocaleTimeString("vi-VN")}</td>
+                    <td>
+                      <span className="pm-slot-cell">{s.slotCode}</span>
+                      <div className="pm-level-sub">{s.levelName}</div>
+                    </td>
+                    <td>{new Date(s.checkinAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</td>
                     <td>{s.durationMinutes} phút</td>
                     <td>
                       <span
-                        className={`staff-badge ${
-                          s.status === "Active" ? "badge-progress" : "badge-resolved"
+                        className={`pm-status-tag ${
+                          s.status === "Active" ? "tag-active" : "tag-completed"
                         }`}
                       >
                         {s.status === "Active" ? "Đang gửi" : "Đã ra"}
@@ -735,8 +794,7 @@ export default function VehicleOperations() {
                       {s.status === "Active" ? (
                         <button
                           type="button"
-                          className="staff-quick-btn staff-btn-primary"
-                          style={{ fontSize: 11, padding: "4px 8px" }}
+                          className="pm-action-btn-cyan"
                           onClick={() => {
                             setActiveTab("checkout");
                             setCheckOutQuery(s.licensePlate);
@@ -746,7 +804,7 @@ export default function VehicleOperations() {
                           Thu phí ra bãi
                         </button>
                       ) : (
-                        <span style={{ fontSize: 11, color: "var(--muted)" }}>Đã hoàn tất</span>
+                        <span className="pm-text-muted">Đã hoàn tất</span>
                       )}
                     </td>
                   </tr>

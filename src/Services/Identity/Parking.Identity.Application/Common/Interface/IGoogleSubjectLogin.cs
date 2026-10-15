@@ -1,4 +1,4 @@
-﻿using Parking.Identity.Domain.Entities;
+using Parking.Identity.Domain.Entities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
