@@ -7,6 +7,8 @@ import {
   Calendar,
   Car,
   Check,
+  ChevronDown,
+  Clock,
   Cpu,
   CreditCard,
   Droplets,
@@ -55,9 +57,8 @@ const parkingPhotos = [
 function slotStatus(status: string, lang: string = "vi") {
   const normalized = status.toLowerCase();
   if (normalized.includes("available")) return { className: "available", label: lang === "en" ? "Available" : "Còn chỗ" };
-  if (normalized.includes("reserved") || normalized.includes("held")) return { className: "reserved", label: lang === "en" ? "Reserved" : "Đang giữ" };
+  if (normalized.includes("reserved")) return { className: "reserved", label: lang === "en" ? "Reserved" : "Đã giữ" };
   if (normalized.includes("occupied")) return { className: "occupied", label: lang === "en" ? "Occupied" : "Đang có xe" };
-  if (normalized.includes("maintenance")) return { className: "maintenance", label: lang === "en" ? "Maintenance" : "Bảo trì" };
   return { className: "maintenance", label: status || (lang === "en" ? "Unknown" : "Không rõ") };
 }
 
@@ -107,6 +108,7 @@ export default function Home() {
   const [apiState, setApiState] = useState<"loading" | "online" | "offline">("loading");
   const [showLogout, setShowLogout] = useState(false);
   const [mobileMenu, setMobileMenu] = useState(false);
+  const [activeFilter, setActiveFilter] = useState("filter.near");
   const [mapTab, setMapTab] = useState<"map" | "satellite" | "3d">("map");
 
   const [envData, setEnvData] = useState<BuildingEnvironment>({
@@ -153,6 +155,16 @@ export default function Home() {
     await logout();
     setShowLogout(false);
   };
+
+  const filterPills = [
+    { key: "filter.near", fallback: "Gần tôi" },
+    { key: "filter.available", fallback: "Còn chỗ trống" },
+    { key: "filter.best_price", fallback: "Giá tốt nhất" },
+    { key: "filter.has_charge", fallback: "Có chỗ sạc" },
+    { key: "filter.ev", fallback: "Trạm sạc EV" },
+    { key: "filter.open_247", fallback: "Mở cửa 24/7" },
+    { key: "filter.car_type", fallback: "Ô tô 4-7 chỗ" },
+  ];
 
   const marqueeTelemetryItems = (
     <>
@@ -220,24 +232,18 @@ export default function Home() {
             <Link to="/booking" onClick={() => setMobileMenu(false)} className="nav-item">
               {lang === "en" ? "Book a slot" : "Đặt chỗ 3D"}
             </Link>
-            <Link to="/search" onClick={() => setMobileMenu(false)} className="nav-item">
+            <a href="#gis-section" onClick={() => setMobileMenu(false)} className="nav-item">
               {t("nav.find")}
-            </Link>
+            </a>
             <a href="#gis-section" onClick={() => setMobileMenu(false)} className="nav-item">
               {t("nav.map")}
             </a>
-            <Link to="/faq" onClick={() => setMobileMenu(false)} className="nav-item">
-              FAQ
-            </Link>
             <a href="#solutions" onClick={() => setMobileMenu(false)} className="nav-item">
               {t("nav.solutions")}
             </a>
             <a href="#about" onClick={() => setMobileMenu(false)} className="nav-item">
               {t("nav.infrastructure")}
             </a>
-            <Link to="/staff/dashboard" onClick={() => setMobileMenu(false)} className="nav-item" style={{ color: "var(--teal)", fontWeight: 700 }}>
-              {lang === "en" ? "Staff Portal" : "Cổng Vận Hành"}
-            </Link>
           </nav>
 
           <div className="header-actions-light">
@@ -324,20 +330,56 @@ export default function Home() {
 
             {/* Floating Glass Search Container */}
             <div className="search-floating-card">
-              <div className="customer-home-search">
-                <div>
-                  <strong>{lang === "en" ? "Find a parking lot" : "Tìm bãi đỗ xe phù hợp"}</strong>
-                  <span>{lang === "en" ? "Compare distance, availability and estimated price." : "So sánh khoảng cách, chỗ trống và giá ước tính theo thời gian gửi."}</span>
+              <div className="search-grid-inputs">
+                <div className="search-input-col">
+                  <label>
+                    <MapPin size={14} className="input-icon text-cyan-600" /> {t("search.destination")}
+                  </label>
+                  <div className="select-box">
+                    <span>{t("search.destination_val")}</span>
+                    <ChevronDown size={15} className="text-gray-400" />
+                  </div>
                 </div>
-                <Link className="search-submit-btn" to="/search">
-                  <Search size={18} /> {lang === "en" ? "Search lots" : "Tìm bãi"}
-                </Link>
+
+                <div className="search-input-col">
+                  <label>
+                    <Clock size={14} className="input-icon text-cyan-600" /> {t("search.time")}
+                  </label>
+                  <div className="select-box">
+                    <span>{t("search.time_val")}</span>
+                    <ChevronDown size={15} className="text-gray-400" />
+                  </div>
+                </div>
+
+                <div className="search-input-col">
+                  <label>
+                    <Car size={14} className="input-icon text-cyan-600" /> {t("search.vehicle")}
+                  </label>
+                  <div className="select-box">
+                    <span>{t("search.vehicle_val")}</span>
+                    <ChevronDown size={15} className="text-gray-400" />
+                  </div>
+                </div>
+
+                <button className="search-submit-btn">
+                  <Search size={18} /> {t("search.submit")}
+                </button>
               </div>
+
+              {/* Quick Filters Row */}
               <div className="search-filter-row">
-                <span className="filter-title">{lang === "en" ? "Search options" : "Tiêu chí tìm kiếm"}</span>
-                <span className="customer-home-search-hint">
-                  {lang === "en" ? "NEAREST · CHEAPEST · full-duration estimate" : "GẦN NHẤT · GIÁ THẤP NHẤT · ước tính toàn thời lượng"}
-                </span>
+                <span className="filter-title">{t("search.filter_label")}</span>
+                <div className="filter-chips">
+                  {filterPills.map((pill) => (
+                    <button
+                      key={pill.key}
+                      className={`chip ${activeFilter === pill.key ? "active" : ""}`}
+                      onClick={() => setActiveFilter(pill.key)}
+                    >
+                      {t(pill.key)}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -465,12 +507,6 @@ export default function Home() {
                 </button>
               </div>
             </div>
-            <p className="customer-home-map-note">
-              {lang === "en"
-                ? "The homepage map is illustrative. Use live lot search for current availability and duration-based price estimates."
-                : "Bản đồ trang chủ mang tính minh họa. Dùng tìm kiếm bãi để xem chỗ trống và giá ước tính từ API."}
-              {" "}<Link to="/search">{lang === "en" ? "Search lots" : "Tìm bãi đỗ"}</Link>
-            </p>
 
             {/* Interactive Vector GIS Canvas */}
             <div className="gis-canvas-card">
@@ -504,7 +540,7 @@ export default function Home() {
                 <div className="gis-overlay-widget">
                   <div className="widget-header">
                     <span className="dot-live" /> {t("gis.hub_title")}
-                    <span className="live-hub-tag">DEMO VIEW</span>
+                    <span className="live-hub-tag">LIVE HUB</span>
                   </div>
                   <div className="widget-stat-row">
                     <span>{t("gis.hub_open")}</span>
@@ -569,9 +605,9 @@ export default function Home() {
                 {/* Slot popup integration (API Data) */}
                 <div className="gis-popup-card-light">
                   <div className="popup-card-title">
-                    <MapPin size={13} className="text-cyan-600" /> {slots[0]?.parkingLotName || "BÃI ĐỖ XE"}
+                    <MapPin size={13} className="text-cyan-600" /> PARKMATRIX CENTRAL HUB
                     <span className={`api-live-tag ${apiState}`}>
-                      {apiState === "online" ? "API" : apiState === "loading" ? "..." : "OFF"}
+                      {apiState === "online" ? "LIVE" : apiState === "loading" ? "..." : "OFF"}
                     </span>
                   </div>
                   {apiState === "online" && slots.length > 0 ? (

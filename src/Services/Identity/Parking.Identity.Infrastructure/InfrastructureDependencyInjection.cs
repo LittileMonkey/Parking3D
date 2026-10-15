@@ -10,7 +10,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Parking.Identity.Infrastructure.Service.Google;
 
 namespace Identity.Infrastructure
 {
@@ -21,7 +20,6 @@ namespace Identity.Infrastructure
             services.AddScoped<PasswordHasher<AppUser>>();
             services.AddScoped<IPasswordHasherService, PasswordHasherService>();
             services.AddScoped<DbInitializer>();
-            services.AddScoped<IGoogleTokenValidator, GoogleTokenValidator>();
             return services;
         }
     }
