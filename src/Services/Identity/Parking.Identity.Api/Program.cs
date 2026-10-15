@@ -30,7 +30,6 @@ namespace Parking.Identity.Api
             {
                 var initializer = scope.ServiceProvider.GetRequiredService<DbInitializer>();
                 await initializer.SeedAdminAsync();
-                await initializer.SeedParkingStaff();
             }
 
             // Configure the HTTP request pipeline.

@@ -26,7 +26,6 @@ public partial class AppUser
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
-    public string? GoogleSubject { get; set; }
 
     public virtual ICollection<AuthToken> AuthTokens { get; set; } = new List<AuthToken>();
 

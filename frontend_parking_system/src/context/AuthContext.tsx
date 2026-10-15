@@ -24,9 +24,8 @@ function getSavedUser(): AuthUser | null {
 function normalizeUser(tokens: AuthTokens, userName: string): AuthUser {
   return {
     ...(tokens.user ?? {}),
-    userId: tokens.user?.userId ?? tokens.userId,
     userName: tokens.user?.userName ?? tokens.userName ?? userName,
-    email: tokens.user?.email ?? tokens.email ?? tokens.emailNormalized,
+    email: tokens.user?.email ?? tokens.email,
     fullName: tokens.user?.fullName ?? tokens.fullName ?? userName,
     role: tokens.user?.role ?? tokens.role,
     roles: tokens.user?.roles ?? tokens.roles ?? [],

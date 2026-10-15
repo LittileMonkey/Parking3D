@@ -80,9 +80,7 @@ namespace Parking.Identity.Application.Common.Enum
 
         DatabaseError = 9001,
         InternalServerError = 9002,
-        ServiceUnavailable = 9003,
-
-        ClientIDNotFound = 9004
+        ServiceUnavailable = 9003
     }
 }
 
