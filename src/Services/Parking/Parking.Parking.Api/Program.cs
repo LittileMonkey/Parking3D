@@ -4,6 +4,8 @@ using Parking.Contracts.Identity.V1;
 using Parking.Parking.Application;
 using Parking.Parking.Application.Interfaces;
 using Parking.Parking.Infrastructure;
+using Parking.Parking.Persistence;
+using Parking.Parking.Api.Middleware;
 using Parking.Parking.Infrastructure.BackgroundServices;
 using Parking.Parking.Infrastructure.Repositories;
 using Parking.Parking.Infrastructure.Services;
@@ -16,16 +18,19 @@ builder.Services.AddGrpcClient<PlateRecognition.PlateRecognitionClient>(o => o.A
 builder.Services.AddGrpcClient<OccupancyIngestion.OccupancyIngestionClient>(o => o.Address = new Uri(builder.Configuration["Services:AIGrpc"] ?? "http://ai:8081"));
 builder.Services.AddScoped<IFacilityAccess, FacilityAccess>();
 builder.Services.AddScoped<IRecognitionClient, RecognitionClient>();
-builder.Services.AddScoped<IParkingRepository, ParkingRepository>();
+builder.Services.AddParkingPersistence();
 builder.Services.AddHostedService<OccupancyWorker>();
 builder.Services.AddHostedService<HoldExpiryWorker>();
 builder.Services.AddScoped<IParkingLotRepository, ParkingLotRepository>();
 builder.Services.AddScoped<IEstimatedPriceService, FakeEstimatedPriceService>();
 builder.Services.AddApplicationServices();
-builder.Services.AddControllers();
+builder.Services.AddControllers().ConfigureApiBehaviorOptions(options =>
+    options.InvalidModelStateResponseFactory = context => new BadRequestObjectResult(
+        new Parking.ServiceDefaults.ApiResponse<object>(null, false, 400, "Invalid request parameters.")));
 
 var app = builder.Build();
 app.UseParkingDefaults("parking");
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.MapGrpcService<ParkingCatalogGrpc>();
 app.MapGrpcService<BookingPaymentQueryGrpc>();
 app.MapGrpcService<PaymentEventsGrpc>();
