@@ -1,34 +1,63 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Parking.Parking.Application;
 
 namespace Parking.Parking.Infrastructure.BackgroundServices;
 
-// Worker định kỳ quét và giải phóng các đặt chỗ quá hạn thanh toán
-public sealed class HoldExpiryWorker(IParkingRepository repo, ILogger<HoldExpiryWorker> logger) : BackgroundService
+public sealed class HoldExpiryWorker(
+    IServiceScopeFactory scopeFactory,
+    ILogger<HoldExpiryWorker> logger) : BackgroundService
 {
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(
+        CancellationToken stoppingToken)
     {
-        logger.LogInformation("HoldExpiryWorker started with 10-second sweep cycle.");
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        logger.LogInformation("Hold expiry worker started.");
+
+        using var timer = new PeriodicTimer(
+            TimeSpan.FromSeconds(10));
+
+        try
         {
-            try
+            while (await timer.WaitForNextTickAsync(stoppingToken))
             {
-                var expiredCount = await repo.ExpireHoldsAsync(stoppingToken);
-                if (expiredCount > 0)
+                try
                 {
-                    logger.LogInformation("HoldExpiryWorker released {Count} expired reservations.", expiredCount);
+                    await using var scope =
+                        scopeFactory.CreateAsyncScope();
+
+                    var repository = scope.ServiceProvider
+                        .GetRequiredService<IParkingRepository>();
+
+                    var expiredCount = await repository
+                        .ExpireHoldsAsync(stoppingToken);
+
+                    if (expiredCount > 0)
+                    {
+                        logger.LogInformation(
+                            "Expired {Count} booking holds.",
+                            expiredCount);
+                    }
+                }
+                catch (OperationCanceledException)
+                    when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception exception)
+                {
+                    logger.LogError(
+                        exception,
+                        "Failed to process expired booking holds.");
                 }
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning("HoldExpiryWorker cycle encountered error: {Message}", ex.Message);
-            }
         }
+        catch (OperationCanceledException)
+            when (stoppingToken.IsCancellationRequested)
+        {
+            // Dừng chờ timer khi ứng dụng đang tắt.
+        }
+
+        logger.LogInformation("Hold expiry worker stopped.");
     }
 }
