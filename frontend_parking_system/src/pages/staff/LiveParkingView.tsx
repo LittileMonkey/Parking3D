@@ -14,7 +14,6 @@ import {
   ShieldAlert,
   Info,
   Clock,
-  Sparkles,
 } from "lucide-react";
 import { staffApi } from "../../services/staff/staffApi";
 import type { ParkingSlotDetail, SlotStatus, VehicleType } from "../../types/staff";

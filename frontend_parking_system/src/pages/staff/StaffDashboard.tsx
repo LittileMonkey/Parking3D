@@ -6,15 +6,12 @@ import {
   AlertTriangle,
   ArrowDownLeft,
   ArrowUpRight,
-  ShieldAlert,
-  Clock,
   Sparkles,
-  Search,
   CheckCircle2,
   ChevronRight,
 } from "lucide-react";
 import { staffApi } from "../../services/staff/staffApi";
-import type { DashboardOverview, ActivityEvent, OperationalAlert } from "../../types/staff";
+import type { DashboardOverview, ActivityEvent } from "../../types/staff";
 
 export default function StaffDashboard() {
   const navigate = useNavigate();
@@ -23,20 +20,17 @@ export default function StaffDashboard() {
   const [loading, setLoading] = useState(true);
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
-  const [alerts, setAlerts] = useState<OperationalAlert[]>([]);
   const [quickSearchInput, setQuickSearchInput] = useState("");
 
   const loadData = async () => {
     try {
       const lotId = selectedLotId || "lot-01";
-      const [ov, evs, alts] = await Promise.all([
+      const [ov, evs] = await Promise.all([
         staffApi.getDashboardOverview(lotId),
         staffApi.getActivityEvents(),
-        staffApi.getOperationalAlerts(),
       ]);
       setOverview(ov);
       setEvents(evs);
-      setAlerts(alts);
     } catch (err) {
       console.error("Dashboard data load error:", err);
     } finally {

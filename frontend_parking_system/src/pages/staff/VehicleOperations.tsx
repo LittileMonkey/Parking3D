@@ -12,12 +12,9 @@ import {
   CreditCard,
   Banknote,
   RotateCcw,
-  Sparkles,
   Layers,
   Camera,
   ShieldCheck,
-  Video,
-  Maximize2,
 } from "lucide-react";
 import { staffApi } from "../../services/staff/staffApi";
 import type {
