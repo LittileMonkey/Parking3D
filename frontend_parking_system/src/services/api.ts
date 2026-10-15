@@ -401,4 +401,66 @@ export const api = {
       updatedAt: new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
     };
   },
+
+  async confirmCashPayment(bookingId: string, reason: string = "Thu tiền mặt tại cổng", version: number = 1): Promise<{
+    paymentId: string;
+    bookingId: string;
+    status: string;
+    confirmedBy: string;
+    confirmedAt: string;
+  }> {
+    return request<{
+      paymentId: string;
+      bookingId: string;
+      status: string;
+      confirmedBy: string;
+      confirmedAt: string;
+    }>("/api/v1/payments/cash/confirm", {
+      method: "POST",
+      body: JSON.stringify({
+        bookingId,
+        staffReason: reason,
+        version,
+      }),
+    });
+  },
+
+  async getPaymentStatus(bookingId: string): Promise<{
+    bookingId: string;
+    status: string;
+    paymentMethod?: string;
+    amount?: number;
+  }> {
+    return request<{
+      bookingId: string;
+      status: string;
+      paymentMethod?: string;
+      amount?: number;
+    }>(`/api/v1/payments/${encodeURIComponent(bookingId)}/status`);
+  },
+
+  async getOccupancyForecast(lotId: string, vehicleType: string = "Car", horizonMinutes: number = 60): Promise<{
+    id: string;
+    lotId: string;
+    vehicleType: string;
+    generatedAt: string;
+    targetAt: string;
+    usableCapacity: number;
+    predictedOccupied: number;
+    modelVersion: string;
+    isAdvisory: boolean;
+  }> {
+    const params = new URLSearchParams({ vehicleType, horizonMinutes: String(horizonMinutes) });
+    return request<{
+      id: string;
+      lotId: string;
+      vehicleType: string;
+      generatedAt: string;
+      targetAt: string;
+      usableCapacity: number;
+      predictedOccupied: number;
+      modelVersion: string;
+      isAdvisory: boolean;
+    }>(`/api/v1/parking-lots/${encodeURIComponent(lotId)}/occupancy-forecasts?${params.toString()}`);
+  },
 };

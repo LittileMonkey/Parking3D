@@ -1,4 +1,4 @@
-﻿// ─── Staff Portal Domain Types ───────────────────────────────────────────────
+// ─── Staff Portal Domain Types ───────────────────────────────────────────────
 // Dựa trên Baseline V4 schema & API design
 
 export type SlotStatus = "Available" | "Occupied" | "Reserved" | "Maintenance" | "Disabled";
@@ -94,6 +94,8 @@ export interface CheckOutFeeInfo {
   currency: string;
   pricingPlanName: string;
   paymentStatus: PaymentStatus;
+  bookingId?: string;
+  bookingCode?: string;
 }
 
 export interface CheckOutPayload {
@@ -203,4 +205,31 @@ export interface DashboardOverview {
   todayExits: number;
   pendingCheckouts: number;
   pendingVerifications: number;
+}
+
+export interface CashConfirmationResult {
+  paymentId: string;
+  bookingId: string;
+  status: string;
+  confirmedBy: string;
+  confirmedAt: string;
+}
+
+export interface PaymentStatusResult {
+  bookingId: string;
+  status: string;
+  paymentMethod?: string;
+  amount?: number;
+}
+
+export interface OccupancyForecastResult {
+  id: string;
+  lotId: string;
+  vehicleType: string;
+  generatedAt: string;
+  targetAt: string;
+  usableCapacity: number;
+  predictedOccupied: number;
+  modelVersion: string;
+  isAdvisory: boolean;
 }

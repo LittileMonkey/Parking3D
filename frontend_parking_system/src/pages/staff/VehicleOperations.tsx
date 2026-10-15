@@ -47,6 +47,30 @@ export default function VehicleOperations() {
   const [checkOutMethod, setCheckOutMethod] = useState<"Cash" | "Card" | "Wallet">("Cash");
   const [checkOutProcessing, setCheckOutProcessing] = useState(false);
   const [checkOutSuccess, setCheckOutSuccess] = useState<{ message: string; receiptNumber: string } | null>(null);
+  const [onlinePaymentStatus, setOnlinePaymentStatus] = useState<string | null>(null);
+  const [checkingOnlinePayment, setCheckingOnlinePayment] = useState(false);
+
+  const handleCheckOnlinePayment = async () => {
+    if (!feeInfo?.bookingId) {
+      alert("Lượt đỗ này không gắn với Booking ID trực tuyến!");
+      return;
+    }
+    setCheckingOnlinePayment(true);
+    try {
+      const res = await staffApi.getPaymentStatus(feeInfo.bookingId);
+      if (res && (res.status === "COMPLETED" || res.status === "SUCCESS")) {
+        setOnlinePaymentStatus("Đã thanh toán thành công trực tuyến");
+      } else if (res?.status) {
+        setOnlinePaymentStatus(`Trạng thái: ${res.status}`);
+      } else {
+        setOnlinePaymentStatus("Chưa nhận được thanh toán trực tuyến");
+      }
+    } catch {
+      setOnlinePaymentStatus("Chưa nhận được thanh toán trực tuyến");
+    } finally {
+      setCheckingOnlinePayment(false);
+    }
+  };
 
   // Load Sessions
   const loadSessions = async () => {
@@ -462,6 +486,28 @@ export default function VehicleOperations() {
                       </button>
                     </div>
                   </div>
+
+                  {feeInfo.bookingId && (
+                    <div style={{ marginTop: 12, padding: "10px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid var(--line)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: 12, color: "var(--ink-light)" }}>Kiểm tra thanh toán online qua cổng:</span>
+                        <button
+                          type="button"
+                          onClick={handleCheckOnlinePayment}
+                          disabled={checkingOnlinePayment}
+                          className="staff-quick-btn"
+                          style={{ padding: "4px 8px", fontSize: 11 }}
+                        >
+                          {checkingOnlinePayment ? "Đang kiểm tra..." : "Tra cứu thanh toán"}
+                        </button>
+                      </div>
+                      {onlinePaymentStatus && (
+                        <div style={{ marginTop: 6, fontSize: 12, fontWeight: 600, color: "var(--teal)" }}>
+                          {onlinePaymentStatus}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <button
                     type="button"
