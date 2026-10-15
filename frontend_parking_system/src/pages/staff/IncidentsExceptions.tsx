@@ -8,8 +8,6 @@ import {
   CheckCircle2,
   Clock,
   ShieldAlert,
-  Car,
-  Wrench,
   Check,
   AlertOctagon,
 } from "lucide-react";
@@ -68,6 +66,7 @@ export default function IncidentsExceptions() {
             assignedTo: "Kỹ thuật trực ca",
             detectedAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
             notes: "Kỹ thuật đang kiểm tra motor giảm tốc.",
+            updatedAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
           },
           {
             incidentId: "INC-2026-002",
@@ -80,6 +79,7 @@ export default function IncidentsExceptions() {
             relatedSlotCode: "B1-A04",
             reportedBy: "Nguyễn Văn Hùng",
             detectedAt: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
+            updatedAt: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
           },
           {
             incidentId: "INC-2026-003",
@@ -91,6 +91,7 @@ export default function IncidentsExceptions() {
             relatedGate: "Cổng Ra G3",
             reportedBy: "Nguyễn Văn Hùng",
             detectedAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+            updatedAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
           },
         ]);
       } else {
