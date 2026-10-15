@@ -1,182 +1,27 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Text.Json.Serialization;
-using System.Threading.Tasks;
 using FluentValidation;
-using System.Net;
-using System.Text.Json;
-
-
 using Parking.Parking.Application.Exceptions;
+using Parking.ServiceDefaults;
 
-namespace Parking.Parking.Api.Middleware
+namespace Parking.Parking.Api.Middleware;
+
+// Application failures are handled here; infrastructure failures stay in UseParkingDefaults.
+public sealed class ExceptionHandlingMiddleware(RequestDelegate next)
 {
-    // 1. Lớp cấu trúc trả về lỗi (Của Mentor)
-    public class ErrorMessage
+    public async Task InvokeAsync(HttpContext context)
     {
-        public string Message { get; set; } = "Đã xảy ra lỗi hệ thống.";
-        public List<ErrorDetail> ErrorDetails { get; set; } = new();
-    }
-    public class ErrorDetail
-    {
-        public string ErrorMessage { get; set; } = string.Empty;
-        public string ErrorCode { get; set; } = string.Empty;
-        public string ErrorField { get; set; } = string.Empty;
-    }
-    // 2. Lớp xử lý phân loại lỗi (Theo đúng chuẩn mẫu của Mentor)
-    public class ErrorExceptionHandler
-    {
-        private readonly Dictionary<Type, Func<Exception, ErrorMessage>> ExceptionHandling;
-
-        public ErrorExceptionHandler()
+        try { await next(context); }
+        catch (Exception exception) when (!context.Response.HasStarted &&
+            exception is ValidationException or NotFoundException or ForbiddenAccessException)
         {
-            this.ExceptionHandling = new Dictionary<Type, Func<Exception, ErrorMessage>>
+            var status = exception switch
             {
-                { typeof(ValidationException), HandleValidationException },
-                { typeof(NotFoundException), HandleNotFoundException },
-                { typeof(ForbiddenAccessException), HandleForbiddenAccessException },
-                { typeof(NotImplementedException), HandleNotImplementedException },
-                { typeof(Exception), HandleGenericException }
+                ValidationException => 400,
+                NotFoundException => 404,
+                _ => 403
             };
-        }
-
-        public (int, ErrorMessage) HandleException(Exception exception)
-        {
-            var statusCode = GetStatusCode(exception);
-            var errorMessage = new ErrorMessage();
-
-            if (this.ExceptionHandling.TryGetValue(exception.GetType(), out var handler))
-            {
-                errorMessage = handler(exception);
-            }
-            else
-            {
-                errorMessage = HandleGenericException(exception);
-            }
-
-            return (statusCode, errorMessage);
-        }
-
-        private static int GetStatusCode(Exception exception)
-        {
-            return exception switch
-            {
-                ValidationException => StatusCodes.Status400BadRequest,
-                NotFoundException => StatusCodes.Status404NotFound,
-                ForbiddenAccessException => StatusCodes.Status403Forbidden,
-                NotImplementedException => StatusCodes.Status501NotImplemented,
-                _ => StatusCodes.Status500InternalServerError
-            };
-        }
-
-        private ErrorMessage HandleNotFoundException(Exception exception)
-        {
-            return new ErrorMessage
-            {
-                Message = exception.Message,
-                ErrorDetails = new List<ErrorDetail>
-                {
-                    new()
-                    {
-                        ErrorMessage = exception.Message,
-                        ErrorCode = "NotFound",
-                        ErrorField = string.Empty
-                    }
-                }
-            };
-        }
-
-        private ErrorMessage HandleForbiddenAccessException(Exception exception)
-        {
-            return new ErrorMessage
-            {
-                Message = exception.Message,
-                ErrorDetails = new List<ErrorDetail>
-                {
-                    new()
-                    {
-                        ErrorMessage = exception.Message,
-                        ErrorCode = "Forbidden",
-                        ErrorField = string.Empty
-                    }
-                }
-            };
-        }
-
-        private ErrorMessage HandleValidationException(Exception exception)
-        {
-            var validationException = exception as ValidationException;
-            ArgumentNullException.ThrowIfNull(validationException);
-
-            var listError = validationException.Errors.Select(error => new ErrorDetail
-            {
-                ErrorMessage = error.ErrorMessage,
-                ErrorCode = error.ErrorCode,
-                ErrorField = error.PropertyName
-            }).ToList();
-
-            return new ErrorMessage
-            {
-                Message = "Dữ liệu không hợp lệ.",
-                ErrorDetails = listError
-            };
-        }
-
-        private ErrorMessage HandleNotImplementedException(Exception exception)
-        {
-            return new ErrorMessage
-            {
-                Message = "Chức năng chưa được triển khai.",
-                ErrorDetails = new List<ErrorDetail>
-                {
-                    new()
-                    {
-                        ErrorMessage = exception.Message,
-                        ErrorCode = "NotImplemented",
-                        ErrorField = string.Empty
-                    }
-                }
-            };
-        }
-
-        private ErrorMessage HandleGenericException(Exception exception)
-        {
-            return new ErrorMessage
-            {
-                Message = "Đã xảy ra lỗi hệ thống.",
-                ErrorDetails = new List<ErrorDetail>
-                {
-                    new()
-                    {
-                        ErrorMessage = exception.Message,
-                        ErrorCode = "InternalServerError",
-                        ErrorField = exception.Source ?? string.Empty
-                    }
-                }
-            };
-        }
-    }
-    // 3. Lớp Middleware đứng chặn ở cổng Server (Của Mentor)
-    public class ExceptionHandlingMiddleware : IMiddleware
-    {
-        public async Task InvokeAsync(HttpContext context, RequestDelegate next)
-        {
-            try
-            {
-                await next(context);
-            }
-            catch (Exception ex)
-            {
-                var exceptionHandle = new ErrorExceptionHandler();
-                var (status, errorMessage) = exceptionHandle.HandleException(ex);
-
-                context.Response.ContentType = "application/json";
-                context.Response.StatusCode = status;
-
-                await context.Response.WriteAsync(JsonSerializer.Serialize(errorMessage));
-            }
+            context.Response.StatusCode = status;
+            await context.Response.WriteAsJsonAsync(new ApiResponse<object>(null,false,status,exception.Message),
+                cancellationToken: context.RequestAborted);
         }
     }
 }
