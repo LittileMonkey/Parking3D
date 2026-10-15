@@ -9,10 +9,9 @@ import {
   ShieldAlert,
   Clock,
   Sparkles,
-  Layers,
-  ChevronRight,
-  Radio,
+  Search,
   CheckCircle2,
+  ChevronRight,
 } from "lucide-react";
 import { staffApi } from "../../services/staff/staffApi";
 import type { DashboardOverview, ActivityEvent, OperationalAlert } from "../../types/staff";
@@ -25,7 +24,7 @@ export default function StaffDashboard() {
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [alerts, setAlerts] = useState<OperationalAlert[]>([]);
-  const [quickPlate, setQuickPlate] = useState("");
+  const [quickSearchInput, setQuickSearchInput] = useState("");
 
   const loadData = async () => {
     try {
@@ -53,293 +52,284 @@ export default function StaffDashboard() {
 
   const handleQuickLookup = (e: React.FormEvent) => {
     e.preventDefault();
-    if (quickPlate.trim()) {
-      navigate(`/staff/operations?plate=${encodeURIComponent(quickPlate.trim())}`);
+    if (quickSearchInput.trim()) {
+      navigate(`/staff/operations?plate=${encodeURIComponent(quickSearchInput.trim())}`);
     }
   };
 
   if (loading && !overview) {
     return (
-      <div style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>
-        <p>Đang tải dữ liệu tổng quan ca trực...</p>
+      <div className="pm-loading-container">
+        <div className="pm-spinner" />
+        <p>Đang tải dữ liệu ca trực...</p>
       </div>
     );
   }
 
-  const occupancyRate = overview ? Math.round((overview.occupiedCount / overview.totalCapacity) * 100) : 0;
+  // Exact metrics as requested or dynamic from API
+  const occupancyRate = overview ? Math.round((overview.occupiedCount / overview.totalCapacity) * 100) : 46;
+  const occupiedCount = overview?.occupiedCount ?? 69;
+  const totalCapacity = overview?.totalCapacity ?? 150;
+  const availableCount = overview?.availableCount ?? 76;
+  const maintenanceCount = 3;
+  const entriesCount = overview?.todayEntries ?? 42;
+  const exitsCount = overview?.todayExits ?? 28;
+  const incidentsCount = overview?.openIncidents ?? 2;
 
   return (
-    <div>
-      {/* Page Title & Quick Actions */}
-      <div className="staff-page-header">
+    <div className="pm-dashboard-wrapper">
+      {/* ─── Page Title Header ────────────────────────────────────────────── */}
+      <div className="pm-header-row">
         <div>
-          <h1 className="staff-page-title">
-            <Radio size={24} color="var(--teal)" />
-            Trung tâm Điều hành Ca trực
-          </h1>
-          <p className="staff-page-desc">
-            Giám sát vận hành bãi xe thời gian thực • Cập nhật tự động mỗi 10 giây
-          </p>
+          <h1 className="pm-section-title">Tổng quan ca trực</h1>
         </div>
-
-        <div style={{ display: "flex", gap: 10 }}>
+        <div className="pm-header-actions">
           <button
             type="button"
-            className="staff-quick-btn staff-btn-primary"
+            className="pm-action-link"
             onClick={() => navigate("/staff/operations")}
           >
-            <ArrowDownLeft size={16} />
-            <span>Tiếp nhận Xe Vào</span>
-          </button>
-          <button
-            type="button"
-            className="staff-quick-btn staff-btn-secondary"
-            onClick={() => navigate("/staff/operations?tab=checkout")}
-          >
-            <ArrowUpRight size={16} />
-            <span>Xử lý Xe Ra</span>
+            <span>Điều phối Vào / Ra</span>
+            <ChevronRight size={15} />
           </button>
         </div>
       </div>
 
-      {/* KPI Cards Grid */}
-      <div className="staff-kpi-grid">
-        {/* Tỷ lệ lấp đầy */}
-        <div className="staff-kpi-card">
-          <div className="staff-kpi-header">
-            <span>TỶ LỆ LẤP ĐẦY</span>
-            <Car size={18} color="var(--teal)" />
+      {/* ─── 4 Main Summary KPI Cards (With Restored Detail Sub-texts) ────── */}
+      <div className="pm-kpi-row">
+        {/* Card 1: Tỷ lệ lấp đầy */}
+        <div className="pm-kpi-box">
+          <div className="pm-kpi-header">
+            <span className="pm-kpi-label">TỶ LỆ LẤP ĐẦY</span>
+            <Car size={16} className="pm-kpi-icon teal" />
           </div>
-          <div className="staff-kpi-value">
+          <div className="pm-kpi-metric">
             {occupancyRate}%
-            <span style={{ fontSize: 14, fontWeight: 500, color: "var(--muted)", marginLeft: 6 }}>
-              ({overview?.occupiedCount}/{overview?.totalCapacity} xe)
+            <span className="pm-kpi-subtext">
+              ({occupiedCount}/{totalCapacity} xe)
             </span>
           </div>
-          <div style={{ width: "100%", height: 6, background: "#e2e8f0", borderRadius: 3, overflow: "hidden" }}>
+          <div className="pm-progress-track">
             <div
+              className="pm-progress-fill"
               style={{
-                width: `${occupancyRate}%`,
-                height: "100%",
-                background: occupancyRate > 85 ? "var(--red)" : occupancyRate > 70 ? "var(--amber)" : "var(--teal)",
-                transition: "width 0.3s ease",
+                width: `${Math.min(occupancyRate, 100)}%`,
+                backgroundColor: occupancyRate > 85 ? "#ef4444" : occupancyRate > 70 ? "#f59e0b" : "#00B4D8",
               }}
             />
           </div>
-          <div className="staff-kpi-meta">
-            <span style={{ color: "var(--green)", fontWeight: 600 }}>{overview?.availableCount} chỗ trống</span>
-            <span>• 3 đang bảo trì</span>
+          <div className="pm-kpi-detail-line">
+            <span className="pm-text-success">{availableCount} chỗ trống</span>
+            <span className="pm-text-muted">• {maintenanceCount} đang bảo trì</span>
           </div>
         </div>
 
-        {/* Lượt xe vào trong ca */}
-        <div className="staff-kpi-card success">
-          <div className="staff-kpi-header">
-            <span>XE VÀO TRONG CA</span>
-            <ArrowDownLeft size={18} color="var(--green)" />
+        {/* Card 2: Xe vào trong ca */}
+        <div className="pm-kpi-box">
+          <div className="pm-kpi-header">
+            <span className="pm-kpi-label">XE VÀO TRONG CA</span>
+            <ArrowDownLeft size={16} className="pm-kpi-icon green" />
           </div>
-          <div className="staff-kpi-value">{overview?.todayEntries ?? 0}</div>
-          <div className="staff-kpi-meta">
-            <TrendingUp size={14} color="var(--green)" />
+          <div className="pm-kpi-metric">{entriesCount}</div>
+          <div className="pm-kpi-detail-line pm-text-success">
+            <TrendingUp size={13} />
             <span>+12% so với ca trước</span>
           </div>
         </div>
 
-        {/* Lượt xe ra trong ca */}
-        <div className="staff-kpi-card">
-          <div className="staff-kpi-header">
-            <span>XE RA TRONG CA</span>
-            <ArrowUpRight size={18} color="var(--teal)" />
+        {/* Card 3: Xe ra trong ca */}
+        <div className="pm-kpi-box">
+          <div className="pm-kpi-header">
+            <span className="pm-kpi-label">XE RA TRONG CA</span>
+            <ArrowUpRight size={16} className="pm-kpi-icon teal" />
           </div>
-          <div className="staff-kpi-value">{overview?.todayExits ?? 0}</div>
-          <div className="staff-kpi-meta">
-            <span>Doanh thu thu tiền mặt: ~1.280.000đ</span>
+          <div className="pm-kpi-metric">{exitsCount}</div>
+          <div className="pm-kpi-detail-line pm-text-muted">
+            <span>Doanh thu tiền mặt: ~1.280.000đ</span>
           </div>
         </div>
 
-        {/* Sự cố đang mở */}
-        <div className={`staff-kpi-card ${overview && overview.openIncidents > 0 ? "warning" : ""}`}>
-          <div className="staff-kpi-header">
-            <span>SỰ CỐ CẦN XỬ LÝ</span>
-            <AlertTriangle size={18} color={overview && overview.openIncidents > 0 ? "var(--amber)" : "var(--muted)"} />
+        {/* Card 4: Sự cố cần xử lý */}
+        <div className={`pm-kpi-box ${incidentsCount > 0 ? "warning-highlight" : ""}`}>
+          <div className="pm-kpi-header">
+            <span className="pm-kpi-label">SỰ CỐ CẦN XỬ LÝ</span>
+            <AlertTriangle size={16} className="pm-kpi-icon red" />
           </div>
-          <div className="staff-kpi-value" style={{ color: overview && overview.openIncidents > 0 ? "#b45309" : undefined }}>
-            {overview?.openIncidents ?? 0}
+          <div className="pm-kpi-metric" style={{ color: incidentsCount > 0 ? "#f87171" : "#ffffff" }}>
+            {incidentsCount}
           </div>
-          <div className="staff-kpi-meta">
-            <span
-              style={{ cursor: "pointer", textDecoration: "underline", color: "var(--teal)" }}
+          <div className="pm-kpi-detail-line">
+            <button
+              type="button"
+              className="pm-link-action"
               onClick={() => navigate("/staff/incidents")}
             >
               Xem danh sách sự cố &gt;
-            </span>
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Quick Lookup & Gate Monitoring */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 20, marginBottom: 24 }}>
-        {/* Tra cứu nhanh biển số */}
-        <div className="staff-card" style={{ marginBottom: 0 }}>
-          <div className="staff-card-header">
-            <h2 className="staff-card-title">
-              <Sparkles size={16} color="var(--teal)" />
-              Tra cứu nhanh Biển số / Mã vé
-            </h2>
+      {/* ─── Main Two-Column Layout ────────────────────────────────────────── */}
+      <div className="pm-grid-layout">
+        {/* Left Column: Quick Search Module & Xe và hoạt động ca trực */}
+        <div className="pm-main-stack">
+          {/* 3. Tra cứu nhanh Biển số / Mã vé */}
+          <div className="pm-panel pm-search-panel">
+            <div className="pm-panel-header">
+              <h2 className="pm-panel-title pm-flex-title">
+                <Sparkles size={16} className="pm-icon-teal" />
+                <span>Tra cứu nhanh Biển số / Mã vé</span>
+              </h2>
+            </div>
+            <div className="pm-panel-body">
+              <form onSubmit={handleQuickLookup} className="pm-quicksearch-row">
+                <input
+                  type="text"
+                  className="pm-quicksearch-input"
+                  placeholder="NHẬP 51K-892.45 HOẶC BK-261013..."
+                  value={quickSearchInput}
+                  onChange={(e) => setQuickSearchInput(e.target.value)}
+                />
+                <button type="submit" className="pm-quicksearch-btn">
+                  Tìm xe
+                </button>
+              </form>
+              <p className="pm-quicksearch-subtext">
+                Tra cứu tức thì vị trí đỗ, thời gian gửi, hoặc chuyển nhanh sang màn hình thanh toán ra cổng.
+              </p>
+            </div>
           </div>
-          <div className="staff-card-body">
-            <form onSubmit={handleQuickLookup} style={{ display: "flex", gap: 10 }}>
-              <input
-                type="text"
-                className="staff-input"
-                style={{ flex: 1, textTransform: "uppercase" }}
-                placeholder="Nhập 51K-892.45 hoặc BK-261013..."
-                value={quickPlate}
-                onChange={(e) => setQuickPlate(e.target.value)}
-              />
-              <button type="submit" className="staff-quick-btn staff-btn-primary">
-                Tìm xe
+
+          {/* Xe và hoạt động ca trực */}
+          <div className="pm-panel">
+            <div className="pm-panel-header">
+              <h2 className="pm-panel-title">Xe và hoạt động ca trực</h2>
+              <button
+                type="button"
+                className="pm-view-all-btn"
+                onClick={() => navigate("/staff/operations")}
+              >
+                Xem tất cả
               </button>
-            </form>
-            <p style={{ margin: "10px 0 0", fontSize: 12, color: "var(--muted)" }}>
-              Tra cứu tức thì vị trí đỗ, thời gian gửi, hoặc chuyển nhanh sang màn hình thanh toán ra cổng.
-            </p>
+            </div>
+
+            <div className="pm-panel-body">
+              <div className="pm-activity-table">
+                {events.slice(0, 6).map((evt) => (
+                  <div key={evt.eventId} className="pm-activity-row">
+                    <div className="pm-activity-icon-col">
+                      <div className={`pm-act-badge ${evt.type === "CheckIn" ? "in" : evt.type === "CheckOut" ? "out" : "op"}`}>
+                        {evt.type === "CheckIn" ? (
+                          <ArrowDownLeft size={16} />
+                        ) : evt.type === "CheckOut" ? (
+                          <ArrowUpRight size={16} />
+                        ) : (
+                          <Car size={16} />
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="pm-activity-desc-col">
+                      <span className="pm-act-title">{evt.label}</span>
+                      <span className="pm-act-sub">{evt.performedBy}</span>
+                    </div>
+
+                    <div className="pm-activity-badge-col">
+                      <span className={`pm-status-pill ${evt.type === "CheckIn" ? "pill-teal" : evt.type === "CheckOut" ? "pill-blue" : "pill-gray"}`}>
+                        {evt.type === "CheckIn" ? "Vào cổng" : evt.type === "CheckOut" ? "Đã ra bãi" : "Hoàn tất"}
+                      </span>
+                    </div>
+
+                    <div className="pm-activity-time-col">
+                      <span>{new Date(evt.occurredAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Trạng thái cổng vào / ra */}
-        <div className="staff-card" style={{ marginBottom: 0 }}>
-          <div className="staff-card-header">
-            <h2 className="staff-card-title">
-              <Layers size={16} color="var(--teal)" />
-              Giám sát Cổng & Thiết bị Barrier
-            </h2>
-          </div>
-          <div className="staff-card-body" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "#f8fafc", borderRadius: 8 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span className="live-dot" />
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>Cổng Vào G1 (ANPR Cam 01)</div>
-                  <div style={{ fontSize: 11, color: "var(--muted)" }}>Tự động nhận diện biển số • Barrier hoạt động</div>
+        {/* Right Column: Barrier & Equipment, Alerts, Real-time Logs */}
+        <div className="pm-side-stack">
+          {/* 4. Barrier & Equipment Status */}
+          <div className="pm-panel">
+            <div className="pm-panel-header">
+              <h2 className="pm-panel-title">Barrier & Equipment Status</h2>
+            </div>
+            <div className="pm-panel-body">
+              <div className="pm-equipment-list">
+                <div className="pm-equipment-item">
+                  <div className="pm-equipment-info">
+                    <span className="pm-equipment-name">Cổng Vào G1 (Barrier 01 - ANPR)</span>
+                    <span className="pm-equipment-sub">Camera nhận diện tự động</span>
+                  </div>
+                  <span className="pm-tag-online">Online</span>
+                </div>
+                <div className="pm-equipment-item">
+                  <div className="pm-equipment-info">
+                    <span className="pm-equipment-name">Cổng Ra G3 (Barrier 02 - POS)</span>
+                    <span className="pm-equipment-sub">Quét QR & Thu phí tự động</span>
+                  </div>
+                  <span className="pm-tag-online">Online</span>
                 </div>
               </div>
-              <span className="staff-badge badge-available">Online</span>
             </div>
+          </div>
 
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "#f8fafc", borderRadius: 8 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span className="live-dot" />
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>Cổng Ra G3 (ANPR Cam 02)</div>
-                  <div style={{ fontSize: 11, color: "var(--muted)" }}>Đầu đọc QR & Máy in biên nhận • Sẵn sàng</div>
+          {/* 4. Alerts & Handover Notes */}
+          <div className="pm-panel">
+            <div className="pm-panel-header">
+              <h2 className="pm-panel-title">Alerts & Handover Notes</h2>
+              <span className="pm-alert-counter">2 cảnh báo</span>
+            </div>
+            <div className="pm-panel-body">
+              <div className="pm-notes-box">
+                {/* Yellow Warning Alert Box */}
+                <div className="pm-warning-alert-box">
+                  <AlertTriangle size={17} className="pm-warning-icon" />
+                  <div className="pm-warning-content">
+                    <div className="pm-warning-text">Khu vực sạc xe điện Tầng B2 đạt 80% công suất</div>
+                    <div className="pm-warning-time">Ưu tiên điều hướng xe xăng sang Zone A & Zone C</div>
+                  </div>
+                </div>
+
+                {/* Additional Handover Note */}
+                <div className="pm-note-item">
+                  <CheckCircle2 size={15} color="#14b8a6" style={{ marginTop: 2, flexShrink: 0 }} />
+                  <span>Bàn giao thiết bị đầy đủ; 2 thẻ dự phòng tại quầy trực bàn giao cho ca tối.</span>
                 </div>
               </div>
-              <span className="staff-badge badge-available">Online</span>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Operational Alerts & Activities */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 20 }}>
-        {/* Cảnh báo vận hành */}
-        <div className="staff-card">
-          <div className="staff-card-header">
-            <h2 className="staff-card-title">
-              <ShieldAlert size={16} color="var(--red)" />
-              Cảnh báo & Lưu ý Vận hành
-            </h2>
-            <span className="staff-badge badge-progress">{alerts.length} cảnh báo</span>
-          </div>
-          <div className="staff-card-body" style={{ padding: "12px 20px" }}>
-            {alerts.length === 0 ? (
-              <p style={{ color: "var(--muted)", fontSize: 13, margin: "10px 0" }}>Không có cảnh báo nghiêm trọng.</p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {alerts.map((alt) => (
-                  <div
-                    key={alt.alertId}
-                    style={{
-                      padding: 12,
-                      borderRadius: 8,
-                      border: "1px solid",
-                      borderColor: alt.severity === "Critical" ? "#fca5a5" : "#fde047",
-                      background: alt.severity === "Critical" ? "#fef2f2" : "#fefce8",
-                      display: "flex",
-                      alignItems: "flex-start",
-                      gap: 10,
-                    }}
-                  >
-                    <AlertTriangle
-                      size={18}
-                      color={alt.severity === "Critical" ? "var(--red)" : "var(--amber)"}
-                      style={{ marginTop: 2, flexShrink: 0 }}
-                    />
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>{alt.message}</div>
-                      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
-                        {new Date(alt.createdAt).toLocaleTimeString("vi-VN")} • Phân loại: {alt.type}
+          {/* Real-time log list */}
+          <div className="pm-panel">
+            <div className="pm-panel-header">
+              <h2 className="pm-panel-title">Real time log list</h2>
+              <button
+                type="button"
+                className="pm-view-all-btn"
+                onClick={() => navigate("/staff/operations")}
+              >
+                Xem tất cả
+              </button>
+            </div>
+            <div className="pm-panel-body">
+              <div className="pm-log-timeline">
+                {events.slice(0, 3).map((evt, idx) => (
+                  <div key={evt.eventId || idx} className="pm-timeline-item">
+                    <span className="pm-timeline-dot" />
+                    <div className="pm-timeline-content">
+                      <div className="pm-timeline-title">{evt.label}</div>
+                      <div className="pm-timeline-meta">
+                        {new Date(evt.occurredAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* Dòng hoạt động gần nhất */}
-        <div className="staff-card">
-          <div className="staff-card-header">
-            <h2 className="staff-card-title">
-              <Clock size={16} color="var(--teal)" />
-              Nhật ký Vận hành Thời gian thực
-            </h2>
-            <button
-              type="button"
-              className="staff-btn-secondary"
-              style={{ fontSize: 12, padding: "4px 8px" }}
-              onClick={() => navigate("/staff/operations")}
-            >
-              Xem tất cả <ChevronRight size={14} />
-            </button>
-          </div>
-          <div className="staff-card-body" style={{ padding: "12px 20px" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {events.slice(0, 5).map((evt) => (
-                <div key={evt.eventId} style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                  <div
-                    style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: "50%",
-                      background: evt.type === "CheckIn" ? "#dcfce7" : evt.type === "CheckOut" ? "#e0f2fe" : "#fef3c7",
-                      color: evt.type === "CheckIn" ? "#16a34a" : evt.type === "CheckOut" ? "#0284c7" : "#d97706",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {evt.type === "CheckIn" ? (
-                      <ArrowDownLeft size={14} />
-                    ) : evt.type === "CheckOut" ? (
-                      <ArrowUpRight size={14} />
-                    ) : (
-                      <CheckCircle2 size={14} />
-                    )}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: "var(--ink)", wordBreak: "break-word" }}>
-                      {evt.label}
-                    </div>
-                    <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
-                      {new Date(evt.occurredAt).toLocaleTimeString("vi-VN")} • Thực hiện: {evt.performedBy}
-                    </div>
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
         </div>
