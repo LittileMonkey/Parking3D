@@ -1,46 +1,78 @@
-﻿using Parking.Parking.Application.Interfaces;
+﻿using Npgsql;
+using Parking.Parking.Application.Interfaces;
 using Parking.Parking.Domain;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace Parking.Parking.Infrastructure.Repositories
+namespace Parking.Parking.Infrastructure.Repositories;
+
+public class ParkingLotRepository : IParkingLotRepository
 {
-    public class ParkingLotRepository : IParkingLotRepository
+    private readonly NpgsqlDataSource _db;
+
+    public ParkingLotRepository(NpgsqlDataSource db)
     {
-        // Tạm thời Fake dữ liệu cứng để test Postman thay vì gọi DB thật
-        public Task<List<ParkingLot>> GetAvailableLotsAsync(string vehicleType, CancellationToken cancellationToken = default)
+        _db = db;
+    }
+
+    public async Task<List<ParkingLot>> GetAvailableLotsAsync(string vehicleType, CancellationToken cancellationToken = default)
+    {
+        var normalizedType = vehicleType.Trim().ToUpperInvariant();
+
+        // Truy vấn danh sách bãi ACTIVE có chính sách cho loại xe này và đếm slot khả dụng thực tế
+        const string sql = """
+            SELECT 
+                l.id,
+                l.name,
+                (l.latitude)::float8,
+                (l.longitude)::float8,
+                l.status,
+                COALESCE(slots_stat.available_count, 0) AS available_slots
+            FROM parking_lots l
+            JOIN lot_vehicle_policies p ON p.lot_id = l.id AND p.vehicle_type = @vehicleType
+            LEFT JOIN (
+                SELECT 
+                    s.lot_id,
+                    COUNT(s.id) AS available_count
+                FROM parking_slots s
+                JOIN slot_vehicle_types svt ON svt.slot_id = s.id AND svt.vehicle_type = @vehicleType
+                WHERE s.operational_status = 'ACTIVE'
+                  -- Loại bỏ slot đang có xe đỗ vật lý
+                  AND NOT EXISTS (
+                      SELECT 1 FROM session_slot_assignments sa 
+                      WHERE sa.slot_id = s.id AND sa.vacated_at IS NULL
+                  )
+                  -- Loại bỏ slot đang có đơn giữ chỗ còn hiệu lực
+                  AND NOT EXISTS (
+                      SELECT 1 FROM slot_reservations sr
+                      JOIN bookings b ON b.id = sr.booking_id
+                      WHERE sr.slot_id = s.id 
+                        AND sr.status IN ('HELD', 'CONFIRMED')
+                        AND b.status IN ('PENDING_PAYMENT', 'CONFIRMED')
+                        AND sr.ends_at > now() AND sr.starts_at <= now()
+                  )
+                GROUP BY s.lot_id
+            ) slots_stat ON slots_stat.lot_id = l.id
+            WHERE l.status = 'ACTIVE';
+            """;
+
+        await using var cmd = _db.CreateCommand(sql);
+        cmd.Parameters.AddWithValue("vehicleType", normalizedType);
+
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        var result = new List<ParkingLot>();
+
+        while (await reader.ReadAsync(cancellationToken))
         {
-            var fakeLots = new List<ParkingLot>
-        {
-            new ParkingLot
+            result.Add(new ParkingLot
             {
-                Id = Guid.Parse("11111111-1111-4111-8111-111111111111"),
-                Name = "Bãi demo A",
-                Latitude = 10.776,
-                Longitude = 106.700,
-                AvailableSlots = 50,
-                Status = "ACTIVE"
-            },
-            new ParkingLot
-            {
-                Id = Guid.Parse("22222222-2222-4222-8222-222222222222"),
-                Name = "Bãi demo B",
-                Latitude = 10.790,
-                Longitude = 106.710,
-                AvailableSlots = 20,
-                Status = "ACTIVE"
-            }
-        };
-            // Lọc dữ liệu giả lập y như thật
-            var result = fakeLots
-                .Where(p => p.Status == "ACTIVE")
-                .Where(p => p.AvailableSlots > 0)
-                .ToList();
-            return Task.FromResult(result);
+                Id = reader.GetGuid(0),
+                Name = reader.GetString(1),
+                Latitude = reader.GetDouble(2),
+                Longitude = reader.GetDouble(3),
+                Status = reader.GetString(4),
+                AvailableSlots = reader.GetInt32(5)
+            });
         }
 
+        return result;
     }
 }

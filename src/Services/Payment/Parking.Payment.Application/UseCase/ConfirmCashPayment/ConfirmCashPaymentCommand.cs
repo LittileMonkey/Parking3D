@@ -8,5 +8,5 @@ using System.Threading.Tasks;
 
 namespace Parking.Payment.Application.UseCase.ConfirmCashPayment
 {
-    public record ConfirmCashPaymentCommand(Guid  BookingID, string StaffReason, int Version, string ConfirmedBy) : IRequest<ConfirmCashPaymentResultDto>;
+    public record  ConfirmCashPaymentCommand(Guid  BookingId, string StaffReason, int Version, string ConfirmedBy) : IRequest<ConfirmCashPaymentResultDto>;
 }

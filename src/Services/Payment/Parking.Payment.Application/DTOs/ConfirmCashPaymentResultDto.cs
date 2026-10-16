@@ -10,8 +10,8 @@ namespace Parking.Payment.Application.DTOs
     {
         public Guid PaymentId { get; init; }
         public string Status { get; init; } = "Success";
-        public string ComfirmedBy { get; init; } = string.Empty;
-        public DateTime ComfirmedAt { get; init; } 
+        public string ConfirmedBy { get; init; } = string.Empty;
+        public DateTime ConfirmedAt { get; init; } 
 
     }
 }
