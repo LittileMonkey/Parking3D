@@ -1,0 +1,7 @@
+$kind: collection
+name: '6. AI Documents (Tài liệu tri thức - ADMIN)'
+description: |-
+  Quản lý tài liệu tri thức cho AI Assistant. Yêu cầu JWT token với quyền ADMIN.
+  
+  - POST /api/v1/ai/documents → Tạo tài liệu mới
+  - POST /api/v1/ai/documents/{id}/publish → Xuất bản tài liệu

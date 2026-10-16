@@ -1,0 +1,14 @@
+workspace:
+  id: 0319daf9-1cd2-4659-8621-76f22c833f88
+localResources:
+  specs:
+    - ../docs/templates/Template.Infrastructure/GRPC/Protos/demo.proto
+    - ../src/Contracts/Parking.Contracts/Protos/v1/ai.proto
+    - ../src/Contracts/Parking.Contracts/Protos/v1/identity.proto
+    - ../src/Contracts/Parking.Contracts/Protos/v1/parking_catalog.proto
+    - ../src/Contracts/Parking.Contracts/Protos/v1/payment_events.proto
+cloudResources:
+  collections:
+    ../postman/collections/AI-Feature-Service: 49791222-71056777-640c-446a-b600-abfc985983d0
+  environments:
+    ../postman/environments/AI-Service-Local.environment.yaml: 49791222-df801f8e-8d0c-4b6d-84ab-849921175607

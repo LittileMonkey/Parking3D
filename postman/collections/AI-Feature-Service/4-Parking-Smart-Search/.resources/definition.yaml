@@ -1,0 +1,7 @@
+$kind: collection
+name: '4. Parking Smart Search (AI)'
+description: |-
+  Tìm kiếm bãi đỗ xe thông minh bằng AI và xử lý ngôn ngữ tự nhiên (NLP).
+  
+  - POST /api/v1/ai/parking/smart-search → Tìm kiếm bằng câu hỏi tự nhiên
+  - POST /api/v1/ai/parking/recommend → Gợi ý bãi đỗ theo tiêu chí cụ thể

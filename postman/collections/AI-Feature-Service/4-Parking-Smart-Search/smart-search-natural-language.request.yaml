@@ -1,0 +1,34 @@
+$kind: http-request
+name: 'Smart Search - Natural Language'
+method: POST
+url: '{{base_url}}/api/v1/ai/parking/smart-search'
+order: 1000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "naturalLanguagePrompt": "Tìm bãi đỗ xe gần Landmark 81 Bình Thạnh cho ô tô, giá dưới 20k/giờ, có mái che",
+      "userCurrentLatitude": 10.7950,
+      "userCurrentLongitude": 106.7220
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status code is 200", function () {
+          pm.response.to.have.status(200);
+      });
+      pm.test("Response has standard envelope", function () {
+          const json = pm.response.json();
+          pm.expect(json).to.have.property("isSuccess");
+          pm.expect(json).to.have.property("result");
+      });
+      pm.test("Search results returned", function () {
+          const json = pm.response.json();
+          if (json.isSuccess && json.result) {
+              console.log("Kết quả tìm kiếm:", JSON.stringify(json.result, null, 2));
+          }
+      });

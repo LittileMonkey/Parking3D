@@ -1,0 +1,7 @@
+$kind: collection
+name: '2. License Plate (ANPR OCR)'
+description: |-
+  Nhận diện biển số xe tự động (Automatic Number Plate Recognition).
+  
+  - POST /api/v1/ai/license-plate/scan → Upload ảnh để nhận diện biển số
+  - POST /api/v1/parking-lots/{lotId}/plate-recognitions/{id}/review → Review kết quả nhận diện (yêu cầu JWT + quyền OCR)

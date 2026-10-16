@@ -1,0 +1,6 @@
+$kind: collection
+name: '5. Occupancy Forecast (Dự báo công suất)'
+description: |-
+  Dự báo công suất bãi đỗ xe theo thời gian thực.
+  
+  - GET /api/v1/parking-lots/{lotId}/occupancy-forecasts → Dự báo công suất theo loại xe và khoảng thời gian

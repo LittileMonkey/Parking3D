@@ -1,0 +1,30 @@
+$kind: http-request
+name: 'Publish AI Document (ADMIN)'
+method: POST
+url: '{{base_url}}/api/v1/ai/documents/{{doc_id}}/publish'
+order: 2000
+headers:
+  - key: Authorization
+    value: 'Bearer {{jwt_token}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "version": "1.0",
+      "confirmPublicContentReviewed": true
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status code is 200", function () {
+          pm.response.to.have.status(200);
+      });
+      pm.test("Document published", function () {
+          const json = pm.response.json();
+          pm.expect(json.isSuccess).to.be.true;
+          pm.expect(json.result.status).to.equal("PUBLISHED");
+          console.log("Document published:", json.result.id);
+      });

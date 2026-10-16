@@ -122,6 +122,21 @@ services:
       payment-db:
         condition: service_healthy
     restart: unless-stopped
+  ai-vision:
+    build:
+      context: ./src/Services/AI/ai_vision_service
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      PYTHONUNBUFFERED: "1"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
   ai:
     build:
       context: .
@@ -138,11 +153,16 @@ services:
       Services__IdentityGrpc: http://identity:8081
       Services__ParkingGrpc: http://parking:8081
       Services__AIGrpc: http://ai:8081
-      AI__OcrEndpoint: ${OCR_ENDPOINT:-}
+      AiVision__ServiceUrl: http://ai-vision:8000
+      AI__OcrEndpoint: ${OCR_ENDPOINT:-http://ai-vision:8000/ocr/recognize}
       AI__OcrApiKey: ${OCR_API_KEY:-}
+      Gemini__ApiKey: ${GEMINI_API_KEY:-}
+      AI__GeminiApiKey: ${GEMINI_API_KEY:-}
     depends_on:
       ai-db:
         condition: service_healthy
+      ai-vision:
+        condition: service_started
     restart: unless-stopped
   gateway:
     build:

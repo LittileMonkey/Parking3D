@@ -1,0 +1,27 @@
+$kind: http-request
+name: 'Get Occupancy Forecast'
+method: GET
+url: '{{base_url}}/api/v1/parking-lots/{{lot_id}}/occupancy-forecasts'
+order: 1000
+queryParams:
+  - key: vehicleType
+    value: Car
+    description: 'Loại xe: Car hoặc Motorbike'
+  - key: horizonMinutes
+    value: '60'
+    description: 'Khoảng thời gian dự báo (phút). VD: 60 = dự báo 1 giờ tới'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status code is 200", function () {
+          pm.response.to.have.status(200);
+      });
+      pm.test("Forecast data returned", function () {
+          const json = pm.response.json();
+          pm.expect(json).to.have.property("isSuccess");
+          pm.expect(json).to.have.property("result");
+          if (json.isSuccess) {
+              console.log("Dự báo công suất:", JSON.stringify(json.result, null, 2));
+          }
+      });

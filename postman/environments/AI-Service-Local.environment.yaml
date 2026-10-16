@@ -1,0 +1,37 @@
+name: AI Service - Local Development
+values:
+  - key: base_url
+    value: 'http://localhost:5004'
+    description: 'Base URL của Parking.AI.Api (.NET 9, port 5004)'
+    enabled: true
+    type: default
+  - key: vision_url
+    value: 'http://localhost:8000'
+    description: 'Base URL của Python FastAPI ai_vision_service (port 8000)'
+    enabled: true
+    type: default
+  - key: jwt_token
+    value: ''
+    description: 'JWT Bearer token (lấy từ Identity Service sau khi đăng nhập)'
+    enabled: true
+    type: default
+  - key: lot_id
+    value: 'b1e2a3c4-5678-90ab-cdef-111122223333'
+    description: 'ID bãi đỗ xe mẫu để test'
+    enabled: true
+    type: default
+  - key: session_id
+    value: ''
+    description: 'Session ID của AI Assistant (tự động set sau khi chat)'
+    enabled: true
+    type: default
+  - key: doc_id
+    value: ''
+    description: 'Document ID (tự động set sau khi tạo document)'
+    enabled: true
+    type: default
+  - key: recognition_id
+    value: ''
+    description: 'ID kết quả nhận diện biển số để review'
+    enabled: true
+    type: default

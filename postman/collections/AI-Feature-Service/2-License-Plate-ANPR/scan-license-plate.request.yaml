@@ -1,0 +1,37 @@
+$kind: http-request
+name: 'Scan License Plate (Upload Image)'
+method: POST
+url: '{{base_url}}/api/v1/ai/license-plate/scan'
+order: 1000
+body:
+  type: formdata
+  content:
+    - key: file
+      type: file
+      src: ''
+      description: 'Ảnh biển số xe (JPG/PNG). Chọn file ảnh từ máy tính.'
+    - key: gateId
+      type: text
+      value: 'gate-entrance-01'
+      description: 'ID cổng ra/vào (tùy chọn)'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status code is 200", function () {
+          pm.response.to.have.status(200);
+      });
+      pm.test("Response has standard envelope", function () {
+          const json = pm.response.json();
+          pm.expect(json).to.have.property("isSuccess");
+          pm.expect(json).to.have.property("statusCode");
+          pm.expect(json).to.have.property("result");
+      });
+      pm.test("Plate text is returned", function () {
+          const json = pm.response.json();
+          if (json.isSuccess && json.result) {
+              pm.expect(json.result).to.have.property("plateText");
+              console.log("Biển số nhận diện:", json.result.plateText);
+              console.log("Độ tin cậy:", json.result.confidence);
+          }
+      });

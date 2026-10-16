@@ -1,0 +1,26 @@
+$kind: http-request
+name: 'Lot-specific Assistant'
+method: POST
+url: '{{base_url}}/api/v1/parking-lots/{{lot_id}}/assistant'
+order: 4000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "question": "Bãi đỗ xe này còn bao nhiêu chỗ trống? Giá gửi xe ô tô là bao nhiêu?"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status code is 200", function () {
+          pm.response.to.have.status(200);
+      });
+      pm.test("Assistant answered lot question", function () {
+          const json = pm.response.json();
+          pm.expect(json.isSuccess).to.be.true;
+          console.log("Lot Assistant Reply:", json.result);
+      });

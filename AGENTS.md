@@ -72,3 +72,13 @@ Mọi quy tắc nghiệp vụ, quyết định kiến trúc và quy chuẩn phá
    - Viết code C# 13, async/await đầy đủ, xử lý lỗi chuẩn ProblemDetails bọc trong `ApiResponse<T>`.
    - Viết tests kiểm thử và kiểm tra API readiness `/health/ready`.
    - Commit & push lên GitHub Team Repo trước -> Pull `develop` từ GitLab về rebase giải quyết mọi conflict -> Push GitLab -> Tạo Pull Request Implementation kèm DoD và Test Coverage theo mẫu mục 5.1 trong [GitlabGuide.md](file:///d:/FSOFT_FALL26_NET/Project.CleanArchitecture/Project.CleanArchitecture/docs/GitlabGuide.md).
+
+---
+
+## 4. Áp dụng Chuẩn mực Agentic Awesome Skills (AAS Workflow Mandate)
+Mọi câu prompt, thao tác phân tích, sửa lỗi (bug-fixing), viết code hoặc review BẮT BUỘC phải áp dụng nguyên tắc từ **Agentic Awesome Skills**:
+1. **The Iron Law of Systematic Debugging:** `NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST`. Tuyệt đối không sửa code khi chưa điều tra rõ nguyên nhân gốc rễ.
+2. **Test-Driven & Verification:** Kiểm chứng lỗi bằng test case trước và sau khi sửa code; bảo đảm `dotnet build` đạt 0 lỗi 0 cảnh báo.
+3. **API Contract Integrity:** Giữ tính toàn vẹn của DTO, chuẩn hóa mã lỗi HTTP (400, 401, 403, 404, 409, 503) và bọc đầy đủ trong `ApiResponse<T>`.
+4. **Memory & Thread Safety:** Tuyệt đối không lưu trữ state phiên/dữ liệu người dùng trong bộ nhớ RAM không có TTL; bảo đảm an toàn đa luồng.
+

@@ -1,0 +1,37 @@
+$kind: http-request
+name: 'Parking Recommend (Structured Criteria)'
+method: POST
+url: '{{base_url}}/api/v1/ai/parking/recommend'
+order: 2000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "destinationName": "Landmark 81",
+      "latitude": 10.7950,
+      "longitude": 106.7220,
+      "vehicleType": "Car",
+      "maxPricePerHour": 20000,
+      "desiredRadiusMeters": 1000,
+      "expectedDurationHours": 2.0,
+      "specialRequirements": ["COVERED", "EV_CHARGING"],
+      "priorityStrategy": "NEAREST"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status code is 200", function () {
+          pm.response.to.have.status(200);
+      });
+      pm.test("Recommendations returned", function () {
+          const json = pm.response.json();
+          pm.expect(json.isSuccess).to.be.true;
+          if (json.result) {
+              console.log("Số bãi gợi ý:", Array.isArray(json.result) ? json.result.length : "N/A");
+              console.log("Kết quả:", JSON.stringify(json.result, null, 2));
+          }
+      });

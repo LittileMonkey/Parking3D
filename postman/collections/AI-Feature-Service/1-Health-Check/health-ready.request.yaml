@@ -1,0 +1,12 @@
+$kind: http-request
+name: 'Health - Ready'
+method: GET
+url: '{{base_url}}/health/ready'
+order: 2000
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status code is 200", function () {
+          pm.response.to.have.status(200);
+      });
