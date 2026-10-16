@@ -1,0 +1,30 @@
+$kind: collection
+name: AI Feature Service
+description: |-
+  Collection để test toàn bộ API của Parking AI Feature Service (.NET 9 + Python FastAPI).
+
+  **Services:**
+  - Parking.AI.Api (C# .NET 9) → http://localhost:5004
+  - ai_vision_service (Python FastAPI) → http://localhost:8000
+
+  **Nhóm API:**
+  1. Health Check - Kiểm tra trạng thái service
+  2. License Plate (ANPR) - Nhận diện biển số xe
+  3. AI Assistant - Trợ lý ảo AI
+  4. Parking Smart Search - Tìm kiếm bãi đỗ thông minh
+  5. Occupancy Forecast - Dự báo công suất bãi đỗ
+  6. AI Documents - Quản lý tài liệu tri thức AI (yêu cầu ADMIN)
+  7. Python Vision Service - AI Vision Service trực tiếp
+variables:
+  - key: base_url
+    value: 'http://localhost:5004'
+  - key: vision_url
+    value: 'http://localhost:8000'
+  - key: jwt_token
+    value: ''
+  - key: lot_id
+    value: 'b1e2a3c4-5678-90ab-cdef-111122223333'
+  - key: session_id
+    value: ''
+  - key: doc_id
+    value: ''

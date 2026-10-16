@@ -1,0 +1,3 @@
+$kind: collection
+name: '1. Health Check'
+description: Kiểm tra trạng thái hoạt động của AI Service (.NET API)

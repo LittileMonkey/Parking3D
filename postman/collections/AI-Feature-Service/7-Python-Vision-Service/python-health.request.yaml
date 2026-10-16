@@ -1,0 +1,18 @@
+$kind: http-request
+name: 'Python Vision - Health Check'
+method: GET
+url: '{{vision_url}}/health'
+order: 1000
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status code is 200", function () {
+          pm.response.to.have.status(200);
+      });
+      pm.test("Python service is healthy", function () {
+          const json = pm.response.json();
+          pm.expect(json.status).to.equal("healthy");
+          pm.expect(json.service).to.equal("ai_vision_service");
+          console.log("Python Vision Service:", json.status);
+      });

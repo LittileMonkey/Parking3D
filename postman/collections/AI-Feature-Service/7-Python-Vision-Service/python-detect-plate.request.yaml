@@ -1,0 +1,29 @@
+$kind: http-request
+name: 'Python Vision - Detect License Plate'
+method: POST
+url: '{{vision_url}}/detect-plate'
+order: 2000
+body:
+  type: formdata
+  content:
+    - key: file
+      type: file
+      src: ''
+      description: 'Ảnh biển số xe (JPG/PNG). Chọn file ảnh từ máy tính.'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status code is 200", function () {
+          pm.response.to.have.status(200);
+      });
+      pm.test("Plate detected", function () {
+          const json = pm.response.json();
+          pm.expect(json).to.have.property("plate_text");
+          pm.expect(json).to.have.property("confidence");
+          pm.expect(json).to.have.property("processing_time_ms");
+          console.log("Biển số:", json.plate_text);
+          console.log("Độ tin cậy:", json.confidence);
+          console.log("Thời gian xử lý:", json.processing_time_ms, "ms");
+          console.log("Loại biển:", json.plate_type);
+      });

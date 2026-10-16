@@ -1,0 +1,35 @@
+$kind: http-request
+name: 'Create AI Document (ADMIN)'
+method: POST
+url: '{{base_url}}/api/v1/ai/documents'
+order: 1000
+headers:
+  - key: Authorization
+    value: 'Bearer {{jwt_token}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "title": "Hướng dẫn gửi xe tại Bãi đỗ Trung tâm Quận 1",
+      "content": "Bãi đỗ xe Trung tâm Quận 1 hoạt động 24/7. Giá gửi xe ô tô: 15.000đ/giờ đầu, 10.000đ/giờ tiếp theo. Xe máy: 5.000đ/giờ. Có hỗ trợ sạc điện EV tại tầng B1.",
+      "category": "PARKING_GUIDE",
+      "tags": ["parking", "guide", "quan1"],
+      "parkingLotId": null
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status code is 200", function () {
+          pm.response.to.have.status(200);
+      });
+      pm.test("Document created", function () {
+          const json = pm.response.json();
+          pm.expect(json.isSuccess).to.be.true;
+          if (json.result && json.result.id) {
+              pm.collectionVariables.set("doc_id", json.result.id);
+              console.log("Document ID:", json.result.id);
+          }
+      });

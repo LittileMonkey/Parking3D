@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json.schemastore.org/launchsettings.json",
+  "profiles": {
+    "http": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": false,
+      "applicationUrl": "http://localhost:5004",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Jwt__Key": "12345678901234567890123456789012",
+        "Grpc__ServiceKey": "12345678901234567890123456789012",
+        "ConnectionStrings__Service": "Host=localhost;Port=5432;Database=parking_ai;Username=ai;Password=postgres",
+        "Ports__Http": "5004",
+        "Ports__Grpc": "5005"
+      }
+    }
+  }
+}

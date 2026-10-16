@@ -1,0 +1,9 @@
+$kind: collection
+name: '7. Python Vision Service (FastAPI - Port 8000)'
+description: |-
+  Gọi trực tiếp Python FastAPI AI Vision Service (ai_vision_service).
+  
+  - GET /health → Kiểm tra trạng thái Python service
+  - POST /detect-plate → Nhận diện biển số xe trực tiếp qua Python (không qua .NET gateway)
+  
+  **Lưu ý:** Service này chạy trên port 8000 (biến {{vision_url}})

@@ -30,4 +30,4 @@ Xem [RUNBOOK](docs/microservices/RUNBOOK.md) để chạy, [kiến trúc](docs/m
 
 QR/check-in/check-out, VNPay sandbox thực tế, giao diện 3D và đánh giá AI vẫn là backlog. Chưa xác nhận chạy Docker/pipeline trên môi trường đích. Khóa dùng chung chỉ dành cho Development; yêu cầu production nằm trong RUNBOOK.
 
-Baseline nghiệp vụ nằm trong docs; thiết kế microservices bổ sung cách triển khai. Runtime mới sử dụng database/services. Không commit .env, mật khẩu, dữ liệu cá nhân hoặc docs/templates.
+Baseline nghiệp vụ nằm trong docs; xem [Bảng Tính Năng & Phân Chia Nhiệm Vụ Toàn Diện (Stitch + 4 Microservices)](docs/11-FEATURE-SPEC-AND-TASK-ASSIGNMENT.md) để phân chia công việc cho các thành viên. Runtime mới sử dụng database/services. Không commit .env, mật khẩu, dữ liệu cá nhân hoặc docs/templates.

@@ -1,0 +1,41 @@
+$kind: http-request
+name: 'AI Assistant - Chat (New Session)'
+method: POST
+url: '{{base_url}}/api/v1/ai/assistant/chat'
+order: 1000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "sessionId": null,
+      "userId": null,
+      "message": "Tôi muốn tìm bãi đỗ xe gần Landmark 81 cho xe ô tô, khoảng 2 tiếng",
+      "currentParkingLotId": null
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status code is 200", function () {
+          pm.response.to.have.status(200);
+      });
+      pm.test("Response has standard envelope", function () {
+          const json = pm.response.json();
+          pm.expect(json).to.have.property("isSuccess");
+          pm.expect(json).to.have.property("result");
+      });
+      pm.test("Assistant replied with message", function () {
+          const json = pm.response.json();
+          if (json.isSuccess && json.result) {
+              pm.expect(json.result).to.have.property("reply");
+              console.log("AI Reply:", json.result.reply);
+              // Lưu sessionId để dùng cho request tiếp theo
+              if (json.result.sessionId) {
+                  pm.collectionVariables.set("session_id", json.result.sessionId);
+                  console.log("Session ID:", json.result.sessionId);
+              }
+          }
+      });

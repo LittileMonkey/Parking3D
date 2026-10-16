@@ -1,0 +1,8 @@
+$kind: collection
+name: '3. AI Assistant (Trợ lý ảo)'
+description: |-
+  Trợ lý ảo AI hỗ trợ người dùng tìm kiếm và đặt chỗ bãi đỗ xe.
+  
+  - POST /api/v1/ai/assistant/chat → Gửi tin nhắn hội thoại
+  - DELETE /api/v1/ai/assistant/session/{sessionId} → Xóa phiên hội thoại
+  - POST /api/v1/parking-lots/{lotId}/assistant → Trợ lý theo bãi đỗ cụ thể

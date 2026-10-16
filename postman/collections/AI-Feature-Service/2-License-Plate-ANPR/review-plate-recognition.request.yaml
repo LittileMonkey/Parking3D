@@ -1,0 +1,30 @@
+$kind: http-request
+name: 'Review Plate Recognition Result'
+method: POST
+url: '{{base_url}}/api/v1/parking-lots/{{lot_id}}/plate-recognitions/{{recognition_id}}/review'
+order: 2000
+headers:
+  - key: Authorization
+    value: 'Bearer {{jwt_token}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "correctedPlateText": "51K-88888",
+      "isCorrect": false,
+      "reviewNote": "Biển số bị nhận diện sai do ánh sáng yếu"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status code is 200", function () {
+          pm.response.to.have.status(200);
+      });
+      pm.test("Review submitted successfully", function () {
+          const json = pm.response.json();
+          pm.expect(json.isSuccess).to.be.true;
+          pm.expect(json.result.status).to.equal("REVIEWED");
+      });
