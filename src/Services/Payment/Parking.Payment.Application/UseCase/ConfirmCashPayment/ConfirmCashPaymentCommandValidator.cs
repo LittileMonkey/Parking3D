@@ -1,4 +1,4 @@
-﻿using FluentValidation;
+using FluentValidation;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,7 +11,7 @@ namespace Parking.Payment.Application.UseCase.ConfirmCashPayment
     {
         public ConfirmCashPaymentCommandValidator()
         {
-            RuleFor(x => x.BookingID).NotEmpty().WithMessage("Mã đặt chỗ (BookingId) không được để trống.");
+            RuleFor(x => x.BookingId).NotEmpty().WithMessage("Mã đặt chỗ (BookingId) không được để trống.");
 
             RuleFor(x => x.StaffReason)
                 .NotEmpty()

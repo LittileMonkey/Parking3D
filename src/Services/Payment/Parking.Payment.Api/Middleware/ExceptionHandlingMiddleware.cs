@@ -1,10 +1,12 @@
-﻿using System;
+﻿using FluentValidation;
+using Parking.ServiceDefaults;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
-using FluentValidation;
+
 
 namespace Parking.Payment.Api.Middleware
 {
@@ -17,6 +19,7 @@ namespace Parking.Payment.Api.Middleware
             this.ExceptionHandling = new Dictionary<Type, Func<Exception, ErrorMessage>>
             {
                 { typeof(ValidationException), HandleValidationException },
+                { typeof(ServiceException), HandleServiceException },
                 { typeof(NotImplementedException), HandleNotImplementedException },
                 { typeof(Exception), HandleGenericException }
             };
@@ -40,6 +43,7 @@ namespace Parking.Payment.Api.Middleware
             return exception switch
             {
                 ValidationException => StatusCodes.Status400BadRequest,
+                ServiceException se => se.StatusCode,
                 NotImplementedException => StatusCodes.Status501NotImplemented,
                 _ => StatusCodes.Status500InternalServerError
             };
@@ -90,6 +94,24 @@ namespace Parking.Payment.Api.Middleware
                         ErrorField = exception.Source ?? string.Empty
                     }
                 }
+            };
+        }
+
+        private ErrorMessage HandleServiceException(Exception exception)
+        {
+            var serviceException = (ServiceException)exception;
+            return new ErrorMessage
+            {
+                Message = serviceException.Message,
+                ErrorDetails = new List<ErrorDetail>
+        {
+            new()
+            {
+                ErrorMessage = serviceException.Message,
+                ErrorCode = $"HTTP_{serviceException.StatusCode}",
+                ErrorField = string.Empty
+            }
+        }
             };
         }
     }

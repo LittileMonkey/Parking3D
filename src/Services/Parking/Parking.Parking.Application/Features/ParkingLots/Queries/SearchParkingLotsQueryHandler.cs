@@ -1,6 +1,7 @@
 ﻿using MediatR;
 using Parking.Parking.Application.DTOs;
 using Parking.Parking.Application.Interfaces;
+using Parking.Parking.Domain;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -32,7 +33,12 @@ namespace Parking.Parking.Application.Features.ParkingLots.Queries
                 double distance = 0;
                 if (request.Latitude.HasValue && request.Longitude.HasValue)
                 {
-                    distance = CalculateHaversine(request.Latitude.Value, request.Longitude.Value, lot.Latitude, lot.Longitude);
+                    var distanceInMeters = SearchMath.Haversine(
+                        request.Latitude.Value,
+                        request.Longitude.Value,
+                        lot.Latitude,
+                        lot.Longitude);
+                    distance = distanceInMeters / 1000.0;
                 }
                 // Gọi (Fake) Service tính giá cho TOÀN BỘ thời lượng đỗ
                 var pricing = await _priceService.CalculateEstimatedFeeAsync(
@@ -77,17 +83,6 @@ namespace Parking.Parking.Application.Features.ParkingLots.Queries
                 Items = resultItems
             };
         }
-        // Công thức lượng giác Haversine tính khoảng cách đường chim bay siêu tốc
-        private double CalculateHaversine(double lat1, double lon1, double lat2, double lon2)
-        {
-            var R = 6371d; // Bán kính Trái Đất (Km)
-            var dLat = (lat2 - lat1) * Math.PI / 180.0;
-            var dLon = (lon2 - lon1) * Math.PI / 180.0;
-            var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
-                    Math.Cos(lat1 * Math.PI / 180.0) * Math.Cos(lat2 * Math.PI / 180.0) *
-                    Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
-            var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
-            return R * c;
-        }
+        
     }
 }

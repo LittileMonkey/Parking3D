@@ -8,7 +8,7 @@ namespace Parking.Payment.Application.DTOs
 {
     public record ConfirmCashPaymentRequestDto
     {
-        public Guid bookingId { get; init; }
+        public Guid BookingId { get; init; }
         public string StaffReason { get; init; } = string.Empty;
         public int Version { get; init; }
 

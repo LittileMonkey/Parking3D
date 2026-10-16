@@ -64,7 +64,7 @@ namespace Parking.Payment.Api.Controllers
 
             // 2. Chuyển đổi DTO thành MediatR Command
             var command = new ConfirmCashPaymentCommand(
-                           requestDto.bookingId, // hoặc requestDto.BookingId tùy theo file DTO của bạn
+                           requestDto.BookingId, // hoặc requestDto.BookingId tùy theo file DTO của bạn
                            requestDto.StaffReason,
                            requestDto.Version,
                            staffName
