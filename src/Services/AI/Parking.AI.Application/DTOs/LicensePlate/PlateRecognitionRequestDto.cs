@@ -24,4 +24,14 @@ public record PlateRecognitionRequestDto
     /// Mã bãi đỗ xe (ParkingLotId) nếu có
     /// </summary>
     public Guid? ParkingLotId { get; init; }
+
+    /// <summary>
+    /// Khóa chống trùng lặp (Idempotency Key)
+    /// </summary>
+    public string? IdempotencyKey { get; init; }
+
+    /// <summary>
+    /// Mã người dùng hoặc nhân viên tải ảnh lên
+    /// </summary>
+    public Guid? UploadedBy { get; init; }
 }

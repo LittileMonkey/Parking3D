@@ -47,7 +47,8 @@ class LicensePlateDetector:
                         y2_clamped = min(h, y2 + pad_y)
                         
                         cropped = image[y1_clamped:y2_clamped, x1_clamped:x2_clamped]
-                        return cropped, conf, (x1_clamped, y1_clamped, x2_clamped, y2_clamped)
+                        if cropped.size > 0:
+                            return cropped, conf, (x1_clamped, y1_clamped, x2_clamped, y2_clamped)
             except Exception as e:
                 print(f"[Detector] Lỗi khi inference YOLO: {e}")
 
@@ -57,4 +58,6 @@ class LicensePlateDetector:
         y1 = int(h * 0.55)
         y2 = int(h * 0.85)
         cropped = image[y1:y2, x1:x2]
+        if cropped.size == 0:
+            cropped = image
         return cropped, 0.92, (x1, y1, x2, y2)

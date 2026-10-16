@@ -18,10 +18,16 @@ public class GeminiApiClient(
 
     public async Task<string> GenerateTextAsync(string systemInstruction, string userPrompt, CancellationToken ct = default)
     {
+        var (text, _) = await GenerateTextWithStatusAsync(systemInstruction, userPrompt, ct);
+        return text;
+    }
+
+    public async Task<(string Text, bool IsFallback)> GenerateTextWithStatusAsync(string systemInstruction, string userPrompt, CancellationToken ct = default)
+    {
         if (string.IsNullOrWhiteSpace(_apiKey))
         {
             logger.LogInformation("Gemini API Key chưa được cấu hình. Sử dụng bộ suy luận AI cục bộ mô phỏng.");
-            return GenerateSimulatedResponse(userPrompt);
+            return (GenerateSimulatedResponse(userPrompt), true);
         }
 
         var endpoint = $"https://generativelanguage.googleapis.com/v1beta/models/{_model}:generateContent?key={_apiKey}";
@@ -62,7 +68,7 @@ public class GeminiApiClient(
                     parts.GetArrayLength() > 0 &&
                     parts[0].TryGetProperty("text", out var textElem))
                 {
-                    return textElem.GetString() ?? string.Empty;
+                    return (textElem.GetString() ?? string.Empty, false);
                 }
             }
             else
@@ -75,7 +81,7 @@ public class GeminiApiClient(
             logger.LogWarning(ex, "Lỗi khi gọi Gemini API. Tự động chuyển đổi sang bộ xử lý thông minh fallback.");
         }
 
-        return GenerateSimulatedResponse(userPrompt);
+        return (GenerateSimulatedResponse(userPrompt), true);
     }
 
     /// <summary>

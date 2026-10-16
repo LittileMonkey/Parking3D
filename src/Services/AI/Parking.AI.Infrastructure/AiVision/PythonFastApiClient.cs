@@ -29,6 +29,9 @@ public record PythonPlateDetectionResponse
 
     [JsonPropertyName("error")]
     public string? Error { get; init; }
+
+    [JsonIgnore]
+    public bool IsFallback { get; init; }
 }
 
 /// <summary>
@@ -65,7 +68,7 @@ public class PythonFastApiClient(
                     PropertyNameCaseInsensitive = true
                 });
 
-                if (result != null) return result;
+                if (result != null) return result with { IsFallback = false };
             }
 
             logger.LogWarning("Python AI Vision service responded with status {StatusCode}", response.StatusCode);
@@ -94,7 +97,8 @@ public class PythonFastApiClient(
             Confidence = 0.94,
             PlateType = selectedPlate.Contains("-P1") ? "TwoLine" : "OneLine",
             CroppedImageBase64 = null,
-            ProcessingTimeMs = 45
+            ProcessingTimeMs = 45,
+            IsFallback = true
         };
     }
 }

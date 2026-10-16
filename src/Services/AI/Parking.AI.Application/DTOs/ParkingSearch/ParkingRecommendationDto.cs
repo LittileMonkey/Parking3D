@@ -24,6 +24,11 @@ public record ParkingRecommendationDto
     /// Thời gian AI phân tích và xếp hạng (ms)
     /// </summary>
     public long ProcessingTimeMs { get; init; }
+
+    /// <summary>
+    /// Cờ đánh dấu truy vấn được bóc tách bằng bộ mô phỏng fallback cục bộ khi chưa có Gemini API Key
+    /// </summary>
+    public bool IsFallback { get; init; }
 }
 
 /// <summary>

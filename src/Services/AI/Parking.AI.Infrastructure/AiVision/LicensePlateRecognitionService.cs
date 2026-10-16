@@ -1,49 +1,62 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Parking.AI.Application.DTOs.LicensePlate;
 using Parking.AI.Application.Interfaces;
+using Parking.AI.Domain;
 using Parking.AI.Domain.Entities;
 using Parking.AI.Domain.Enums;
+using Parking.ServiceDefaults;
 
 namespace Parking.AI.Infrastructure.AiVision;
 
 /// <summary>
-/// Dịch vụ nhận diện biển số xe sử dụng kết hợp Python Vision và quy chuẩn xử lý hậu kỳ biển số Việt Nam
+/// Dịch vụ nhận diện biển số xe sử dụng kết hợp Python Vision, lưu trữ CSDL ai_plate_recognitions và chuẩn hóa biển số Việt Nam
 /// </summary>
 public partial class LicensePlateRecognitionService(
     PythonFastApiClient pythonClient,
+    NpgsqlDataSource db,
     ILogger<LicensePlateRecognitionService> logger) : ILicensePlateRecognitionService
 {
     public async Task<PlateRecognitionResultDto> RecognizePlateAsync(PlateRecognitionRequestDto request, CancellationToken ct = default)
     {
-        byte[]? imageBytes = null;
-
-        if (!string.IsNullOrWhiteSpace(request.ImageBase64))
+        if (string.IsNullOrWhiteSpace(request.ImageBase64))
         {
-            var base64Clean = CleanBase64String(request.ImageBase64);
-            try
-            {
-                imageBytes = Convert.FromBase64String(base64Clean);
-            }
-            catch (FormatException ex)
-            {
-                logger.LogWarning(ex, "Chuỗi Base64 không hợp lệ khi quét biển số tại cổng {GateId}", request.GateId);
-                return new PlateRecognitionResultDto
-                {
-                    Status = RecognitionStatus.Failed,
-                    RawPlate = string.Empty,
-                    NormalizedPlate = string.Empty,
-                    Confidence = 0.0,
-                    PlateType = "Unknown",
-                    ProcessingTimeMs = 0
-                };
-            }
+            throw new ServiceException(400, "Yêu cầu chuỗi Base64 imageBase64 hoặc file ảnh hợp lệ.");
         }
 
-        imageBytes ??= [];
+        var base64Clean = CleanBase64String(request.ImageBase64);
+        byte[] imageBytes;
+        try
+        {
+            imageBytes = Convert.FromBase64String(base64Clean);
+        }
+        catch (FormatException ex)
+        {
+            logger.LogWarning(ex, "Chuỗi Base64 không hợp lệ khi quét biển số tại cổng {GateId}", request.GateId);
+            throw new ServiceException(400, "Định dạng chuỗi Base64 của ảnh không hợp lệ.");
+        }
 
-        return await RecognizePlateFromBytesAsync(imageBytes, request.GateId, request.Direction, request.ParkingLotId, ct);
+        if (imageBytes.Length == 0)
+        {
+            throw new ServiceException(400, "Dữ liệu ảnh rỗng sau khi giải mã Base64.");
+        }
+
+        if (imageBytes.Length > ImageRules.MaxImageBytes)
+        {
+            throw new ServiceException(400, $"Kích thước ảnh vượt quá giới hạn cho phép ({ImageRules.MaxImageBytes / 1024 / 1024}MB).");
+        }
+
+        return await RecognizePlateFromBytesAsync(
+            imageBytes,
+            request.GateId,
+            request.Direction,
+            request.ParkingLotId,
+            request.IdempotencyKey,
+            request.UploadedBy,
+            ct);
     }
 
     public async Task<PlateRecognitionResultDto> RecognizePlateFromBytesAsync(
@@ -51,120 +64,156 @@ public partial class LicensePlateRecognitionService(
         string gateId,
         string direction,
         Guid? parkingLotId = null,
+        string? idempotencyKey = null,
+        Guid? uploadedBy = null,
         CancellationToken ct = default)
     {
         var stopwatch = Stopwatch.StartNew();
 
-        // 1. Gọi Python AI Vision Service (YOLOv8 + PaddleOCR)
+        if (imageBytes.Length == 0)
+        {
+            throw new ServiceException(400, "Mảng byte ảnh đầu vào rỗng.");
+        }
+
+        // 1. Gọi Python AI Vision Service (YOLOv8 + PaddleOCR hoặc Fallback có cờ)
         var detection = await pythonClient.DetectPlateAsync(imageBytes, ct);
 
-        // 2. Làm sạch và chuẩn hóa biển số theo quy chuẩn Việt Nam
-        var normalized = NormalizeVietnamesePlate(detection.PlateText);
+        // 2. Tách biệt chuẩn hóa: PlateNumber (lưu DB / đối soát) và DisplayPlate (hiển thị UI)
+        var plateNumber = ToAlphanumericPlate(detection.PlateText);
+        var displayPlate = FormatDisplayPlate(detection.PlateText);
 
         // 3. Đánh giá trạng thái tin cậy
-        var status = EvaluateRecognitionStatus(detection.Confidence, normalized);
+        var status = EvaluateRecognitionStatus(detection.Confidence, plateNumber);
 
         // 4. Phỏng đoán loại phương tiện dựa trên sê-ri biển số
-        var vehicleType = PredictVehicleType(normalized);
+        var vehicleType = PredictVehicleType(displayPlate);
+
+        // 5. Lưu vết nhận diện vào CSDL PostgreSQL (ai_plate_recognitions) để Staff có thể đối soát (DEF-02)
+        var recognitionId = Guid.NewGuid();
+        var lotId = parkingLotId ?? Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var user = uploadedBy ?? Guid.Parse("00000000-0000-0000-0000-000000000001");
+        var key = !string.IsNullOrWhiteSpace(idempotencyKey)
+            ? idempotencyKey
+            : $"SCAN_{gateId}_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+        var digest = Convert.ToHexStringLower(SHA256.HashData(imageBytes));
+        var modelVersion = detection.IsFallback ? "simulated-detector-v1" : "yolov8-paddleocr-v1";
+
+        try
+        {
+            var isNoPlate = string.IsNullOrWhiteSpace(plateNumber);
+            var dbStatus = isNoPlate ? "NO_PLATE" : "PENDING_REVIEW";
+
+            await using var insert = db.CreateCommand("""
+                INSERT INTO ai_plate_recognitions(
+                    id, lot_id, uploaded_by, idempotency_key, image_sha256,
+                    candidate_plate, confidence, status, model_version, expires_at
+                )
+                VALUES(
+                    @id, @lot, @user, @key, @digest,
+                    @plate, @conf, @status, @model, now() + interval '24 hours'
+                )
+                ON CONFLICT(lot_id, uploaded_by, idempotency_key) DO NOTHING
+                """);
+            insert.Parameters.AddWithValue("id", recognitionId);
+            insert.Parameters.AddWithValue("lot", lotId);
+            insert.Parameters.AddWithValue("user", user);
+            insert.Parameters.AddWithValue("key", key);
+            insert.Parameters.AddWithValue("digest", digest);
+            insert.Parameters.AddWithValue("plate", isNoPlate ? DBNull.Value : plateNumber);
+            insert.Parameters.AddWithValue("conf", isNoPlate ? DBNull.Value : Math.Round(detection.Confidence, 5));
+            insert.Parameters.AddWithValue("status", dbStatus);
+            insert.Parameters.AddWithValue("model", modelVersion);
+
+            await insert.ExecuteNonQueryAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Lưu bản ghi nhận diện vào ai_plate_recognitions thất bại (tiếp tục trả kết quả cho client)");
+        }
 
         stopwatch.Stop();
 
-        // 5. Chuẩn bị log nghiệp vụ
-        var log = new LicensePlateLog
-        {
-            RawPlate = detection.PlateText,
-            NormalizedPlate = normalized,
-            Confidence = detection.Confidence,
-            GateId = gateId,
-            Direction = direction,
-            Status = status,
-            VehicleType = vehicleType,
-            PlateType = detection.PlateType,
-            CroppedPlateBase64 = detection.CroppedImageBase64,
-            ParkingLotId = parkingLotId
-        };
-
         logger.LogInformation(
-            "Biển số nhận diện thành công: {Normalized} | Confidence: {Confidence:P1} | Gate: {GateId} | Direction: {Direction} | Time: {Time}ms",
-            normalized, detection.Confidence, gateId, direction, stopwatch.ElapsedMilliseconds);
+            "Biển số nhận diện thành công: {DisplayPlate} (DB: {PlateNumber}) | Conf: {Confidence:P1} | Gate: {GateId} | Dir: {Direction} | Time: {Time}ms | Fallback: {IsFallback}",
+            displayPlate, plateNumber, detection.Confidence, gateId, direction, stopwatch.ElapsedMilliseconds, detection.IsFallback);
 
         return new PlateRecognitionResultDto
         {
-            NormalizedPlate = normalized,
+            RecognitionId = recognitionId,
+            PlateNumber = plateNumber,
+            NormalizedPlate = plateNumber,
+            DisplayPlate = displayPlate,
             RawPlate = detection.PlateText,
             Confidence = Math.Round(detection.Confidence, 3),
             PlateType = detection.PlateType,
             CroppedPlateBase64 = detection.CroppedImageBase64,
             Status = status,
             VehicleTypeSuggestion = vehicleType,
-            ProcessingTimeMs = stopwatch.ElapsedMilliseconds
+            ProcessingTimeMs = stopwatch.ElapsedMilliseconds,
+            IsFallback = detection.IsFallback
         };
     }
 
     /// <summary>
-    /// Chuẩn hóa chuỗi biển số xe Việt Nam:
-    /// Loại bỏ ký tự đặc biệt thừa, phân tách chuẩn dạng '51K-888.88' hoặc '59-P1 678.90'
+    /// Chuẩn hóa chuỗi biển số dạng chữ và số liền mạch phục vụ lưu trữ CSDL và kiểm tra regex ^[A-Z0-9]{1,20}$
     /// </summary>
-    public static string NormalizeVietnamesePlate(string rawText)
+    public static string ToAlphanumericPlate(string rawText)
     {
         if (string.IsNullOrWhiteSpace(rawText)) return string.Empty;
+        var cleaned = CleanSpecialCharactersRegex().Replace(rawText.ToUpperInvariant().Trim(), "");
+        return cleaned.Length > 20 ? cleaned[..20] : cleaned;
+    }
 
-        var cleaned = rawText.ToUpperInvariant().Trim();
-        cleaned = CleanSpecialCharactersRegex().Replace(cleaned, "");
+    /// <summary>
+    /// Định dạng biển số hiển thị thân thiện trên giao diện UI (VD: 51K-888.88 hoặc 59-P1 678.90)
+    /// </summary>
+    public static string FormatDisplayPlate(string rawText)
+    {
+        var cleaned = ToAlphanumericPlate(rawText);
+        if (cleaned.Length < 7) return cleaned;
 
-        if (cleaned.Length >= 7)
+        var carMatch = CarPlateRegex().Match(cleaned);
+        if (carMatch.Success)
         {
-            var carMatch = CarPlateRegex().Match(cleaned);
-            if (carMatch.Success)
-            {
-                var province = carMatch.Groups[1].Value;
-                var series = carMatch.Groups[2].Value;
-                var numbers = carMatch.Groups[3].Value;
+            var province = carMatch.Groups[1].Value;
+            var series = carMatch.Groups[2].Value;
+            var numbers = carMatch.Groups[3].Value;
 
-                if (numbers.Length == 5)
-                {
-                    return $"{province}{series}-{numbers[..3]}.{numbers[3..]}";
-                }
-                if (numbers.Length == 4)
-                {
-                    return $"{province}{series}-{numbers}";
-                }
-            }
+            return numbers.Length == 5
+                ? $"{province}{series}-{numbers[..3]}.{numbers[3..]}"
+                : $"{province}{series}-{numbers}";
+        }
 
-            var bikeMatch = BikePlateRegex().Match(cleaned);
-            if (bikeMatch.Success)
-            {
-                var province = bikeMatch.Groups[1].Value;
-                var series = bikeMatch.Groups[2].Value;
-                var numbers = bikeMatch.Groups[3].Value;
+        var bikeMatch = BikePlateRegex().Match(cleaned);
+        if (bikeMatch.Success)
+        {
+            var province = bikeMatch.Groups[1].Value;
+            var series = bikeMatch.Groups[2].Value;
+            var numbers = bikeMatch.Groups[3].Value;
 
-                if (numbers.Length == 5)
-                {
-                    return $"{province}-{series} {numbers[..3]}.{numbers[3..]}";
-                }
-                if (numbers.Length == 4)
-                {
-                    return $"{province}-{series} {numbers}";
-                }
-            }
+            return numbers.Length == 5
+                ? $"{province}-{series} {numbers[..3]}.{numbers[3..]}"
+                : $"{province}-{series} {numbers}";
         }
 
         return cleaned;
     }
 
-    private static RecognitionStatus EvaluateRecognitionStatus(double confidence, string normalizedPlate)
+    public static string NormalizeVietnamesePlate(string rawText) => FormatDisplayPlate(rawText);
+
+    private static RecognitionStatus EvaluateRecognitionStatus(double confidence, string plateNumber)
     {
-        if (string.IsNullOrWhiteSpace(normalizedPlate)) return RecognitionStatus.Failed;
+        if (string.IsNullOrWhiteSpace(plateNumber)) return RecognitionStatus.Failed;
         if (confidence >= 0.85) return RecognitionStatus.Success;
         if (confidence >= 0.60) return RecognitionStatus.LowConfidence;
         return RecognitionStatus.Failed;
     }
 
-    private static VehicleType PredictVehicleType(string plate)
+    private static VehicleType PredictVehicleType(string displayPlate)
     {
-        if (plate.Contains('-') && plate.Length >= 8)
+        if (displayPlate.Contains('-') && displayPlate.Length >= 8)
         {
-            var parts = plate.Split(['-', ' '], StringSplitOptions.RemoveEmptyEntries);
+            var parts = displayPlate.Split(['-', ' '], StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length > 1 && parts[1].Length == 2 && char.IsDigit(parts[1][1]))
             {
                 return VehicleType.Motorbike;

@@ -24,4 +24,9 @@ public record AssistantChatResponseDto
     /// Thời điểm tạo câu trả lời
     /// </summary>
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
+
+    /// <summary>
+    /// Cờ đánh dấu câu trả lời được sinh từ bộ suy luận mô phỏng cục bộ (fallback) khi Gemini API chưa cấu hình
+    /// </summary>
+    public bool IsFallback { get; init; }
 }

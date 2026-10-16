@@ -16,9 +16,14 @@ public partial class ParkingAssistantService(
     ILogger<ParkingAssistantService> logger) : IParkingAssistantService
 {
     private static readonly ConcurrentDictionary<Guid, ParkingAssistantSession> Sessions = new();
+    private static DateTimeOffset _lastCleanup = DateTimeOffset.UtcNow;
+    private static readonly object _cleanupLock = new();
 
     public async Task<AssistantChatResponseDto> ChatAsync(AssistantChatRequestDto request, CancellationToken cancellationToken = default)
     {
+        // 1. Dọn dẹp session hết hạn định kỳ (DEF-04: Tránh rò rỉ bộ nhớ RAM)
+        EvictExpiredSessions();
+
         var sessionId = request.SessionId ?? Guid.NewGuid();
 
         var session = Sessions.GetOrAdd(sessionId, id => new ParkingAssistantSession
@@ -38,10 +43,19 @@ public partial class ParkingAssistantService(
             Content = request.Message,
             CreatedAt = DateTimeOffset.UtcNow
         };
-        session.Messages.Add(userMsg);
+
+        // Đồng bộ hóa đa luồng an toàn cho session (DEF-04)
+        lock (session)
+        {
+            session.Messages.Add(userMsg);
+            // Giới hạn tối đa 20 tin nhắn mỗi session để kiểm soát bộ nhớ
+            if (session.Messages is List<ParkingAssistantMessage> list && list.Count > 20)
+            {
+                list.RemoveRange(0, list.Count - 20);
+            }
+        }
 
         // 🛡️ TẦNG BẢO VỆ 1: LỌC CỤC BỘ KHÔNG TỐN TOKEN (ZERO-COST GUARDRAIL)
-        // Nếu câu hỏi hoàn toàn lạc đề (code, thơ, thời tiết, chính trị,...), từ chối ngay lập tức mà KHÔNG GỌI GEMINI API!
         if (IsDefinitelyOutOfDomain(request.Message))
         {
             logger.LogInformation("Phát hiện câu hỏi ngoài phạm vi bãi xe. Từ chối cục bộ để bảo toàn quota: {Query}", request.Message);
@@ -56,33 +70,41 @@ public partial class ParkingAssistantService(
                 Content = rejectionMsg,
                 CreatedAt = DateTimeOffset.UtcNow
             };
-            session.Messages.Add(assistantRejection);
+
+            lock (session)
+            {
+                session.Messages.Add(assistantRejection);
+            }
 
             return new AssistantChatResponseDto
             {
                 SessionId = session.Id,
                 ReplyMessage = rejectionMsg,
                 SuggestedActions = defaultSuggestions,
-                CreatedAt = DateTimeOffset.UtcNow
+                CreatedAt = DateTimeOffset.UtcNow,
+                IsFallback = false
             };
         }
 
-        // 2. Xây dựng lịch sử ngắn (tối đa 6 tin nhắn gần nhất)
-        var recentHistory = session.Messages
-            .OrderByDescending(m => m.CreatedAt)
-            .Take(6)
-            .Reverse()
-            .Select(m => $"{(m.Role == "user" ? "Khách hàng" : "Trợ lý")}: {m.Content}");
-
-        var historyText = string.Join("\n", recentHistory);
+        // 2. Xây dựng lịch sử ngắn an toàn đa luồng (tối đa 6 tin nhắn gần nhất)
+        string historyText;
+        lock (session)
+        {
+            var recentHistory = session.Messages
+                .OrderByDescending(m => m.CreatedAt)
+                .Take(6)
+                .Reverse()
+                .Select(m => $"{(m.Role == "user" ? "Khách hàng" : "Trợ lý")}: {m.Content}");
+            historyText = string.Join("\n", recentHistory);
+        }
 
         var prompt = ParkingAssistantPrompts.BuildPromptWithContext(
             request.Message,
             historyText,
             request.CurrentParkingLotId.HasValue ? $"Mã bãi xe: {request.CurrentParkingLotId.Value}" : null);
 
-        // 3. Gọi Gemini API (nếu hợp lệ)
-        var aiRawResponse = await geminiClient.GenerateTextAsync(
+        // 3. Gọi Gemini API (có theo dõi trạng thái Fallback: DEF-10)
+        var (aiRawResponse, isFallback) = await geminiClient.GenerateTextWithStatusAsync(
             ParkingAssistantPrompts.SystemKnowledgeBase,
             prompt,
             cancellationToken);
@@ -96,16 +118,21 @@ public partial class ParkingAssistantService(
             Content = cleanReply,
             CreatedAt = DateTimeOffset.UtcNow
         };
-        session.Messages.Add(assistantMsg);
 
-        logger.LogInformation("AI Assistant đã phản hồi session {SessionId} thành công.", session.Id);
+        lock (session)
+        {
+            session.Messages.Add(assistantMsg);
+        }
+
+        logger.LogInformation("AI Assistant đã phản hồi session {SessionId} thành công (Fallback: {IsFallback}).", session.Id, isFallback);
 
         return new AssistantChatResponseDto
         {
             SessionId = session.Id,
             ReplyMessage = cleanReply,
             SuggestedActions = suggestions,
-            CreatedAt = DateTimeOffset.UtcNow
+            CreatedAt = DateTimeOffset.UtcNow,
+            IsFallback = isFallback
         };
     }
 
@@ -113,6 +140,28 @@ public partial class ParkingAssistantService(
     {
         var removed = Sessions.TryRemove(sessionId, out _);
         return Task.FromResult(removed);
+    }
+
+    private static void EvictExpiredSessions()
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (now - _lastCleanup < TimeSpan.FromMinutes(5)) return;
+
+        lock (_cleanupLock)
+        {
+            if (now - _lastCleanup < TimeSpan.FromMinutes(5)) return;
+            _lastCleanup = now;
+
+            var expiredKeys = Sessions
+                .Where(kvp => now - kvp.Value.LastActivityAt > TimeSpan.FromMinutes(45))
+                .Select(kvp => kvp.Key)
+                .ToList();
+
+            foreach (var key in expiredKeys)
+            {
+                Sessions.TryRemove(key, out _);
+            }
+        }
     }
 
     /// <summary>
