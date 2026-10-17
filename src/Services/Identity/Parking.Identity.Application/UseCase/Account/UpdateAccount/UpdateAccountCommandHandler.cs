@@ -25,17 +25,19 @@ namespace Parking.Identity.Application.UseCase.Account.UpdateAccount
             {
                 throw new AppException(ErrorCode.AccountNotFound, "Account Not Found");
             }
+            var email = request.EmailNormalized.Trim().ToLowerInvariant();
 
-            if (account.EmailNormalized != request.EmailNormalized)
+            if (account.EmailNormalized != email)
             {
-                var exitingEmail = await repository.GetUserByEmail(request.EmailNormalized);
+                var exitingEmail = await repository.GetUserByEmail(email);
+
                 if (exitingEmail != null && exitingEmail.Id != account.Id)
                 {
                     throw new AppException(ErrorCode.EmailAlreadyExists, "Email already exists");
                 }
 
 
-                account.EmailNormalized = request.EmailNormalized;
+                account.EmailNormalized = email;
             }
 
             account.FullName = request.FullName;

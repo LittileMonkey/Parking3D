@@ -20,6 +20,7 @@ namespace Parking.Identity.Application
                 });
 
             services.AddValidatorsFromAssembly(typeof(ApplicationDependencyInjection).Assembly);
+            services.AddMemoryCache();
 
             return services;
         }

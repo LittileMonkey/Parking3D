@@ -13,6 +13,7 @@ namespace Parking.Identity.Application.Common.Interface
         Task<AuthToken?> GetByTokenHashAsync(string tokenHash, CancellationToken cancellationToken);
         Task RevokedAsync(AuthToken authToken, CancellationToken cancellationToken);
         Task RevokedFamilyAsync(Guid familyId, CancellationToken cancellationToken);
+        Task RevokedAllByUserIdAsync(Guid userId, CancellationToken cancellationToken);
 
     }
 }

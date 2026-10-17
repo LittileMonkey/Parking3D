@@ -18,22 +18,18 @@ namespace Parking.Identity.Application.UseCase.Authentication.Logout
         {
             if (string.IsNullOrWhiteSpace(request.RefreshToken))
             {
-                throw new AppException(ErrorCode.Unauthorized, "Refresh token không hợp lệ.");
+                throw new AppException(ErrorCode.TokenMissing, "Can Not Hash Token");
             }
-
             // Hash Refresh Token
             var tokenHash = accessToken.HashToken(request.RefreshToken);
-
+           
             // Tìm Refresh Token trong DB
             var authToken =
-                await authTokenRepository
-                    .GetByTokenHashAsync(
-                        tokenHash,
-                        cancellationToken);
+                await authTokenRepository.GetByTokenHashAsync(tokenHash, cancellationToken);
 
             if (authToken == null)
             {
-                throw new AppException(ErrorCode.Unauthorized, "Refresh token không hợp lệ.");
+                throw new AppException(ErrorCode.Unauthorized, "Refresh Invalid.");
             }
 
             //Đã revoke rồi

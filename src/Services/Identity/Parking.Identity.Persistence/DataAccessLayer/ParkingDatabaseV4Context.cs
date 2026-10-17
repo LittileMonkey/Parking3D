@@ -31,6 +31,8 @@ public partial class ParkingDatabaseV4Context : DbContext
     public virtual DbSet<PlatformUserRole> PlatformUserRoles { get; set; }
 
     public virtual DbSet<ServiceSchemaVersion> ServiceSchemaVersions { get; set; }
+
+    public virtual DbSet<PasswordResetOtp> PasswordResetOtps { get; set; }
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder
@@ -234,6 +236,33 @@ public partial class ParkingDatabaseV4Context : DbContext
             entity.Property(e => e.AppliedAt)
                 .HasDefaultValueSql("now()")
                 .HasColumnName("applied_at");
+        });
+        modelBuilder.Entity<PasswordResetOtp>(entity =>
+        {
+            entity.ToTable("password_reset_otps", "public");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id)
+                .HasColumnName("id");
+
+            entity.Property(x => x.UserId)
+                .HasColumnName("user_id");
+
+            entity.Property(x => x.OtpHash)
+                .HasColumnName("otp_hash");
+
+            entity.Property(x => x.ExpiresAt)
+                .HasColumnName("expires_at");
+
+            entity.Property(x => x.UsedAt)
+                .HasColumnName("used_at");
+
+            entity.Property(x => x.AttemptCount)
+                .HasColumnName("attempt_count");
+
+            entity.Property(x => x.CreatedAt)
+                .HasColumnName("created_at");
         });
 
         OnModelCreatingPartial(modelBuilder);
