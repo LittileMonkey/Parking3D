@@ -1,4 +1,4 @@
-using Parking.Identity.Application.Common.AppException;
+﻿using Parking.Identity.Application.Common.AppException;
 using Parking.Identity.Application.Common.Enum;
 using Parking.Identity.Application.Common.Interface;
 using Parking.Identity.Application.DTOs;
@@ -23,12 +23,15 @@ namespace Parking.Identity.Application.UseCase.Authentication.Login
         }
         async Task<AuthenticationResponseDto> IRequestHandler<LoginCommand, AuthenticationResponseDto>.Handle(LoginCommand request, CancellationToken cancellationToken)
         {
-            if (string.IsNullOrWhiteSpace(request.emailNormalized) || string.IsNullOrWhiteSpace(request.password))
+            if (string.IsNullOrEmpty(request.emailNormalized))
             {
-                throw new AppException(ErrorCode.Unauthorized, "Email or password is incorrect.");
+                throw new AppException(ErrorCode.InvalidEmail, "Email Invalid");
             }
 
-            var user = await accountRepository.GetUserByEmail(request.emailNormalized);
+            var email = request.emailNormalized.Trim().ToUpperInvariant();
+
+
+            var user = await accountRepository.GetUserByEmail(email);
 
             if (user == null)
             {
@@ -40,11 +43,10 @@ namespace Parking.Identity.Application.UseCase.Authentication.Login
                 throw new AppException(ErrorCode.Unauthorized, "User is inactive.");
             }
 
-            if (string.IsNullOrWhiteSpace(user.PasswordHash))
+            if(string.IsNullOrWhiteSpace(request.password) || string.IsNullOrWhiteSpace(user.PasswordHash))
             {
-                throw new AppException(ErrorCode.Unauthorized, "Email or password is incorrect.");
+                throw new AppException(ErrorCode.InvalidPassword, "Email or password is incorrect.");
             }
-
             var passwordValid = hasherService.VerifiedPassword(user, request.password, user.PasswordHash);
 
             if (!passwordValid)
@@ -77,7 +79,7 @@ namespace Parking.Identity.Application.UseCase.Authentication.Login
             {
                 UserId = user.Id,
                 FullName = user.FullName,
-                EmailNormalized = user.EmailNormalized ?? request.emailNormalized,
+                EmailNormalized = user.EmailNormalized,
                 Status = user.Status,
 
 

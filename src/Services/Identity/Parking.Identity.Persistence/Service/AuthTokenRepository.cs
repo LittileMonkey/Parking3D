@@ -24,6 +24,24 @@ namespace Parking.Identity.Persistence.Service
                 .FirstOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
         }
 
+        public async Task RevokedAllByUserIdAsync(Guid userId, CancellationToken cancellationToken)
+        {
+           var authToken = await context.AuthTokens
+                .Where(x => x.UserId == userId && x.RevokedAt == null)
+                .ToListAsync(cancellationToken);
+
+            var now = DateTime.UtcNow;
+
+            foreach(var token in authToken)
+            {
+                token.RevokedAt = now;
+            }
+
+            await context.SaveChangesAsync(cancellationToken);
+
+
+        }
+
         public async Task RevokedAsync(AuthToken authToken, CancellationToken cancellationToken)
         {
             authToken.RevokedAt = DateTime.UtcNow;

@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Parking.Identity.Application.Common.Enum
+﻿namespace Parking.Identity.Application.Common.Enum
 {
     public enum ErrorCode
     {
@@ -82,7 +76,17 @@ namespace Parking.Identity.Application.Common.Enum
         InternalServerError = 9002,
         ServiceUnavailable = 9003,
 
-        ClientIDNotFound = 9004
+        ClientIDNotFound = 9004,
+
+        // =========================
+        // OTP (Mới bổ sung cho tính năng quên mật khẩu)
+        // =========================
+
+        OtpNotFound = 1351,
+        OtpExpired = 1352,
+        OtpInvalid = 1353,
+        OtpAlreadyUsed = 1354,
+        OtpMaxAttemptsExceeded = 1355,
     }
 }
 
