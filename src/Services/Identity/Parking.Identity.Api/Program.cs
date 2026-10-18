@@ -1,9 +1,13 @@
+using System.Net;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Parking.Identity.Infrastructure;
 using Parking.Identity.Persistence;
 using Parking.Identity.Application;
 using Parking.Identity.Api.Middleware;
 using Parking.Identity.Infrastructure.Initializer;
 using Identity.Infrastructure;
+using Parking.ServiceDefaults;
+
 namespace Parking.Identity.Api
 {
     public class Program
@@ -11,6 +15,13 @@ namespace Parking.Identity.Api
         public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
+
+            builder.WebHost.ConfigureKestrel(k =>
+            {
+                var bind = builder.Configuration["Ports:Bind"] == "0.0.0.0" ? IPAddress.Any : IPAddress.Loopback;
+                k.Listen(bind, builder.Configuration.GetValue("Ports:Http", 8080), o => o.Protocols = HttpProtocols.Http1);
+                k.Listen(bind, builder.Configuration.GetValue("Ports:Grpc", 8081), o => o.Protocols = HttpProtocols.Http2);
+            });
 
             // Add services to the container.
 
@@ -21,6 +32,9 @@ namespace Parking.Identity.Api
             builder.Services.AddPersistenceDependencyInjection(builder.Configuration);
             builder.Services.AddInfrastructureDependencyInjection(builder.Configuration);
             builder.Services.AddApplicationDependencyInjection(builder.Configuration);
+
+            builder.Services.AddGrpc(o => { o.Interceptors.Add<ServiceKeyInterceptor>(); });
+            builder.Services.AddTransient<ServiceKeyInterceptor>();
 
             builder.Services.AddAuthorization();
 
@@ -48,6 +62,7 @@ namespace Parking.Identity.Api
 
 
             app.MapControllers();
+            app.MapGrpcService<FacilityAuthorizationGrpc>();
 
             app.Run();
         }
