@@ -15,6 +15,7 @@ import {
   Layers,
   Camera,
   ShieldCheck,
+  Upload,
 } from "lucide-react";
 import { staffApi } from "../../services/staff/staffApi";
 import type {
@@ -22,6 +23,7 @@ import type {
   CheckInResult,
   CheckOutFeeInfo,
   VehicleType,
+  PlateRecognitionResult,
 } from "../../types/staff";
 
 export default function VehicleOperations() {
@@ -54,6 +56,127 @@ export default function VehicleOperations() {
   const [checkOutSuccess, setCheckOutSuccess] = useState<{ message: string; receiptNumber: string } | null>(null);
   const [onlinePaymentStatus, setOnlinePaymentStatus] = useState<string | null>(null);
   const [checkingOnlinePayment, setCheckingOnlinePayment] = useState(false);
+
+  // Camera ANPR Boxes State (Quản lý trạng thái và ảnh tải lên riêng cho từng ô camera)
+  interface CamBoxState {
+    fileUrl?: string;
+    result?: PlateRecognitionResult;
+    scanning?: boolean;
+    plateText?: string;
+    confidence?: string;
+  }
+
+  const [cameraStates, setCameraStates] = useState<Record<string, CamBoxState>>({
+    "moto-cam1": {},
+    "moto-cam2": { plateText: "59-P1 982.14", confidence: "Độ chính xác: 99.2% • Honda AirBlade" },
+    "car-cam1": { plateText: "51K - 892.45", confidence: "AI: 99.4% • Toyota Cross" },
+    "car-cam2": { plateText: "51K - 892.45", confidence: "AI: 98.9% • Khớp biển trước" },
+    "car-cam3": {},
+    "car-cam4": {},
+  });
+  const [activeTargetCam, setActiveTargetCam] = useState<string>("car-cam1");
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const handleTriggerUploadForCam = (camId: string) => {
+    setActiveTargetCam(camId);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    event.target.value = "";
+    const camId = activeTargetCam;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Dung lượng ảnh vượt quá 5MB. Vui lòng chọn ảnh nhỏ hơn.");
+      return;
+    }
+
+    if (!["image/jpeg", "image/png", "image/jpg"].includes(file.type)) {
+      alert("Chỉ chấp nhận file ảnh JPG hoặc PNG hợp lệ.");
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+
+    // Kích hoạt trạng thái quét riêng cho ô camera này
+    setCameraStates((prev) => ({
+      ...prev,
+      [camId]: {
+        ...prev[camId],
+        fileUrl: previewUrl,
+        scanning: true,
+      },
+    }));
+
+    try {
+      const gate = activeTab === "checkin" ? checkInGate : "Cổng Ra G3";
+      const direction = activeTab === "checkin" ? "IN" : "OUT";
+      const result = await staffApi.scanLicensePlate(file, gate, direction);
+
+      const recognizedPlate = result.displayPlate || result.plateNumber;
+
+      setCameraStates((prev) => ({
+        ...prev,
+        [camId]: {
+          fileUrl: previewUrl,
+          result: result,
+          scanning: false,
+          plateText: recognizedPlate || "Không nhận diện được",
+          confidence: `AI: ${(result.confidence * 100).toFixed(1)}%${result.isFallback ? " (Giả lập)" : ""}`,
+        },
+      }));
+
+      if (recognizedPlate) {
+        if (activeTab === "checkin") {
+          setCheckInPlate(recognizedPlate);
+
+          const isMoto =
+            result.vehicleTypeSuggestion === "Motorcycle" ||
+            String(result.vehicleTypeSuggestion) === "1" ||
+            result.plateType === "TwoLine" ||
+            recognizedPlate.includes("-P") ||
+            recognizedPlate.includes("-V");
+
+          if (isMoto) {
+            setCheckInVehicleType("Motorcycle");
+            setCameraVehicleCategory("Motorcycle");
+          } else {
+            setCheckInVehicleType("Car");
+            setCameraVehicleCategory("Car");
+          }
+        } else {
+          setCheckOutQuery(recognizedPlate);
+          handleLookupFee(recognizedPlate);
+        }
+      }
+    } catch (err: any) {
+      console.error("AI Plate Recognition error for cam:", camId, err);
+      alert("Lỗi nhận diện biển số: " + (err.message || "Máy chủ OCR không phản hồi"));
+      setCameraStates((prev) => ({
+        ...prev,
+        [camId]: {
+          ...prev[camId],
+          scanning: false,
+        },
+      }));
+    }
+  };
+
+  const handleResetCam = (camId: string, defaultPlate?: string, defaultConf?: string) => {
+    setCameraStates((prev) => ({
+      ...prev,
+      [camId]: {
+        fileUrl: undefined,
+        result: undefined,
+        scanning: false,
+        plateText: defaultPlate,
+        confidence: defaultConf,
+      },
+    }));
+  };
 
   // Sync category when user changes vehicle type in form
   const handleVehicleTypeChange = (vt: VehicleType) => {
@@ -183,6 +306,15 @@ export default function VehicleOperations() {
 
   return (
     <div className="pm-operations-container">
+      {/* Hidden File Input for AI License Plate OCR */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileUpload}
+        accept="image/jpeg,image/png,image/jpg"
+        style={{ display: "none" }}
+      />
+
       {/* ─── 1. Header Row ─────────────────────────────────────────────────── */}
       <div className="pm-header-row">
         <div>
@@ -527,7 +659,21 @@ export default function VehicleOperations() {
                     <span className="pm-cam-res">1080P</span>
                   </div>
                   <div className="pm-cam-viewport">
-                    <div className="pm-cam-crosshair" />
+                    {cameraStates["moto-cam1"]?.fileUrl ? (
+                      <img
+                        src={cameraStates["moto-cam1"]!.fileUrl}
+                        alt="Ảnh Cam 1"
+                        className="pm-cam-real-preview"
+                      />
+                    ) : (
+                      <div className="pm-cam-crosshair" />
+                    )}
+                    {cameraStates["moto-cam1"]?.scanning && (
+                      <div className="pm-cam-scan-overlay">
+                        <div className="pm-cam-laser-scanner" />
+                        <span className="pm-cam-scan-text">AI đang phân tích...</span>
+                      </div>
+                    )}
                     <div className="pm-cam-tag-box">
                       <ShieldCheck size={14} color="#10b981" />
                       <span>Mũ bảo hiểm OK • Người điều khiển rõ nét</span>
@@ -535,13 +681,24 @@ export default function VehicleOperations() {
                     <div className="pm-cam-time">{new Date().toLocaleTimeString("vi-VN")}</div>
                   </div>
                   <div className="pm-cam-footer">
-                    <span className="pm-cam-status-label">Làn xe máy G2 • Cảm biến vòng từ kích hoạt</span>
+                    <button
+                      type="button"
+                      className="pm-cam-upload-btn"
+                      onClick={() => handleTriggerUploadForCam("moto-cam1")}
+                      disabled={cameraStates["moto-cam1"]?.scanning}
+                      title="Tải ảnh riêng cho Cam 1 để AI nhận diện"
+                    >
+                      <Upload size={12} />
+                      <span>{cameraStates["moto-cam1"]?.scanning ? "Đang quét..." : "Tải ảnh"}</span>
+                    </button>
+                    <span className="pm-cam-status-label">Làn xe máy G2</span>
                     <button
                       type="button"
                       className="pm-cam-retake-btn"
-                      onClick={() => alert("Đã gửi lệnh chụp lại Cam 1 (Mặt trước)")}
+                      onClick={() => handleResetCam("moto-cam1")}
+                      title="Chụp lại hoặc reset ảnh"
                     >
-                      <RotateCcw size={13} /> Chụp lại
+                      <RotateCcw size={12} /> Chụp lại
                     </button>
                   </div>
                 </div>
@@ -556,26 +713,62 @@ export default function VehicleOperations() {
                     <span className="pm-cam-res">1080P</span>
                   </div>
                   <div className="pm-cam-viewport">
+                    {cameraStates["moto-cam2"]?.fileUrl ? (
+                      <img
+                        src={cameraStates["moto-cam2"]!.fileUrl}
+                        alt="Ảnh Cam 2"
+                        className="pm-cam-real-preview"
+                      />
+                    ) : null}
+                    {cameraStates["moto-cam2"]?.scanning && (
+                      <div className="pm-cam-scan-overlay">
+                        <div className="pm-cam-laser-scanner" />
+                        <span className="pm-cam-scan-text">AI đang nhận diện biển số...</span>
+                      </div>
+                    )}
                     <div className="pm-cam-anpr-bounding-box">
-                      <div className="pm-anpr-plate">[ 59-P1 982.14 ]</div>
-                      <div className="pm-anpr-confidence">Độ chính xác: 99.2% • Honda AirBlade</div>
+                      <div className="pm-anpr-plate">
+                        [ {cameraStates["moto-cam2"]?.plateText || "59-P1 982.14"} ]
+                      </div>
+                      <div className="pm-anpr-confidence">
+                        {cameraStates["moto-cam2"]?.confidence || "Độ chính xác: 99.2% • Honda AirBlade"}
+                      </div>
                     </div>
                     <div className="pm-cam-time">{new Date().toLocaleTimeString("vi-VN")}</div>
                   </div>
                   <div className="pm-cam-footer">
                     <button
                       type="button"
+                      className="pm-cam-upload-btn"
+                      onClick={() => handleTriggerUploadForCam("moto-cam2")}
+                      disabled={cameraStates["moto-cam2"]?.scanning}
+                      title="Tải ảnh riêng cho Cam 2 để AI nhận diện"
+                    >
+                      <Upload size={12} />
+                      <span>{cameraStates["moto-cam2"]?.scanning ? "Đang quét..." : "Tải ảnh"}</span>
+                    </button>
+                    <button
+                      type="button"
                       className="pm-cam-fill-btn"
-                      onClick={() => setCheckInPlate("59-P1 982.14")}
+                      onClick={() => {
+                        const p = cameraStates["moto-cam2"]?.plateText || "59-P1 982.14";
+                        if (activeTab === "checkin") setCheckInPlate(p);
+                        else {
+                          setCheckOutQuery(p);
+                          handleLookupFee(p);
+                        }
+                      }}
+                      title="Điền biển số nhận diện từ Cam 2 vào Form"
                     >
                       Điền Biển số vào Form
                     </button>
                     <button
                       type="button"
                       className="pm-cam-retake-btn"
-                      onClick={() => alert("Đã gửi lệnh chụp lại Cam 2 (Mặt sau)")}
+                      onClick={() => handleResetCam("moto-cam2", "59-P1 982.14", "Độ chính xác: 99.2% • Honda AirBlade")}
+                      title="Chụp lại hoặc reset ảnh"
                     >
-                      <RotateCcw size={13} /> Chụp lại
+                      <RotateCcw size={12} /> Chụp lại
                     </button>
                   </div>
                 </div>
@@ -592,25 +785,61 @@ export default function VehicleOperations() {
                     <span className="pm-cam-name">Cam 1: Mặt trước (Front Plate)</span>
                   </div>
                   <div className="pm-cam-viewport compact">
+                    {cameraStates["car-cam1"]?.fileUrl ? (
+                      <img
+                        src={cameraStates["car-cam1"]!.fileUrl}
+                        alt="Ảnh Cam 1"
+                        className="pm-cam-real-preview"
+                      />
+                    ) : null}
+                    {cameraStates["car-cam1"]?.scanning && (
+                      <div className="pm-cam-scan-overlay">
+                        <div className="pm-cam-laser-scanner" />
+                        <span className="pm-cam-scan-text">AI đang quét...</span>
+                      </div>
+                    )}
                     <div className="pm-cam-anpr-bounding-box">
-                      <div className="pm-anpr-plate">[ 51K - 892.45 ]</div>
-                      <div className="pm-anpr-confidence">AI: 99.4% • Toyota Cross</div>
+                      <div className="pm-anpr-plate">
+                        [ {cameraStates["car-cam1"]?.plateText || "51K - 892.45"} ]
+                      </div>
+                      <div className="pm-anpr-confidence">
+                        {cameraStates["car-cam1"]?.confidence || "AI: 99.4% • Toyota Cross"}
+                      </div>
                     </div>
                   </div>
                   <div className="pm-cam-footer compact">
                     <button
                       type="button"
+                      className="pm-cam-upload-btn compact"
+                      onClick={() => handleTriggerUploadForCam("car-cam1")}
+                      disabled={cameraStates["car-cam1"]?.scanning}
+                      title="Tải ảnh riêng cho Cam 1 để AI nhận diện"
+                    >
+                      <Upload size={11} />
+                      <span>{cameraStates["car-cam1"]?.scanning ? "..." : "Tải ảnh"}</span>
+                    </button>
+                    <button
+                      type="button"
                       className="pm-cam-fill-btn compact"
-                      onClick={() => setCheckInPlate("51K-892.45")}
+                      onClick={() => {
+                        const p = cameraStates["car-cam1"]?.plateText || "51K-892.45";
+                        if (activeTab === "checkin") setCheckInPlate(p);
+                        else {
+                          setCheckOutQuery(p);
+                          handleLookupFee(p);
+                        }
+                      }}
+                      title="Điền biển số nhận diện từ Cam 1 vào Form"
                     >
                       Điền vào Form
                     </button>
                     <button
                       type="button"
                       className="pm-cam-retake-btn compact"
-                      onClick={() => alert("Đã gửi lệnh chụp lại Cam 1 (Mặt trước)")}
+                      onClick={() => handleResetCam("car-cam1", "51K - 892.45", "AI: 99.4% • Toyota Cross")}
+                      title="Chụp lại hoặc reset ảnh"
                     >
-                      <RotateCcw size={12} /> Chụp lại
+                      <RotateCcw size={11} /> Chụp lại
                     </button>
                   </div>
                 </div>
@@ -624,25 +853,61 @@ export default function VehicleOperations() {
                     <span className="pm-cam-name">Cam 2: Mặt sau (Rear Plate)</span>
                   </div>
                   <div className="pm-cam-viewport compact">
+                    {cameraStates["car-cam2"]?.fileUrl ? (
+                      <img
+                        src={cameraStates["car-cam2"]!.fileUrl}
+                        alt="Ảnh Cam 2"
+                        className="pm-cam-real-preview"
+                      />
+                    ) : null}
+                    {cameraStates["car-cam2"]?.scanning && (
+                      <div className="pm-cam-scan-overlay">
+                        <div className="pm-cam-laser-scanner" />
+                        <span className="pm-cam-scan-text">AI đang quét...</span>
+                      </div>
+                    )}
                     <div className="pm-cam-anpr-bounding-box">
-                      <div className="pm-anpr-plate">[ 51K - 892.45 ]</div>
-                      <div className="pm-anpr-confidence">AI: 98.9% • Khớp biển trước</div>
+                      <div className="pm-anpr-plate">
+                        [ {cameraStates["car-cam2"]?.plateText || "51K - 892.45"} ]
+                      </div>
+                      <div className="pm-anpr-confidence">
+                        {cameraStates["car-cam2"]?.confidence || "AI: 98.9% • Khớp biển trước"}
+                      </div>
                     </div>
                   </div>
                   <div className="pm-cam-footer compact">
                     <button
                       type="button"
+                      className="pm-cam-upload-btn compact"
+                      onClick={() => handleTriggerUploadForCam("car-cam2")}
+                      disabled={cameraStates["car-cam2"]?.scanning}
+                      title="Tải ảnh riêng cho Cam 2 để AI nhận diện"
+                    >
+                      <Upload size={11} />
+                      <span>{cameraStates["car-cam2"]?.scanning ? "..." : "Tải ảnh"}</span>
+                    </button>
+                    <button
+                      type="button"
                       className="pm-cam-fill-btn compact"
-                      onClick={() => setCheckInPlate("51K-892.45")}
+                      onClick={() => {
+                        const p = cameraStates["car-cam2"]?.plateText || "51K-892.45";
+                        if (activeTab === "checkin") setCheckInPlate(p);
+                        else {
+                          setCheckOutQuery(p);
+                          handleLookupFee(p);
+                        }
+                      }}
+                      title="Điền biển số nhận diện từ Cam 2 vào Form"
                     >
                       Điền vào Form
                     </button>
                     <button
                       type="button"
                       className="pm-cam-retake-btn compact"
-                      onClick={() => alert("Đã gửi lệnh chụp lại Cam 2 (Mặt sau)")}
+                      onClick={() => handleResetCam("car-cam2", "51K - 892.45", "AI: 98.9% • Khớp biển trước")}
+                      title="Chụp lại hoặc reset ảnh"
                     >
-                      <RotateCcw size={12} /> Chụp lại
+                      <RotateCcw size={11} /> Chụp lại
                     </button>
                   </div>
                 </div>
@@ -656,19 +921,43 @@ export default function VehicleOperations() {
                     <span className="pm-cam-name">Cam 3: Sườn trái (Left Side)</span>
                   </div>
                   <div className="pm-cam-viewport compact">
+                    {cameraStates["car-cam3"]?.fileUrl ? (
+                      <img
+                        src={cameraStates["car-cam3"]!.fileUrl}
+                        alt="Ảnh Cam 3"
+                        className="pm-cam-real-preview"
+                      />
+                    ) : null}
+                    {cameraStates["car-cam3"]?.scanning && (
+                      <div className="pm-cam-scan-overlay">
+                        <div className="pm-cam-laser-scanner" />
+                        <span className="pm-cam-scan-text">AI đang quét...</span>
+                      </div>
+                    )}
                     <div className="pm-cam-tag-box">
                       <ShieldCheck size={14} color="#10b981" />
                       <span>Thân xe &amp; Gương trái OK</span>
                     </div>
                   </div>
                   <div className="pm-cam-footer compact">
-                    <span className="pm-cam-status-label">Không vết trầy xước</span>
+                    <button
+                      type="button"
+                      className="pm-cam-upload-btn compact"
+                      onClick={() => handleTriggerUploadForCam("car-cam3")}
+                      disabled={cameraStates["car-cam3"]?.scanning}
+                      title="Tải ảnh riêng cho Cam 3"
+                    >
+                      <Upload size={11} />
+                      <span>{cameraStates["car-cam3"]?.scanning ? "..." : "Tải ảnh"}</span>
+                    </button>
+                    <span className="pm-cam-status-label">Thân xe trái</span>
                     <button
                       type="button"
                       className="pm-cam-retake-btn compact"
-                      onClick={() => alert("Đã gửi lệnh chụp lại Cam 3 (Sườn trái)")}
+                      onClick={() => handleResetCam("car-cam3")}
+                      title="Chụp lại hoặc reset ảnh"
                     >
-                      <RotateCcw size={12} /> Chụp lại
+                      <RotateCcw size={11} /> Chụp lại
                     </button>
                   </div>
                 </div>
@@ -682,19 +971,43 @@ export default function VehicleOperations() {
                     <span className="pm-cam-name">Cam 4: Sườn phải (Right Side)</span>
                   </div>
                   <div className="pm-cam-viewport compact">
+                    {cameraStates["car-cam4"]?.fileUrl ? (
+                      <img
+                        src={cameraStates["car-cam4"]!.fileUrl}
+                        alt="Ảnh Cam 4"
+                        className="pm-cam-real-preview"
+                      />
+                    ) : null}
+                    {cameraStates["car-cam4"]?.scanning && (
+                      <div className="pm-cam-scan-overlay">
+                        <div className="pm-cam-laser-scanner" />
+                        <span className="pm-cam-scan-text">AI đang quét...</span>
+                      </div>
+                    )}
                     <div className="pm-cam-tag-box">
                       <ShieldCheck size={14} color="#10b981" />
                       <span>Thân xe &amp; Gương phải OK</span>
                     </div>
                   </div>
                   <div className="pm-cam-footer compact">
-                    <span className="pm-cam-status-label">Không vết trầy xước</span>
+                    <button
+                      type="button"
+                      className="pm-cam-upload-btn compact"
+                      onClick={() => handleTriggerUploadForCam("car-cam4")}
+                      disabled={cameraStates["car-cam4"]?.scanning}
+                      title="Tải ảnh riêng cho Cam 4"
+                    >
+                      <Upload size={11} />
+                      <span>{cameraStates["car-cam4"]?.scanning ? "..." : "Tải ảnh"}</span>
+                    </button>
+                    <span className="pm-cam-status-label">Thân xe phải</span>
                     <button
                       type="button"
                       className="pm-cam-retake-btn compact"
-                      onClick={() => alert("Đã gửi lệnh chụp lại Cam 4 (Sườn phải)")}
+                      onClick={() => handleResetCam("car-cam4")}
+                      title="Chụp lại hoặc reset ảnh"
                     >
-                      <RotateCcw size={12} /> Chụp lại
+                      <RotateCcw size={11} /> Chụp lại
                     </button>
                   </div>
                 </div>
