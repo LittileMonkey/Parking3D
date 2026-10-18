@@ -19,16 +19,14 @@ namespace Identity.Infrastructure.Service.PasswordHash
         {
             var hash = passwordHasher.HashPassword(appUser, password);
 
+            var result = passwordHasher.VerifyHashedPassword(appUser, hash, password);
+
             return hash;
         }
 
         public bool VerifiedPassword(AppUser appUser, string password, string passwordHash)
         {
-            if (string.IsNullOrWhiteSpace(passwordHash)) return false;
-
             var result = passwordHasher.VerifyHashedPassword(appUser, passwordHash, password);
-
-            log.LogInformation("VERIFY RESULT = {Result}", result);
 
             return result == PasswordVerificationResult.Success
                 || result == PasswordVerificationResult.SuccessRehashNeeded;

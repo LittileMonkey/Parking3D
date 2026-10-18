@@ -4,6 +4,7 @@ using Parking.Identity.Application.Common.Interface;
 using Parking.Identity.Application.DTOs;
 using Parking.Identity.Domain.Entities;
 using MediatR;
+using Parking.Identity.Application.Common.Constants;
 
 namespace Parking.Identity.Application.UseCase.Authentication.TokenRefresh
 {
@@ -19,89 +20,116 @@ namespace Parking.Identity.Application.UseCase.Authentication.TokenRefresh
             this.accessTokenService = accessTokenService;
         }
 
-        public async Task<AuthenticationResponseDto> Handle(RefreshTokenCommand request, CancellationToken cancellationToken)
+        public async Task<AuthenticationResponseDto> Handle(
+     RefreshTokenCommand request,
+     CancellationToken cancellationToken)
         {
-            // 1. Hash token từ client
-            var tokenHash = accessTokenService.HashToken(request.refreshToken);
-            // 2. Tìm token trong DB
-            var authToken = await authTokenRepository.GetByTokenHashAsync(tokenHash, cancellationToken);
+            // 1. Validate input
+            if (string.IsNullOrWhiteSpace(request.refreshToken))
+            {
+                throw new AppException(
+                    ErrorCode.Unauthorized,
+                    "Refresh token is required.");
+            }
+
+            // 2. Hash token từ client
+            var tokenHash = accessTokenService.HashToken(
+                request.refreshToken);
+
+            // 3. Tìm refresh token trong database
+            var authToken = await authTokenRepository.GetByTokenHashAsync(
+                tokenHash,
+                cancellationToken);
 
             if (authToken == null)
             {
-                throw new AppException(ErrorCode.Unauthorized, "Refresh token is invalid.");
+                throw new AppException(
+                    ErrorCode.Unauthorized,
+                    "Refresh token is invalid.");
             }
 
-            // 3. Check purpose
+            // 4. Kiểm tra purpose
             if (authToken.Purpose != "RefreshToken")
             {
-                throw new AppException(ErrorCode.Unauthorized, "Invalid token purpose.");
+                throw new AppException(
+                    ErrorCode.Unauthorized,
+                    "Invalid token purpose.");
             }
 
-            // 4. Check revoked
+            // 5. Kiểm tra token đã bị thu hồi
             if (authToken.RevokedAt != null)
             {
-                throw new AppException(ErrorCode.Unauthorized, "Refresh token has been revoked.");
+                throw new AppException(
+                    ErrorCode.Unauthorized,
+                    "Refresh token has been revoked.");
             }
 
-            // 5. Check expiration
+            // 6. Kiểm tra thời hạn
             if (authToken.ExpiresAt <= DateTime.UtcNow)
             {
-                throw new AppException(ErrorCode.Unauthorized, "Refresh token has expired.");
+                throw new AppException(
+                    ErrorCode.Unauthorized,
+                    "Refresh token has expired.");
             }
 
-            // 6. Check consumed
+            // 7. Phát hiện token đã được sử dụng
             if (authToken.ConsumedAt != null)
             {
-                // Token reuse detected
-                await authTokenRepository.RevokedFamilyAsync(authToken.FamilyId, cancellationToken);
-                throw new AppException(ErrorCode.Unauthorized, "Refresh token reuse detected.");
+                await authTokenRepository.RevokedFamilyAsync(
+                    authToken.FamilyId,
+                    cancellationToken);
 
+                throw new AppException(
+                    ErrorCode.Unauthorized,
+                    "Refresh token reuse detected.");
             }
 
-            var user = await accountRepository.GetUserByIdAsync(authToken.UserId, cancellationToken);
+            // 8. Tìm user sở hữu refresh token
+            var user = await accountRepository.GetUserByIdAsync(
+                authToken.UserId,
+                cancellationToken);
 
             if (user == null)
             {
-                throw new AppException(ErrorCode.AccountNotFound, "User does not exist.");
+                throw new AppException(
+                    ErrorCode.AccountNotFound,
+                    "User does not exist.");
             }
 
-            if (user.Status != "Active")
+            // 9. Kiểm tra trạng thái tài khoản
+            if (user.Status != AppUserStatus.Active)
             {
-                throw new AppException(ErrorCode.AccountNotFound, "User is inactive.");
+                throw new AppException(
+                    ErrorCode.Unauthorized,
+                    "User is inactive.");
             }
 
-            // 8. Consume old refresh token
-            authToken.ConsumedAt =
-                DateTime.UtcNow;
+            // 10. Đánh dấu token cũ đã sử dụng
+            authToken.ConsumedAt = DateTime.UtcNow;
 
-            // 9. Generate new Access Token
-            var newAccessToken = accessTokenService.GenerateAccessToken(user);
+            // TODO: Lưu authToken.ConsumedAt bằng repository.
+            // Tốt nhất thực hiện cùng transaction với bước tạo token mới.
 
-            // 10. Generate new Refresh Token
-            var newRefreshToken = accessTokenService.GenerateRefreshToken();
+            // 11. Sinh access token mới
+            var newAccessToken =
+                accessTokenService.GenerateAccessToken(user);
 
-            // 11. Hash new Refresh Token
+            // 12. Sinh refresh token mới
+            var newRefreshToken =
+                accessTokenService.GenerateRefreshToken();
+
             var newTokenHash =
                 accessTokenService.HashToken(newRefreshToken);
 
-            // 12. Save new Refresh Token
+            // 13. Lưu refresh token mới trong cùng family
             var newAuthToken = new AuthToken
             {
                 Id = Guid.NewGuid(),
-
                 UserId = user.Id,
-
                 TokenHash = newTokenHash,
-
-                // IMPORTANT:
-                // same family
                 FamilyId = authToken.FamilyId,
-
                 Purpose = "RefreshToken",
-
-                ExpiresAt =
-                    DateTime.UtcNow.AddDays(7),
-
+                ExpiresAt = DateTime.UtcNow.AddDays(7),
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -109,18 +137,15 @@ namespace Parking.Identity.Application.UseCase.Authentication.TokenRefresh
                 newAuthToken,
                 cancellationToken);
 
+            // 14. Trả về thông tin xác thực mới
             return new AuthenticationResponseDto
             {
                 UserId = user.Id,
-
                 FullName = user.FullName,
-
-                EmailNormalized = user.EmailNormalized ?? string.Empty,
-
-                Role = user.PlatformUserRoles.FirstOrDefault()?.RoleCode ?? string.Empty,
-
+                EmailNormalized = user.EmailNormalized,
+                Role = user.PlatformUserRoles
+                    .FirstOrDefault()?.RoleCode ?? string.Empty,
                 AccessToken = newAccessToken,
-
                 RefreshToken = newRefreshToken
             };
         }

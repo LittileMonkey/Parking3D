@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Parking.Identity.Application.Common.Interface;
 using Parking.Identity.Domain.Entities;
 using Parking.Identity.Persistence.DataAccessLayer;
@@ -79,6 +79,53 @@ namespace Parking.Identity.Persistence.Repositories
                     x.ValidFrom <= now &&
                     (x.ValidUntil == null || x.ValidUntil > now),
                     cancellationToken);
+        }
+
+        public async Task<bool> CheckAccessAsync(Guid userId, Guid lotId, string capability, CancellationToken cancellationToken)
+        {
+            if (userId == Guid.Empty || capability is not ("USER" or "ADMIN" or "OCR" or "GATE" or "CASH" or "REPORT"))
+                return false;
+
+            var now = DateTime.UtcNow;
+
+            var userActive = await context.AppUsers
+                .AsNoTracking()
+                .AnyAsync(u => u.Id == userId && u.Status == "ACTIVE" && (u.LockedUntil == null || u.LockedUntil <= now), cancellationToken);
+
+            if (!userActive) return false;
+
+            return capability switch
+            {
+                "USER" => true,
+                "ADMIN" => await context.PlatformUserRoles
+                    .AsNoTracking()
+                    .AnyAsync(r => r.UserId == userId && r.RoleCode == "ADMIN", cancellationToken),
+                "OCR" => await context.LotStaffAssignments
+                    .AsNoTracking()
+                    .AnyAsync(a => a.UserId == userId
+                                && a.LotId == lotId
+                                && a.RevokedAt == null
+                                && a.ValidFrom <= now
+                                && (a.ValidUntil == null || now < a.ValidUntil)
+                                && (a.RoleCode == "PARKING_STAFF" || a.RoleCode == "PARKING_MANAGER"), cancellationToken),
+                "GATE" or "CASH" => await context.LotStaffAssignments
+                    .AsNoTracking()
+                    .AnyAsync(a => a.UserId == userId
+                                && a.LotId == lotId
+                                && a.RevokedAt == null
+                                && a.ValidFrom <= now
+                                && (a.ValidUntil == null || now < a.ValidUntil)
+                                && a.RoleCode == "PARKING_STAFF", cancellationToken),
+                "REPORT" => await context.LotStaffAssignments
+                    .AsNoTracking()
+                    .AnyAsync(a => a.UserId == userId
+                                && a.LotId == lotId
+                                && a.RevokedAt == null
+                                && a.ValidFrom <= now
+                                && (a.ValidUntil == null || now < a.ValidUntil)
+                                && a.RoleCode == "PARKING_MANAGER", cancellationToken),
+                _ => false
+            };
         }
     }
 }
