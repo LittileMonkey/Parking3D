@@ -5,6 +5,7 @@ namespace Parking.Parking.Persistence.Repositories;
 
 public sealed partial class ParkingRepository
 {
+    // Chỉ hết hạn hold pending; không giải phóng slot đang có xe vật lý.
     public Task<int> ExpireHoldsAsync(CancellationToken ct) => ExpireHoldsAsync(ct, null, null);
 
     private async Task<int> ExpireHoldsAsync(CancellationToken ct, Guid? vehicleId, Guid? slotId)
