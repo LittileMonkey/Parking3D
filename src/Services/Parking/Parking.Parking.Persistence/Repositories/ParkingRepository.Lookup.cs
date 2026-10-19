@@ -5,6 +5,7 @@ namespace Parking.Parking.Persistence.Repositories;
 
 public sealed partial class ParkingRepository
 {
+    // Kèm owner/lot để Application kiểm tra quyền trước khi trả dữ liệu cho client.
     public async Task<(BookingDetailDto Detail, Guid? CustomerId, Guid LotId)?> GetBookingDetailAsync(
         Guid bookingId, CancellationToken ct)
     {
