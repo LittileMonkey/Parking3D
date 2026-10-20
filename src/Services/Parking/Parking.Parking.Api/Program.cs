@@ -11,6 +11,7 @@ using Parking.Parking.Infrastructure.Repositories;
 using Parking.Parking.Infrastructure.Services;
 using Parking.ServiceDefaults;
 
+
 var builder = WebApplication.CreateBuilder(args);
 builder.AddParkingDefaults();
 builder.Services.AddGrpcClient<FacilityAuthorization.FacilityAuthorizationClient>(o => o.Address = new Uri(builder.Configuration["Services:IdentityGrpc"] ?? "http://identity:8081"));
@@ -22,12 +23,14 @@ builder.Services.AddParkingPersistence();
 builder.Services.AddHostedService<OccupancyWorker>();
 builder.Services.AddHostedService<HoldExpiryWorker>();
 builder.Services.AddScoped<IParkingLotRepository, ParkingLotRepository>();
-builder.Services.AddScoped<IEstimatedPriceService, FakeEstimatedPriceService>();
-builder.Services.AddApplicationServices();
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<IEstimatedPriceService, EstimatedPriceService>();
 builder.Services.AddControllers().ConfigureApiBehaviorOptions(options =>
     options.InvalidModelStateResponseFactory = context => new BadRequestObjectResult(
         new Parking.ServiceDefaults.ApiResponse<object>(null, false, 400, "Invalid request parameters.")));
 
+builder.Services.AddSingleton<IQrTokenService, QrTokenService>();
+builder.Services.AddApplicationServices();
 var app = builder.Build();
 app.UseParkingDefaults("parking");
 app.UseMiddleware<ExceptionHandlingMiddleware>();

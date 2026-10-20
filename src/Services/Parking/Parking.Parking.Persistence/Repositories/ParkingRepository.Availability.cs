@@ -10,6 +10,7 @@ namespace Parking.Parking.Persistence.Repositories;
 
 public sealed partial class ParkingRepository
 {
+    // SCRUM-48: tổng hợp slot theo thời gian, loại xe và tầng trong cùng snapshot DB.
     public async Task<LotAvailabilityDto> GetLotAvailabilityAsync(Guid lotId,
         DateTimeOffset? startTime, DateTimeOffset? endTime, string? vehicleType,
         Guid? levelId, CancellationToken ct)

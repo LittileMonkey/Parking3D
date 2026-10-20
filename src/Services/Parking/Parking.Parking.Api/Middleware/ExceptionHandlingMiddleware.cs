@@ -11,17 +11,20 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next)
     {
         try { await next(context); }
         catch (Exception exception) when (!context.Response.HasStarted &&
-            exception is ValidationException or NotFoundException or ForbiddenAccessException)
+            exception is ValidationException or NotFoundException or ForbiddenAccessException or ConflictException)
         {
             var status = exception switch
             {
                 ValidationException => 400,
                 NotFoundException => 404,
-                _ => 403
+                ForbiddenAccessException => 403,
+                ConflictException => 409,
+                _ => 500
             };
             context.Response.StatusCode = status;
             await context.Response.WriteAsJsonAsync(new ApiResponse<object>(null,false,status,exception.Message),
                 cancellationToken: context.RequestAborted);
         }
+
     }
 }

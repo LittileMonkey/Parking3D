@@ -33,8 +33,7 @@ namespace Parking.Identity.Persistence
                     options.TokenValidationParameters = new TokenValidationParameters
                     {
                         ValidateIssuerSigningKey = true,
-                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(
-                            configuration["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key is required."))),
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["Jwt:Key"])),
 
                         ValidateIssuer = true,
                         ValidIssuer = configuration["Jwt:Issuer"],
@@ -49,6 +48,7 @@ namespace Parking.Identity.Persistence
                 });
 
             services.AddScoped<IGoogleSubjectLogin, GoogleSubjectLogin>();
+            services.AddScoped<IPasswordResetOtpRepository, PasswordResetOtpRepository>();
 
             return services;
         }

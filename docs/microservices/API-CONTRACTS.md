@@ -992,4 +992,4 @@ sequenceDiagram
     Worker->>PaymentDB: Mark delivered after ACK
 ```
 
-No callback endpoint accepts an unsigned/manual success as VNPay. Cash is a separate real operation requiring assigned Staff confirmation. QR/check-in/check-out/physical-exit APIs remain on the implementation backlog and must preserve core database guards.
+No callback endpoint accepts an unsigned/manual success as VNPay. Cash is a separate real operation requiring assigned Staff confirmation. QR issuance and Staff check-in are implemented in [S2-05_QR_CheckIn_Design.md](../S2-05_QR_CheckIn_Design.md): `POST /api/v1/bookings/{bookingId}/qr` and `POST /api/v1/check-in`. Check-out/physical-exit remain on the implementation backlog; all paths preserve core database guards.

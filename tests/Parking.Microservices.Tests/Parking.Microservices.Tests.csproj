@@ -4,7 +4,12 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.0.2" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.2" />
     <ProjectReference Include="../../src/Services/Parking/Parking.Parking.Domain/Parking.Parking.Domain.csproj" />
+    <ProjectReference Include="../../src/Services/Parking/Parking.Parking.Infrastructure/Parking.Parking.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/Services/Parking/Parking.Parking.Persistence/Parking.Parking.Persistence.csproj" />
+    <ProjectReference Include="../../src/Services/Identity/Parking.Identity.Persistence/Parking.Identity.Persistence.csproj" />
     <ProjectReference Include="../../src/Services/AI/Parking.AI.Infrastructure/Parking.AI.Infrastructure.csproj" />
     <ProjectReference Include="../../src/Services/Identity/Parking.Identity.Infrastructure/Parking.Identity.Infrastructure.csproj" />
   </ItemGroup>

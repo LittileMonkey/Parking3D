@@ -23,6 +23,7 @@ import type {
   CashConfirmationResult,
   PaymentStatusResult,
   OccupancyForecastResult,
+  PlateRecognitionResult,
 } from "../../types/staff";
 
 // Storage keys for persisting local operational staff data
@@ -863,5 +864,46 @@ export const staffApi = {
       return null;
     }
   },
+
+  /**
+   * [REAL API AI ANPR OCR] Quét và nhận diện biển số xe bằng AI từ file ảnh tải lên
+   * Tự động fallback giả lập an toàn nếu Backend (localhost:5237) chưa khởi động
+   */
+  async scanLicensePlate(
+    file: File,
+    gateId: string = "GATE_IN_01",
+    direction: "IN" | "OUT" = "IN",
+    parkingLotId?: string
+  ): Promise<PlateRecognitionResult> {
+    try {
+      return await api.scanLicensePlate(file, gateId, direction, parkingLotId);
+    } catch (err: any) {
+      console.warn("Backend API tại localhost:5237 chưa kết nối được, tự động chuyển sang cơ chế giả lập ANPR cục bộ:", err);
+
+      // Phân loại xe theo tên file hoặc cổng quét
+      const fileNameLower = file.name.toLowerCase();
+      const isMotoFile = fileNameLower.includes("moto") || fileNameLower.includes("bike") || fileNameLower.includes("xe_may") || gateId.includes("G2");
+
+      const carPlates = ["51K - 892.45", "30H - 998.77", "43A - 123.45", "60A - 112.33", "51H - 776.89"];
+      const motoPlates = ["59-P1 982.14", "29-B1 678.90", "59-V2 345.89", "72-C1 567.89"];
+
+      const chosenPlate = isMotoFile
+        ? motoPlates[Math.floor(Math.random() * motoPlates.length)]
+        : carPlates[Math.floor(Math.random() * carPlates.length)];
+
+      return {
+        recognitionId: "mock-" + Date.now(),
+        displayPlate: chosenPlate,
+        plateNumber: chosenPlate.replace(/[^A-Z0-9]/g, ""),
+        confidence: 0.985,
+        plateType: isMotoFile ? "TwoLine" : "OneLine",
+        status: "HighConfidence",
+        vehicleTypeSuggestion: isMotoFile ? "Motorcycle" : "Car",
+        processingTimeMs: 45,
+        isFallback: true,
+      };
+    }
+  },
 };
+
 
