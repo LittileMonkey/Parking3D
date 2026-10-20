@@ -36,6 +36,11 @@ namespace Parking.Identity.Api
             builder.Services.AddGrpc(o => { o.Interceptors.Add<ServiceKeyInterceptor>(); });
             builder.Services.AddTransient<ServiceKeyInterceptor>();
 
+            builder.Services.AddCors(options => options.AddPolicy("FrondEndAPI", policy => {
+                policy.AllowAnyOrigin("http://localhost:5173");
+                policy.AllowAnyMethod();
+                policy.AllowAnyHeader();
+            }));
             builder.Services.AddAuthorization();
 
             var app = builder.Build();
@@ -56,6 +61,8 @@ namespace Parking.Identity.Api
             app.UseMiddleware<GlobalExceptionMiddleware>();
 
             app.UseHttpsRedirection();
+
+            app.UseCors("FrondEndAPI");
 
             app.UseAuthentication();
             app.UseAuthorization();
