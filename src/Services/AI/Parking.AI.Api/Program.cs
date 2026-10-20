@@ -26,13 +26,52 @@ using Parking.ServiceDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Tự động nạp cấu hình từ file .env ở thư mục gốc khi chạy môi trường Development (dotnet run)
+var searchDir = new DirectoryInfo(builder.Environment.ContentRootPath);
+while (searchDir != null)
+{
+    var envPath = Path.Combine(searchDir.FullName, ".env");
+    if (File.Exists(envPath))
+    {
+        foreach (var line in File.ReadAllLines(envPath))
+        {
+            var trimmed = line.Trim();
+            if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith('#')) continue;
+            var parts = trimmed.Split('=', 2);
+            if (parts.Length == 2)
+            {
+                var k = parts[0].Trim();
+                var v = parts[1].Trim();
+                if (!string.IsNullOrEmpty(v))
+                {
+                    if (k == "GEMINI_API_KEY")
+                    {
+                        builder.Configuration["Gemini:ApiKey"] = v;
+                        builder.Configuration["AI:GeminiApiKey"] = v;
+                    }
+                    else if (k == "GEMINI_MODEL")
+                    {
+                        builder.Configuration["Gemini:Model"] = v;
+                    }
+                    else if (k == "OCR_ENDPOINT")
+                    {
+                        builder.Configuration["AI:OcrEndpoint"] = v;
+                    }
+                }
+            }
+        }
+        break;
+    }
+    searchDir = searchDir.Parent;
+}
+
 // Cấu hình các thiết lập chuẩn của hệ sinh thái .NET Aspire / ServiceDefaults (OpenTelemetry, Logging, HealthChecks)
 builder.AddParkingDefaults();
 
 // Cấu hình Typed HttpClient với thời gian chờ (Timeout) được kiểm soát nghiêm ngặt tránh treo luồng:
 builder.Services.AddHttpClient<IPlateProvider, HttpPlateProvider>(http => http.Timeout = TimeSpan.FromSeconds(10));
 builder.Services.AddHttpClient<PythonFastApiClient>(http => http.Timeout = TimeSpan.FromSeconds(15));
-builder.Services.AddHttpClient<GeminiApiClient>(http => http.Timeout = TimeSpan.FromSeconds(20));
+builder.Services.AddHttpClient<GeminiApiClient>(http => http.Timeout = TimeSpan.FromSeconds(90));
 
 // Đăng ký Dependency Injection (DI) theo đúng vòng đời dịch vụ:
 // - Scoped: Tạo mới cho mỗi HTTP Request (phù hợp với các dịch vụ thao tác CSDL NpgsqlDataSource)
