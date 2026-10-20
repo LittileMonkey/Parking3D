@@ -12,7 +12,8 @@
         "Grpc__ServiceKey": "12345678901234567890123456789012",
         "ConnectionStrings__Service": "Host=localhost;Port=5432;Database=parking_ai;Username=ai;Password=postgres",
         "Ports__Http": "5004",
-        "Ports__Grpc": "5005"
+        "Ports__Grpc": "5005",
+        "Gemini__Model": "gemini-2.5-flash"
       }
     }
   }

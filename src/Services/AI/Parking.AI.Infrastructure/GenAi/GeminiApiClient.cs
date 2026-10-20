@@ -24,7 +24,7 @@ public class GeminiApiClient(
     ILogger<GeminiApiClient> logger)
 {
     private readonly string _apiKey = configuration["Gemini:ApiKey"] ?? configuration["AI:GeminiApiKey"] ?? string.Empty;
-    private readonly string _model = configuration["Gemini:Model"] ?? "gemini-1.5-flash";
+    private readonly string _model = configuration["Gemini:Model"] ?? "gemini-2.5-flash";
 
     /// <summary>
     /// Gửi câu lệnh và chỉ dẫn hệ thống tới Gemini AI để sinh văn bản trả lời.
@@ -76,7 +76,11 @@ public class GeminiApiClient(
                 generationConfig = new
                 {
                     temperature = 0.2,       // Nhiệt độ thấp giúp phản hồi bám sát dữ liệu và chuẩn cấu trúc JSON
-                    maxOutputTokens = 1024   // Giới hạn độ dài output
+                    maxOutputTokens = 512,   // Giới hạn độ dài output để phản hồi nhanh chóng
+                    thinkingConfig = new
+                    {
+                        thinkingBudget = 0   // Giảm thiểu thời gian suy nghĩ nội bộ để phản hồi nhanh
+                    }
                 }
             };
 
