@@ -21,7 +21,7 @@
   - [ ] Xây dựng API Đặt chỗ (`/api/v1/bookings`) hỗ trợ cả `ExactSlot` và `AutoSlot`.
   - [ ] Ràng buộc chống chồng lấn thời gian (`time window overlap`) trên cùng slot và cùng xe.
   - [ ] Khóa giao dịch bằng **PostgreSQL Advisory Lock** (`pg_advisory_xact_lock`).
-  - [ ] Cơ chế giữ chỗ tạm thời (`PendingPayment` hold 15 phút) và Background Sweeper Worker quét giải phóng mỗi 10 giây.
+  - [ ] Cơ chế giữ chỗ tạm thời (`PendingPayment` hold 5 phút) và Background Sweeper Worker quét giải phóng mỗi 10 giây.
 - [ ] **Check-In, Check-Out & Payment:**
   - [ ] Sinh mã QR có chữ ký HMAC/Nonce bảo mật, chống chia sẻ ảnh chụp màn hình.
   - [ ] API Check-in tạo `ParkingSession` và mở barrier cổng vào.

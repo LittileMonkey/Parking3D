@@ -31,7 +31,7 @@
   - Hệ thống cho phép một phương tiện tạo nhiều booking khác nhau miễn là các khung giờ đặt (`[StartAt, EndAt)`) không bị giao thoa (overlap).
   - Một slot đỗ có thể nhận nhiều booking tại các khung giờ không trùng nhau trong cùng một ngày.
 - **FR-09 (Thời gian giữ chỗ - Reservation Hold):**
-  - Khi tạo booking thành công, hệ thống giữ chỗ tạm thời với thời gian mặc định là **15 phút** (`HoldExpiresAt = UtcNow + 15m`, có thể cấu hình theo `ParkingPolicy`).
+  - Khi tạo booking thành công, hệ thống giữ chỗ tạm thời với thời gian mặc định là **5 phút** (`HoldExpiresAt = UtcNow + 5m`, cấu hình linh hoạt theo `lot_vehicle_policies.hold_minutes`).
   - Background Worker quét định kỳ tự động hủy booking quá hạn và giải phóng tài nguyên.
 
 ### 1.4. Quản lý Lượt đỗ (Check-In, Parking Session & Check-Out)

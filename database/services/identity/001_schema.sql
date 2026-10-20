@@ -32,6 +32,7 @@ CREATE TABLE public.app_users (
     phone_verified_at timestamptz,
     status text NOT NULL,
     locked_until timestamptz,
+    google_subject varchar(255),
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -110,5 +111,26 @@ CREATE TABLE public.integration_outbox (
  INSERT INTO public.service_schema_versions(version) VALUES(1);
 
 ALTER TABLE public.lot_staff_assignments ADD COLUMN can_manage_staff_assignments boolean NOT NULL DEFAULT false;
+
+CREATE TABLE public.password_reset_otps
+(
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL,
+    otp_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at TIMESTAMPTZ NULL,
+
+    CONSTRAINT fk_password_reset_otps_app_users
+        FOREIGN KEY (user_id)
+        REFERENCES public.app_users(id)
+        ON DELETE CASCADE
+);
+
+CREATE INDEX ix_password_reset_otps_user_id
+    ON public.password_reset_otps(user_id);
+
+CREATE INDEX ix_password_reset_otps_user_id_created_at
+    ON public.password_reset_otps(user_id, created_at DESC);
 
 COMMIT;

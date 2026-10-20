@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <UserSecretsId>0ccc272e-148e-4e7e-a271-b40754fa6cdd</UserSecretsId>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Parking.Parking.Infrastructure/Parking.Parking.Infrastructure.csproj" />
+    <ProjectReference Include="../Parking.Parking.Persistence/Parking.Parking.Persistence.csproj" />
     
   </ItemGroup>
 </Project>

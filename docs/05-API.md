@@ -134,7 +134,7 @@ public class ApiResponse<T>
     },
     "isSuccess": true,
     "statusCode": 201,
-    "message": "Booking created. Please complete payment within 15 minutes."
+    "message": "Booking created. Please complete payment within 5 minutes."
   }
   ```
 
@@ -153,7 +153,7 @@ flowchart TD
     BeginTx --> CheckOverlap{Kiểm tra trùng lịch tstzrange}
     CheckOverlap -- Bị trùng --> RollbackConflict[Rollback & Trả về 409 Conflict]
     
-    CheckOverlap -- Khả dụng --> CreateRecord[Tạo Booking & Giữ Slot Hold 15m]
+    CheckOverlap -- Khả dụng --> CreateRecord[Tạo Booking & Giữ Slot Hold 5m]
     CreateRecord --> GenAccessToken[Sinh AccessToken & QR Signature]
     GenAccessToken --> CommitTx[Commit Transaction]
     CommitTx --> ReturnSuccess[Trả về 201 Created kèm QR & Token]
@@ -191,7 +191,7 @@ sequenceDiagram
         Service-->>Controller: ConflictException("Slot unavailable")
         Controller-->>Customer: 409 Conflict (isSuccess: false)
     else Hợp lệ
-        Service->>DB: INSERT Bookings (HoldExpiresAt = UtcNow + 15m)
+        Service->>DB: INSERT Bookings (HoldExpiresAt = UtcNow + 5m)
         Service->>DB: INSERT SlotReservations
         Service->>DB: SaveChangesAsync()
         Service->>DB: CommitTransactionAsync()
