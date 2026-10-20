@@ -238,6 +238,9 @@ export default function Home() {
             <Link to="/staff/dashboard" onClick={() => setMobileMenu(false)} className="nav-item" style={{ color: "var(--teal)", fontWeight: 700 }}>
               {lang === "en" ? "Staff Portal" : "Cổng Vận Hành"}
             </Link>
+            <Link to="/manager/dashboard" onClick={() => setMobileMenu(false)} className="nav-item" style={{ color: "#087f8c", fontWeight: 700 }}>
+              {lang === "en" ? "Manager V7" : "Quản Lý V7"}
+            </Link>
           </nav>
 
           <div className="header-actions-light">
