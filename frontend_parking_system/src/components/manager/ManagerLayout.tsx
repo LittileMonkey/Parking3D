@@ -16,6 +16,9 @@ import {
   RotateCw,
   ParkingCircle,
   ExternalLink,
+  DollarSign,
+  Sliders,
+  FileText,
 } from "lucide-react";
 import { managerApi } from "../../services/manager/managerApi";
 import type { ManagerFacilitySummary, ReportingPeriod } from "../../types/manager";
@@ -60,6 +63,32 @@ export default function ManagerLayout() {
       icon: <LayoutDashboard size={20} />,
     },
     {
+      to: "/manager/pricing",
+      label: "Biểu phí & Chính sách",
+      icon: <DollarSign size={20} />,
+    },
+    {
+      to: "/manager/facility-layout",
+      label: "Sơ đồ & Ô đỗ (Slots)",
+      icon: <Sliders size={20} />,
+    },
+    {
+      to: "/manager/staff-shifts",
+      label: "Ca trực & Đối soát quỹ",
+      icon: <Users size={20} />,
+    },
+    {
+      to: "/manager/incidents-approvals",
+      label: "Phê duyệt ngoại lệ",
+      icon: <AlertTriangle size={20} />,
+      badge: 3,
+    },
+    {
+      to: "/manager/reports-audit",
+      label: "Báo cáo & Audit logs",
+      icon: <FileText size={20} />,
+    },
+    {
       to: "/booking",
       label: "Bản đồ 3D bãi xe",
       icon: <Box size={20} />,
@@ -67,27 +96,8 @@ export default function ManagerLayout() {
     },
     {
       to: "/staff/operations",
-      label: "Lượt xe & Điều phối",
+      label: "Cổng kiểm soát xe",
       icon: <Car size={20} />,
-      isExternalLike: true,
-    },
-    {
-      to: "/staff/parking",
-      label: "Trạng thái ô đỗ (Slots)",
-      icon: <Building2 size={20} />,
-      isExternalLike: true,
-    },
-    {
-      to: "/staff/shifts",
-      label: "Phân công nhân sự",
-      icon: <Users size={20} />,
-      isExternalLike: true,
-    },
-    {
-      to: "/staff/incidents",
-      label: "Sự cố & Cảnh báo",
-      icon: <AlertTriangle size={20} />,
-      badge: 3,
       isExternalLike: true,
     },
   ];
@@ -186,7 +196,7 @@ export default function ManagerLayout() {
                 onChange={(e) => setSelectedLotId(e.target.value)}
                 aria-label="Chọn cơ sở bãi xe"
               >
-                <option value="all">Toàn bộ cơ sở quản lý (Quận 1 - 3)</option>
+                <option value="all">Metropolis Central Hub (PKM-METRO-01)</option>
                 {facilities.map((fac) => (
                   <option key={fac.lotId} value={fac.lotId}>
                     {fac.name} ({fac.totalCapacity} chỗ)

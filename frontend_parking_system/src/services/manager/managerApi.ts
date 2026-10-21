@@ -17,6 +17,17 @@ import type {
   ManagerOperationalAlert,
   StaffShiftRosterItem,
   ManagerDashboardData,
+  ApiResponse,
+  PricingPlan,
+  PricingPlanHistoryItem,
+  SlotControlItem,
+  LevelSummary,
+  SlotStatus,
+  OnDutyStaff,
+  CashReconciliationRecord,
+  ExceptionRequest,
+  AuditLogEntry,
+  ReportExportRequest,
 } from "../../types/manager";
 
 // Fallback facility seed when backend has partial catalog
@@ -422,4 +433,629 @@ export const managerApi = {
       generatedAt: new Date().toISOString(),
     };
   },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 1. PRICING & POLICY MANAGEMENT (Task S2-03 & V4 Pricing Rules)
+  // ═══════════════════════════════════════════════════════════════════════════
+  async getPricingPlans(lotId: string): Promise<ApiResponse<{ activePlan: PricingPlan; history: PricingPlanHistoryItem[] }>> {
+    // Simulated API call returning standard C# ApiResponse<T>
+    await new Promise((r) => setTimeout(r, 120));
+
+    const activePlan: PricingPlan = {
+      id: "plan-v2-1",
+      parkingLotId: lotId === "all" ? "PKM-METRO-01" : lotId,
+      name: "Chính Sách Biểu Phí Tiêu Chuẩn Giờ Cao Điểm 2026",
+      version: "v2.1",
+      status: "Active",
+      vehicleCategory: "Car",
+      effectiveFrom: "2026-03-01T00:00:00Z",
+      rules: {
+        hourlyRate: 25000,
+        billingUnitMinutes: 15,
+        dailyCap: 250000,
+        peakMultiplier: 1.25,
+        peakHoursStart: "07:00",
+        peakHoursEnd: "18:30",
+        freeGracePeriodMinutes: 15,
+        overnightSurcharge: 60000,
+      },
+      lastModifiedBy: "Trần Anh Tuấn (Manager)",
+      lastModifiedAt: "2026-03-15T09:30:00Z",
+    };
+
+    const history: PricingPlanHistoryItem[] = [
+      {
+        id: "hist-01",
+        planId: "plan-v2-1",
+        version: "v2.1",
+        status: "Active",
+        effectiveDate: "01/03/2026",
+        changedBy: "Trần Anh Tuấn (Manager)",
+        changeSummary: "Điều chỉnh block tính phí 15 phút và trần ngày 250,000 VND theo Baseline V4",
+        hourlyRate: 25000,
+        dailyCap: 250000,
+        peakMultiplier: 1.25,
+      },
+      {
+        id: "hist-02",
+        planId: "plan-v2-0",
+        version: "v2.0",
+        status: "Archived",
+        effectiveDate: "01/01/2026",
+        changedBy: "Nguyễn Văn Hùng (Director)",
+        changeSummary: "Cập nhật hệ số cao điểm 1.2x và tích hợp thanh toán VietQR không tiền mặt",
+        hourlyRate: 22000,
+        dailyCap: 220000,
+        peakMultiplier: 1.2,
+      },
+      {
+        id: "hist-03",
+        planId: "plan-v1.9",
+        version: "v1.9",
+        status: "Archived",
+        effectiveDate: "15/10/2025",
+        changedBy: "Trần Anh Tuấn (Manager)",
+        changeSummary: "Khởi tạo biểu giá thử nghiệm giai đoạn 1",
+        hourlyRate: 20000,
+        dailyCap: 200000,
+        peakMultiplier: 1.1,
+      },
+    ];
+
+    return {
+      result: { activePlan, history },
+      isSuccess: true,
+      statusCode: 200,
+      message: "Truy xuất chính sách biểu phí thành công.",
+    };
+  },
+
+  async savePricingPlan(plan: PricingPlan): Promise<ApiResponse<PricingPlan>> {
+    await new Promise((r) => setTimeout(r, 200));
+    return {
+      result: {
+        ...plan,
+        version: `v${(parseFloat(plan.version.replace("v", "")) + 0.1).toFixed(1)}`,
+        lastModifiedAt: new Date().toISOString(),
+      },
+      isSuccess: true,
+      statusCode: 200,
+      message: "Cập nhật chính sách biểu phí mới thành công. Phiên bản đã được lưu vết kiểm toán.",
+    };
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 2. FACILITY LAYOUT & SLOT CONTROL
+  // ═══════════════════════════════════════════════════════════════════════════
+  async getFacilitySlots(lotId: string, levelId: string = "B1"): Promise<ApiResponse<{ levels: LevelSummary[]; slots: SlotControlItem[] }>> {
+    await new Promise((r) => setTimeout(r, 150));
+
+    const levels: LevelSummary[] = [
+      {
+        levelId: "B1",
+        levelName: "Tầng Hầm B1 (Khu VIP & Sạc EV)",
+        totalSlots: 96,
+        occupiedSlots: 68,
+        availableSlots: 24,
+        maintenanceSlots: 4,
+        occupancyRate: 71,
+      },
+      {
+        levelId: "B2",
+        levelName: "Tầng Hầm B2 (Ô tô Tiêu chuẩn)",
+        totalSlots: 120,
+        occupiedSlots: 92,
+        availableSlots: 26,
+        maintenanceSlots: 2,
+        occupancyRate: 77,
+      },
+      {
+        levelId: "B3",
+        levelName: "Tầng Hầm B3 (Xe máy & Kho mở rộng)",
+        totalSlots: 140,
+        occupiedSlots: 85,
+        availableSlots: 55,
+        maintenanceSlots: 0,
+        occupancyRate: 61,
+      },
+    ];
+
+    const targetLot = lotId === "all" ? "PKM-METRO-01" : lotId;
+    const generatedSlots: SlotControlItem[] = [];
+
+    const zones = [
+      { id: "zone-a", name: "Khu A - Ô tô Tiêu Chuẩn", type: "Car" as const, count: 18 },
+      { id: "zone-b", name: "Khu B - Ô tô Tiêu Chuẩn", type: "Car" as const, count: 18 },
+      { id: "zone-vip", name: "Khu VIP - Cửa Sảnh Chính", type: "Car" as const, count: 8 },
+      { id: "zone-ev", name: "Khu Trạm Sạc EV (Fast Charge)", type: "EV" as const, count: 10 },
+      { id: "zone-moto", name: "Khu Xe Máy Làn Thông Minh", type: "Motorcycle" as const, count: 14 },
+    ];
+
+    let globalIndex = 1;
+    zones.forEach((zone) => {
+      for (let i = 1; i <= zone.count; i++) {
+        const slotCode = `${levelId}-${zone.id === "zone-vip" ? "VIP" : zone.id === "zone-ev" ? "EV" : zone.id === "zone-moto" ? "M" : "A"}${String(i).padStart(2, "0")}`;
+        
+        let status: SlotStatus = "Available";
+        let currentPlate: string | undefined = undefined;
+        let parkedSince: string | undefined = undefined;
+        let overrideReason: string | undefined = undefined;
+
+        if (globalIndex % 7 === 0) {
+          status = "Maintenance";
+          overrideReason = "Bảo trì cảm biến siêu âm IoT & sơn lại vạch giới hạn";
+        } else if (globalIndex % 5 === 0) {
+          status = "Reserved";
+        } else if (globalIndex % 2 === 0 || globalIndex % 3 === 0) {
+          status = "Occupied";
+          currentPlate = `51K-${1000 + (globalIndex * 137) % 9000}`;
+          parkedSince = `${Math.floor(globalIndex % 4) + 1}h ${(globalIndex * 7) % 60}m trước`;
+        }
+
+        generatedSlots.push({
+          id: `slot-${levelId}-${slotCode}`,
+          parkingLotId: targetLot,
+          slotCode,
+          levelId,
+          levelName: levelId === "B1" ? "Tầng Hầm B1" : levelId === "B2" ? "Tầng Hầm B2" : "Tầng Hầm B3",
+          zoneId: zone.id,
+          zoneName: zone.name,
+          status,
+          vehicleType: zone.type,
+          currentPlate,
+          parkedSince,
+          sensorStatus: globalIndex % 15 === 0 ? "Degraded" : "Online",
+          overrideReason,
+          lastOverriddenBy: overrideReason ? "Trần Anh Tuấn (Manager)" : undefined,
+          lastOverriddenAt: overrideReason ? "Hôm nay 08:30" : undefined,
+        });
+
+        globalIndex++;
+      }
+    });
+
+    return {
+      result: { levels, slots: generatedSlots },
+      isSuccess: true,
+      statusCode: 200,
+      message: `Tải sơ đồ và trạng thái vị trí đỗ ${levelId} thành công.`,
+    };
+  },
+
+  async updateSlotStatus(slotId: string, newStatus: SlotStatus, reason: string): Promise<ApiResponse<SlotControlItem>> {
+    await new Promise((r) => setTimeout(r, 180));
+    return {
+      result: {
+        id: slotId,
+        parkingLotId: "PKM-METRO-01",
+        slotCode: slotId.replace("slot-", ""),
+        levelId: "B1",
+        levelName: "Tầng Hầm B1",
+        zoneId: "zone-a",
+        zoneName: "Khu A - Ô tô Tiêu Chuẩn",
+        status: newStatus,
+        vehicleType: "Car",
+        sensorStatus: "Online",
+        overrideReason: reason,
+        lastOverriddenBy: "Trần Anh Tuấn (Manager)",
+        lastOverriddenAt: new Date().toLocaleTimeString("vi-VN"),
+      },
+      isSuccess: true,
+      statusCode: 200,
+      message: `Đã cập nhật trạng thái ô đỗ thành "${newStatus}" và ghi nhận nhật ký kiểm toán.`,
+    };
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 3. STAFF & SHIFT RECONCILIATION (Task S2-06 Cash Shift)
+  // ═══════════════════════════════════════════════════════════════════════════
+  async getStaffShiftReconciliation(lotId: string): Promise<ApiResponse<{ onDutyStaff: OnDutyStaff[]; records: CashReconciliationRecord[] }>> {
+    await new Promise((r) => setTimeout(r, 140));
+
+    const onDutyStaff: OnDutyStaff[] = [
+      {
+        id: "stf-01",
+        staffName: "Nguyễn Văn Hậu",
+        staffCode: "NV-048",
+        role: "Thu ngân & Giám sát Cổng B1",
+        assignedGate: "Cổng Ra B1 (Thu Phí Tiền Mặt)",
+        shiftType: "Morning",
+        shiftHours: "06:00 - 14:00",
+        checkInTime: "05:52",
+        status: "Active",
+        avatarInitials: "NH",
+        phone: "0908 123 456",
+      },
+      {
+        id: "stf-02",
+        staffName: "Lê Thị Hồng Mai",
+        staffCode: "NV-052",
+        role: "Điều phối Cổng Vào A1",
+        assignedGate: "Cổng Vào A1 (Barrier Tự Động)",
+        shiftType: "Morning",
+        shiftHours: "06:00 - 14:00",
+        checkInTime: "05:58",
+        status: "Active",
+        avatarInitials: "LM",
+        phone: "0912 345 678",
+      },
+      {
+        id: "stf-03",
+        staffName: "Trần Quốc Bảo",
+        staffCode: "NV-061",
+        role: "Thu ngân & Đối soát Cổng B2",
+        assignedGate: "Cổng Ra B2 (Thu Phí VietQR/Số)",
+        shiftType: "Morning",
+        shiftHours: "06:00 - 14:00",
+        checkInTime: "06:05",
+        status: "HandoverPending",
+        avatarInitials: "TB",
+        phone: "0988 765 432",
+      },
+      {
+        id: "stf-04",
+        staffName: "Phạm Hải Đăng",
+        staffCode: "NV-075",
+        role: "Kỹ thuật & Tuần tra An ninh",
+        assignedGate: "Tuần Tra An Ninh & Kỹ Thuật",
+        shiftType: "Morning",
+        shiftHours: "06:00 - 14:00",
+        checkInTime: "05:45",
+        status: "Active",
+        avatarInitials: "PĐ",
+        phone: "0934 567 890",
+      },
+    ];
+
+    const records: CashReconciliationRecord[] = [
+      {
+        id: "rec-01",
+        parkingLotId: lotId === "all" ? "PKM-METRO-01" : lotId,
+        shiftId: "SHF-20261021-M1",
+        gateName: "Cổng Ra B1 (Làn Ô Tô Thu Tiền Mặt)",
+        cashierName: "Nguyễn Văn Hậu",
+        cashierCode: "NV-048",
+        shiftType: "Morning",
+        shiftDate: "21/10/2026",
+        expectedCash: 6850000,
+        actualCash: 6850000,
+        difference: 0,
+        digitalPaymentsTotal: 14200000,
+        totalTransactions: 312,
+        matchStatus: "Matched 100%",
+        approvalStatus: "Approved",
+        notes: "Khớp 100% hóa đơn và số dư két tiền mặt đầu ca 1,000,000 VND",
+        approvedBy: "Trần Anh Tuấn (Manager)",
+        approvedAt: "13:45",
+      },
+      {
+        id: "rec-02",
+        parkingLotId: lotId === "all" ? "PKM-METRO-01" : lotId,
+        shiftId: "SHF-20261021-M2",
+        gateName: "Cổng Ra B2 (Làn Hỗn Hợp Tiền Mặt & QR)",
+        cashierName: "Trần Quốc Bảo",
+        cashierCode: "NV-061",
+        shiftType: "Morning",
+        shiftDate: "21/10/2026",
+        expectedCash: 4250000,
+        actualCash: 4200000,
+        difference: -50000,
+        digitalPaymentsTotal: 18950000,
+        totalTransactions: 285,
+        matchStatus: "Mismatch Deficit",
+        approvalStatus: "Pending",
+        notes: "Chênh lệch thiếu 50,000 VND nghi ngờ do thối nhầm tiền khách 51F-889.12 lúc 11:20",
+      },
+      {
+        id: "rec-03",
+        parkingLotId: lotId === "all" ? "PKM-METRO-01" : lotId,
+        shiftId: "SHF-20261020-N1",
+        gateName: "Cổng Ra B1 (Làn Đêm)",
+        cashierName: "Vũ Đình Trọng",
+        cashierCode: "NV-039",
+        shiftType: "Night",
+        shiftDate: "20/10/2026",
+        expectedCash: 2100000,
+        actualCash: 2120000,
+        difference: 20000,
+        digitalPaymentsTotal: 5400000,
+        totalTransactions: 98,
+        matchStatus: "Mismatch Surplus",
+        approvalStatus: "Approved",
+        notes: "Thừa 20,000 VND khách không lấy tiền thừa vé gửi xe máy, đã nộp bổ sung quỹ dự phòng",
+        approvedBy: "Trần Anh Tuấn (Manager)",
+        approvedAt: "06:15",
+      },
+    ];
+
+    return {
+      result: { onDutyStaff, records },
+      isSuccess: true,
+      statusCode: 200,
+      message: "Truy xuất danh sách nhân sự trực ca và bảng đối soát tiền mặt thành công.",
+    };
+  },
+
+  async approveCashShift(recordId: string, remarks?: string): Promise<ApiResponse<CashReconciliationRecord>> {
+    await new Promise((r) => setTimeout(r, 200));
+    return {
+      result: {
+        id: recordId,
+        parkingLotId: "PKM-METRO-01",
+        shiftId: "SHF-APPROVED",
+        gateName: "Cổng Ra B2",
+        cashierName: "Trần Quốc Bảo",
+        cashierCode: "NV-061",
+        shiftType: "Morning",
+        shiftDate: "21/10/2026",
+        expectedCash: 4250000,
+        actualCash: 4200000,
+        difference: -50000,
+        digitalPaymentsTotal: 18950000,
+        totalTransactions: 285,
+        matchStatus: "Mismatch Deficit",
+        approvalStatus: "Approved",
+        notes: remarks || "Quản lý đã duyệt đối soát ca trực và xác nhận thu hồi bù quỹ.",
+        approvedBy: "Trần Anh Tuấn (Manager)",
+        approvedAt: new Date().toLocaleTimeString("vi-VN"),
+      },
+      isSuccess: true,
+      statusCode: 200,
+      message: "Duyệt bàn giao ca tiền mặt thành công. Giao dịch đã được khóa sổ.",
+    };
+  },
+
+  async flagCashDiscrepancy(recordId: string, reason: string): Promise<ApiResponse<CashReconciliationRecord>> {
+    await new Promise((r) => setTimeout(r, 200));
+    return {
+      result: {
+        id: recordId,
+        parkingLotId: "PKM-METRO-01",
+        shiftId: "SHF-FLAGGED",
+        gateName: "Cổng Ra B2",
+        cashierName: "Trần Quốc Bảo",
+        cashierCode: "NV-061",
+        shiftType: "Morning",
+        shiftDate: "21/10/2026",
+        expectedCash: 4250000,
+        actualCash: 4200000,
+        difference: -50000,
+        digitalPaymentsTotal: 18950000,
+        totalTransactions: 285,
+        matchStatus: "Mismatch Deficit",
+        approvalStatus: "Flagged",
+        notes: `Cảnh báo sai lệch: ${reason}`,
+      },
+      isSuccess: true,
+      statusCode: 200,
+      message: "Đã đánh dấu sai lệch tiền mặt và tạo cảnh báo kiểm toán nội bộ.",
+    };
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 4. INCIDENT & EXCEPTION APPROVALS
+  // ═══════════════════════════════════════════════════════════════════════════
+  async getExceptionRequests(lotId: string): Promise<ApiResponse<ExceptionRequest[]>> {
+    await new Promise((r) => setTimeout(r, 150));
+
+    const requests: ExceptionRequest[] = [
+      {
+        id: "EXC-1092",
+        parkingLotId: lotId === "all" ? "PKM-METRO-01" : lotId,
+        exceptionType: "PlateMismatch",
+        title: "Lệch biển số OCR Camera Cổng Ra B1",
+        description: "Camera ANPR cổng vào ghi nhận biển 51G-829.34 nhưng camera cổng ra đọc 51G-828.34 do bùn đất che mờ nét số 9. Nhân viên đối chiếu ảnh chụp vé và đề xuất cho xe ra.",
+        requesterStaffName: "Nguyễn Văn Hậu",
+        requesterStaffCode: "NV-048",
+        gateOrLocation: "Cổng Ra B1 - Làn Ô Tô",
+        licensePlate: "51G-829.34",
+        detectedPlate: "51G-828.34",
+        severity: "Medium",
+        status: "Pending",
+        createdAt: "10:15 - Hôm nay",
+      },
+      {
+        id: "EXC-1093",
+        parkingLotId: lotId === "all" ? "PKM-METRO-01" : lotId,
+        exceptionType: "Refund",
+        title: "Yêu cầu hoàn phí trừ trùng qua VietQR",
+        description: "Khách hàng quét mã VietQR trừ tiền 2 lần cho phiên đỗ #SES-88219 (50,000 VND x 2). Hệ thống ghi nhận 2 mã giao dịch ngân hàng cùng số hóa đơn.",
+        requesterStaffName: "Trần Quốc Bảo",
+        requesterStaffCode: "NV-061",
+        gateOrLocation: "Cổng Ra B2",
+        licensePlate: "51K-912.88",
+        requestedAmount: 50000,
+        severity: "High",
+        status: "Pending",
+        createdAt: "11:02 - Hôm nay",
+      },
+      {
+        id: "EXC-1094",
+        parkingLotId: lotId === "all" ? "PKM-METRO-01" : lotId,
+        exceptionType: "EmergencyBarrierOpen",
+        title: "Mở khẩn cấp Barrier cho xe cứu thương 115",
+        description: "Xe cấp cứu 115 biển trắng đỏ vào xử lý trường hợp khách bị ngất tại tầng trệt. Nhân viên kích hoạt nút bấm khẩn cấp bỏ qua quét thẻ.",
+        requesterStaffName: "Lê Thị Hồng Mai",
+        requesterStaffCode: "NV-052",
+        gateOrLocation: "Cổng Vào A1 - Barrier Trục Chính",
+        licensePlate: "50B-011.55",
+        severity: "High",
+        status: "Pending",
+        createdAt: "11:20 - Hôm nay",
+      },
+      {
+        id: "EXC-1095",
+        parkingLotId: lotId === "all" ? "PKM-METRO-01" : lotId,
+        exceptionType: "LostTicket",
+        title: "Khách báo mất thẻ từ vật lý gửi xe qua đêm",
+        description: "Chủ xe xuất trình căn cước công dân và cà vẹt xe trùng khớp đăng ký hệ thống. Đề xuất thu phí giữ xe 150,000 VND và tiền cọc thẻ mất 100,000 VND.",
+        requesterStaffName: "Nguyễn Văn Hậu",
+        requesterStaffCode: "NV-048",
+        gateOrLocation: "Quầy Thu Ngân B1",
+        licensePlate: "59P2-441.90",
+        requestedAmount: 250000,
+        severity: "Medium",
+        status: "Approved",
+        createdAt: "09:40 - Hôm nay",
+        reviewedBy: "Trần Anh Tuấn (Manager)",
+        reviewedAt: "09:48",
+        reviewRemarks: "Đã kiểm tra đối chiếu CCCD và camera lúc vào bãi, duyệt giải quyết cho khách ra.",
+      },
+    ];
+
+    return {
+      result: requests,
+      isSuccess: true,
+      statusCode: 200,
+      message: "Tải danh sách yêu cầu phê duyệt ngoại lệ thành công.",
+    };
+  },
+
+  async reviewException(id: string, action: "Approved" | "Rejected", remarks: string): Promise<ApiResponse<ExceptionRequest>> {
+    await new Promise((r) => setTimeout(r, 200));
+    return {
+      result: {
+        id,
+        parkingLotId: "PKM-METRO-01",
+        exceptionType: "PlateMismatch",
+        title: "Xử lý ngoại lệ",
+        description: "Đã cập nhật quyết định quản lý.",
+        requesterStaffName: "Nhân viên trực cổng",
+        requesterStaffCode: "STF-01",
+        gateOrLocation: "Cổng Trục Chính",
+        severity: "Medium",
+        status: action,
+        createdAt: "Hôm nay",
+        reviewedBy: "Trần Anh Tuấn (Manager)",
+        reviewedAt: new Date().toLocaleTimeString("vi-VN"),
+        reviewRemarks: remarks,
+      },
+      isSuccess: true,
+      statusCode: 200,
+      message: `Đã ${action === "Approved" ? "phê duyệt" : "từ chối"} yêu cầu ngoại lệ ${id}. Dữ liệu được ghi vào nhật ký kiểm toán không thể sửa xóa.`,
+    };
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 5. REPORTS & APPEND-ONLY AUDIT LOGS
+  // ═══════════════════════════════════════════════════════════════════════════
+  async getAuditLogs(lotId: string, actionTypeFilter?: string): Promise<ApiResponse<AuditLogEntry[]>> {
+    await new Promise((r) => setTimeout(r, 160));
+
+    const targetLot = lotId === "all" ? "PKM-METRO-01" : lotId;
+    const allLogs: AuditLogEntry[] = [
+      {
+        id: "AUD-99120",
+        parkingLotId: targetLot,
+        timestampUtc: "2026-10-21T04:45:10Z",
+        operatorName: "Trần Anh Tuấn",
+        operatorRole: "PARKING_MANAGER",
+        actionType: "PRICE_UPDATE",
+        targetEntity: "PricingPlan: v2.1",
+        justificationNote: "Áp dụng khung giờ cao điểm 07:00-18:30 và hệ số 1.25x theo quyết định số 14/QĐ-BQL",
+        ipAddress: "192.168.1.104",
+        status: "SUCCESS",
+      },
+      {
+        id: "AUD-99119",
+        parkingLotId: targetLot,
+        timestampUtc: "2026-10-21T04:20:05Z",
+        operatorName: "Trần Anh Tuấn",
+        operatorRole: "PARKING_MANAGER",
+        actionType: "BARRIER_OVERRIDE",
+        targetEntity: "Gate: Cổng Vào A1",
+        justificationNote: "Mở barrier cho xe cấp cứu 115 biển số 50B-011.55 vào sảnh khẩn cấp",
+        ipAddress: "192.168.1.104",
+        status: "WARNING",
+      },
+      {
+        id: "AUD-99118",
+        parkingLotId: targetLot,
+        timestampUtc: "2026-10-21T03:52:18Z",
+        operatorName: "Trần Anh Tuấn",
+        operatorRole: "PARKING_MANAGER",
+        actionType: "SLOT_OVERRIDE",
+        targetEntity: "Slot: B1-A12",
+        justificationNote: "Chuyển ô B1-A12 sang Bảo Trì do phát hiện sự cố rò rỉ dầu máy xe đỗ trước",
+        ipAddress: "192.168.1.104",
+        status: "SUCCESS",
+      },
+      {
+        id: "AUD-99117",
+        parkingLotId: targetLot,
+        timestampUtc: "2026-10-21T02:45:30Z",
+        operatorName: "Trần Anh Tuấn",
+        operatorRole: "PARKING_MANAGER",
+        actionType: "REFUND_APPROVED",
+        targetEntity: "Transaction: #TX-90214",
+        justificationNote: "Hoàn phí 50,000 VND cho khách 51K-912.88 do hệ thống thanh toán VietQR quét trùng",
+        ipAddress: "192.168.1.104",
+        status: "SUCCESS",
+      },
+      {
+        id: "AUD-99116",
+        parkingLotId: targetLot,
+        timestampUtc: "2026-10-21T01:30:00Z",
+        operatorName: "Trần Anh Tuấn",
+        operatorRole: "PARKING_MANAGER",
+        actionType: "SHIFT_APPROVAL",
+        targetEntity: "Shift: SHF-20261021-M1",
+        justificationNote: "Duyệt bàn giao két tiền mặt Cổng Ra B1 số tiền 6,850,000 VND khớp 100%",
+        ipAddress: "192.168.1.104",
+        status: "SUCCESS",
+      },
+      {
+        id: "AUD-99115",
+        parkingLotId: targetLot,
+        timestampUtc: "2026-10-20T23:15:22Z",
+        operatorName: "Trần Anh Tuấn",
+        operatorRole: "PARKING_MANAGER",
+        actionType: "DISCREPANCY_FLAGGED",
+        targetEntity: "Shift: SHF-20261020-N1",
+        justificationNote: "Ghi nhận số dư thừa 20,000 VND nộp vào tài khoản quỹ dự phòng cơ sở",
+        ipAddress: "192.168.1.104",
+        status: "WARNING",
+      },
+      {
+        id: "AUD-99114",
+        parkingLotId: targetLot,
+        timestampUtc: "2026-10-20T17:00:10Z",
+        operatorName: "Trần Anh Tuấn",
+        operatorRole: "PARKING_MANAGER",
+        actionType: "MAINTENANCE_TOGGLE",
+        targetEntity: "Hardware: Barrier Làn Ra 02",
+        justificationNote: "Hiệu chuẩn motor cảm biến quang điện định kỳ quý 4/2026",
+        ipAddress: "192.168.1.104",
+        status: "SUCCESS",
+      },
+    ];
+
+    const filtered = actionTypeFilter && actionTypeFilter !== "ALL"
+      ? allLogs.filter((l) => l.actionType === actionTypeFilter)
+      : allLogs;
+
+    return {
+      result: filtered,
+      isSuccess: true,
+      statusCode: 200,
+      message: "Truy xuất danh sách nhật ký kiểm toán bất biến (Append-only) thành công.",
+    };
+  },
+
+  async exportReport(req: ReportExportRequest): Promise<ApiResponse<{ downloadUrl: string; filename: string }>> {
+    await new Promise((r) => setTimeout(r, 300));
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const filename = `ParkMatrix_${req.reportType}_${req.parkingLotId}_${timestamp}.${req.format === "excel" ? "xlsx" : req.format}`;
+    
+    return {
+      result: {
+        downloadUrl: `#/reports/download/${filename}`,
+        filename,
+      },
+      isSuccess: true,
+      statusCode: 200,
+      message: `Đã kết xuất báo cáo "${filename}" định dạng ${req.format.toUpperCase()} thành công.`,
+    };
+  },
 };
+
