@@ -11,6 +11,7 @@ using Parking.Parking.Infrastructure.Repositories;
 using Parking.Parking.Infrastructure.Services;
 using Parking.ServiceDefaults;
 
+
 var builder = WebApplication.CreateBuilder(args);
 builder.AddParkingDefaults();
 builder.Services.AddGrpcClient<FacilityAuthorization.FacilityAuthorizationClient>(o => o.Address = new Uri(builder.Configuration["Services:IdentityGrpc"] ?? "http://identity:8081"));
@@ -21,8 +22,11 @@ builder.Services.AddScoped<IRecognitionClient, RecognitionClient>();
 builder.Services.AddParkingPersistence();
 builder.Services.AddHostedService<OccupancyWorker>();
 builder.Services.AddHostedService<HoldExpiryWorker>();
+// 1. Thêm bộ nhớ đệm Memory Cache (hỗ trợ cho EstimatedPriceService)
+builder.Services.AddMemoryCache();
+// 2. Đăng ký Repository và Service tính giá THẬT (thay thế Fake)
 builder.Services.AddScoped<IParkingLotRepository, ParkingLotRepository>();
-builder.Services.AddScoped<IEstimatedPriceService, FakeEstimatedPriceService>();
+builder.Services.AddScoped<IEstimatedPriceService, EstimatedPriceService>();
 builder.Services.AddApplicationServices();
 builder.Services.AddControllers().ConfigureApiBehaviorOptions(options =>
     options.InvalidModelStateResponseFactory = context => new BadRequestObjectResult(

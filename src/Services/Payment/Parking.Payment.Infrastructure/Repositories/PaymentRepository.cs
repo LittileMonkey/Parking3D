@@ -20,7 +20,7 @@ namespace Parking.Payment.Infrastructure.Repositories
         {
             _db = db;
         }
-
+        
         public async Task<ConfirmCashPaymentResultDto> ConfirmCashPaymentAsync(ConfirmCashPaymentCommand command, CancellationToken cancellationToken = default)
         {
             await using var conn = await _db.OpenConnectionAsync(cancellationToken);
@@ -123,7 +123,7 @@ namespace Parking.Payment.Infrastructure.Repositories
         }
 
         
-
+        //Lấy tính booking để xem thành trạng thanh toán
         public async Task<PaymentStatusDto?> GetPaymentStatusByBookingIdAsync(Guid bookingId, CancellationToken cancellationToken = default)
         {
             const string sql = """
