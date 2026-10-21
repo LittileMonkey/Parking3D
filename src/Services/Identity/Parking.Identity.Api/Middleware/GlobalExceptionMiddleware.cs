@@ -1,4 +1,5 @@
-﻿using Parking.Identity.Application.Common.AppException;
+using Parking.Identity.Application.Common.AppException;
+using Parking.Identity.Application.Common.Enum;
 using System.Text.Json;
 using ValidationException = FluentValidation.ValidationException;
 
@@ -56,7 +57,7 @@ namespace Parking.Identity.Api.Middleware
 
             var response = new
             {
-                code = 9999,
+                code = ErrorCode.InternalServerError,
                 message = "Internal server error"
             };
 
@@ -75,7 +76,7 @@ namespace Parking.Identity.Api.Middleware
 
             var response = new
             {
-                code = 1601,
+                code = ErrorCode.InvalidRequest,
                 message = "Validation failed",
                 result = errors
             };

@@ -1,10 +1,5 @@
 ﻿using FluentValidation;
 using MediatR;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Parking.Identity.Application.Common.Behavior
 {
@@ -29,7 +24,7 @@ namespace Parking.Identity.Application.Common.Behavior
                     .Where(x => x != null!)
                     .ToList();
 
-                if(errors.Count != 0)
+                if (errors.Count != 0)
                 {
                     throw new ValidationException(errors);
                 }

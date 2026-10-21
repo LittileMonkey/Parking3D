@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Parking.Identity.Application.DTOs.Response
+﻿namespace Parking.Identity.Application.DTOs.Response
 {
     public class ApiResponse<T>
     {
@@ -24,14 +18,14 @@ namespace Parking.Identity.Application.DTOs.Response
             Message = message;
         }
 
-        public static ApiResponse<T> Success(T? result , string message, int statusCode = 200)
+        public static ApiResponse<T> Success(T? result, string message, int statusCode = 200)
         {
-            return new ApiResponse<T>( true, statusCode, message, result);
+            return new ApiResponse<T>(true, statusCode, message, result);
         }
 
-        public static ApiResponse<T> Failure(string message,int statusCode, T? result = default)
+        public static ApiResponse<T> Failure(string message, int statusCode, T? result = default)
         {
-            return new ApiResponse<T>(false, statusCode, message,  result);
+            return new ApiResponse<T>(false, statusCode, message, result);
         }
     }
 }

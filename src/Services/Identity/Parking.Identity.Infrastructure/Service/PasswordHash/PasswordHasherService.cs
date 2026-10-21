@@ -1,7 +1,7 @@
-﻿using Parking.Identity.Application.Common.Interface;
-using Parking.Identity.Domain.Entities;
-using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
+using Parking.Identity.Application.Common.Interface;
+using Parking.Identity.Domain.Entities;
 
 
 namespace Identity.Infrastructure.Service.PasswordHash

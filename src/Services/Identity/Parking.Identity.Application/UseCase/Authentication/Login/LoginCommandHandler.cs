@@ -1,4 +1,4 @@
-﻿using Parking.Identity.Application.Common.AppException;
+using Parking.Identity.Application.Common.AppException;
 using Parking.Identity.Application.Common.Enum;
 using Parking.Identity.Application.Common.Interface;
 using Parking.Identity.Application.DTOs;
@@ -23,35 +23,35 @@ namespace Parking.Identity.Application.UseCase.Authentication.Login
         }
         async Task<AuthenticationResponseDto> IRequestHandler<LoginCommand, AuthenticationResponseDto>.Handle(LoginCommand request, CancellationToken cancellationToken)
         {
-            if (string.IsNullOrEmpty(request.emailNormalized))
+            if (string.IsNullOrEmpty(request.Email))
             {
-                throw new AppException(ErrorCode.InvalidEmail, "Email Invalid");
+                throw new AppException(ErrorCode.InvalidEmail, "The provided email address is invalid.");
             }
 
-            var email = request.emailNormalized.Trim().ToUpperInvariant();
+            var email = request.Email.Trim().ToUpperInvariant();
 
 
             var user = await accountRepository.GetUserByEmail(email);
 
             if (user == null)
             {
-                throw new AppException(ErrorCode.Unauthorized, "Email or password is incorrect.");
+                throw new AppException(ErrorCode.InvalidCredentials, "The email address or password is incorrect.");
             }
 
             if (user.Status != "ACTIVE")
             {
-                throw new AppException(ErrorCode.Unauthorized, "User is inactive.");
+                throw new AppException(ErrorCode.AccountInactive, "The account is currently inactive.");
             }
 
-            if(string.IsNullOrWhiteSpace(request.password) || string.IsNullOrWhiteSpace(user.PasswordHash))
+            if(string.IsNullOrWhiteSpace(request.Password) || string.IsNullOrWhiteSpace(user.PasswordHash))
             {
-                throw new AppException(ErrorCode.InvalidPassword, "Email or password is incorrect.");
+                throw new AppException(ErrorCode.InvalidCredentials, "The email address or password is incorrect.");
             }
-            var passwordValid = hasherService.VerifiedPassword(user, request.password, user.PasswordHash);
+            var passwordValid = hasherService.VerifiedPassword(user, request.Password, user.PasswordHash);
 
             if (!passwordValid)
             {
-                throw new AppException(ErrorCode.Unauthorized, "Email or password is incorrect.");
+                throw new AppException(ErrorCode.InvalidCredentials, "The email address or password is incorrect.");
             }
 
             var accessToken = tokenService.GenerateAccessToken(user);
@@ -77,14 +77,6 @@ namespace Parking.Identity.Application.UseCase.Authentication.Login
 
             return new AuthenticationResponseDto
             {
-                UserId = user.Id,
-                FullName = user.FullName,
-                EmailNormalized = user.EmailNormalized,
-                Status = user.Status,
-
-
-                Role = user.PlatformUserRoles.FirstOrDefault()?.RoleCode ?? string.Empty,
-
                 AccessToken = accessToken,
 
                 RefreshToken = refreshToken

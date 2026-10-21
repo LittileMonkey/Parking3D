@@ -1,4 +1,4 @@
-﻿using MediatR;
+using MediatR;
 using Parking.Identity.Application.Common.AppException;
 using Parking.Identity.Application.Common.Enum;
 using Parking.Identity.Application.Common.Interface;
@@ -9,10 +9,12 @@ namespace Parking.Identity.Application.UseCase.Authentication.ChangePassword
     {
         private readonly IAccountRepository accountRepository;
         private readonly IPasswordHasherService passwordHasherService;
-        public ChangePasswordCommandHandler(IAccountRepository repository, IPasswordHasherService service)
+        private readonly IUnitOfWork unitOfWork;
+        public ChangePasswordCommandHandler(IAccountRepository repository, IPasswordHasherService service, IUnitOfWork unitOfWork)
         {
             this.accountRepository = repository;
             this.passwordHasherService = service;
+            this.unitOfWork = unitOfWork;
         }
 
         public async Task<bool> Handle(ChangePasswordCommand request, CancellationToken cancellationToken)
@@ -23,26 +25,26 @@ namespace Parking.Identity.Application.UseCase.Authentication.ChangePassword
 
             if(user == null)
             {
-                throw new AppException(ErrorCode.AccountNotFound, "Account Not Found");
+                throw new AppException(ErrorCode.AccountNotFound, "The requested account could not be found.");
             }
 
             if(!passwordHasherService.VerifiedPassword(user, request.Password, user.PasswordHash))
             {
-                throw new AppException(ErrorCode.PasswordIncorrect, "Password Incorrect!!!");
+                throw new AppException(ErrorCode.PasswordIncorrect, "The current password entered is incorrect.");
             }
 
             
 
             if(passwordHasherService.VerifiedPassword(user, request.NewPassword, user.PasswordHash))
             {
-                throw new AppException(ErrorCode.PasswordIncorrect,"New password must be different from current password");
+                throw new AppException(ErrorCode.PasswordIncorrect, "The new password must be different from the current password.");
             }
 
             if (request.NewPassword != request.ConfirmPassword)
             {
                 throw new AppException(
                     ErrorCode.PasswordIncorrect,
-                    "New password and confirm password do not match");
+                    "The new password and confirmation password do not match.");
             }
 
             var newPassHash = passwordHasherService.HashPassword(user, request.NewPassword);
@@ -50,6 +52,8 @@ namespace Parking.Identity.Application.UseCase.Authentication.ChangePassword
             user.PasswordHash = newPassHash;
 
             await accountRepository.UpdateAccount(user);
+
+            await unitOfWork.SaveChangesAsync(cancellationToken);
 
             return true;
 

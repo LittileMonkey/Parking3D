@@ -1,4 +1,4 @@
-﻿using MediatR;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Parking.Identity.Application.DTOs;
@@ -89,12 +89,12 @@ namespace Parking.Identity.Api.Controllers
         }
 
         [HttpPost("refresh-token")]
-        [Authorize]
+        [AllowAnonymous]
         public async Task<IActionResult> RefreshToken(RefreshTokenCommand command, CancellationToken cancellationToken)
         {     
             var result = await sender.Send(command, cancellationToken);
 
-            var response = ApiResponse<AuthenticationResponseDto>.Success(result, "Reset Password Successfully", 200);
+            var response = ApiResponse<AuthenticationResponseDto>.Success(result, "Refresh Token Successfully", 200);
 
             return Ok(response);
         }

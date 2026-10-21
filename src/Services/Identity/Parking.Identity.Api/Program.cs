@@ -16,38 +16,73 @@ namespace Parking.Identity.Api
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            builder.WebHost.ConfigureKestrel(k =>
+            // Configure Kestrel only outside Development.
+            // Development uses launchSettings.json.
+            if (!builder.Environment.IsDevelopment())
             {
-                var bind = builder.Configuration["Ports:Bind"] == "0.0.0.0" ? IPAddress.Any : IPAddress.Loopback;
-                k.Listen(bind, builder.Configuration.GetValue("Ports:Http", 8080), o => o.Protocols = HttpProtocols.Http1);
-                k.Listen(bind, builder.Configuration.GetValue("Ports:Grpc", 8081), o => o.Protocols = HttpProtocols.Http2);
-            });
+                builder.WebHost.ConfigureKestrel(k =>
+                {
+                    var bind = builder.Configuration["Ports:Bind"] == "0.0.0.0"
+                        ? IPAddress.Any
+                        : IPAddress.Loopback;
+
+                    k.Listen(
+                        bind,
+                        builder.Configuration.GetValue<int>("Ports:Http", 8080),
+                        o => o.Protocols = HttpProtocols.Http1);
+
+                    k.Listen(
+                        bind,
+                        builder.Configuration.GetValue<int>("Ports:Grpc", 8081),
+                        o => o.Protocols = HttpProtocols.Http2);
+                });
+            }
 
             // Add services to the container.
-
             builder.Services.AddControllers();
-            // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
             builder.Services.AddOpenApi();
 
-            builder.Services.AddPersistenceDependencyInjection(builder.Configuration);
-            builder.Services.AddInfrastructureDependencyInjection(builder.Configuration);
-            builder.Services.AddApplicationDependencyInjection(builder.Configuration);
+            // Dependency Injection
+            builder.Services.AddPersistenceDependencyInjection(
+                builder.Configuration);
 
-            builder.Services.AddGrpc(o => { o.Interceptors.Add<ServiceKeyInterceptor>(); });
+            builder.Services.AddInfrastructureDependencyInjection(
+                builder.Configuration);
+
+            builder.Services.AddApplicationDependencyInjection(
+                builder.Configuration);
+
+            // gRPC
+            builder.Services.AddGrpc(o =>
+            {
+                o.Interceptors.Add<ServiceKeyInterceptor>();
+            });
+
             builder.Services.AddTransient<ServiceKeyInterceptor>();
 
-            builder.Services.AddCors(options => options.AddPolicy("FrondEndAPI", policy => {
-                policy.AllowAnyOrigin("http://localhost:5173");
-                policy.AllowAnyMethod();
-                policy.AllowAnyHeader();
-            }));
+            // CORS
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("FrondEndAPI", policy =>
+                {
+                    policy
+                        .WithOrigins("http://localhost:5173")
+                        .AllowAnyMethod()
+                        .AllowAnyHeader();
+                });
+            });
+
+            // Authentication and Authorization
             builder.Services.AddAuthorization();
 
             var app = builder.Build();
 
-            using (var scope = app.Services.CreateAsyncScope())
+            // Initialize database data
+            await using (var scope = app.Services.CreateAsyncScope())
             {
-                var initializer = scope.ServiceProvider.GetRequiredService<DbInitializer>();
+                var initializer =
+                    scope.ServiceProvider.GetRequiredService<DbInitializer>();
+
                 await initializer.SeedAdminAsync();
                 await initializer.SeedParkingStaff();
             }
@@ -67,8 +102,10 @@ namespace Parking.Identity.Api
             app.UseAuthentication();
             app.UseAuthorization();
 
-
+            // REST API
             app.MapControllers();
+
+            // gRPC service
             app.MapGrpcService<FacilityAuthorizationGrpc>();
 
             app.Run();

@@ -1,4 +1,4 @@
-﻿using MediatR;
+using MediatR;
 using Parking.Identity.Application.Common.AppException;
 using Parking.Identity.Application.Common.Enum;
 using Parking.Identity.Application.Common.Interface;
@@ -35,7 +35,7 @@ namespace Parking.Identity.Application.UseCase.Authentication.ResetPassword
 
             if(user is null)
             {
-                throw new AppException(ErrorCode.AccountNotFound, "Account Not Found");
+                throw new AppException(ErrorCode.AccountNotFound, "The requested account could not be found.");
                 
             }
 
@@ -43,19 +43,19 @@ namespace Parking.Identity.Application.UseCase.Authentication.ResetPassword
 
             if(otpEntity is null)
             {
-                throw new AppException(ErrorCode.OtpNotFound, "Otp Not Found");
+                throw new AppException(ErrorCode.OtpNotFound, "No active verification code was found for this account.");
             }
 
             if(otpEntity.ExpiresAt <= DateTimeOffset.UtcNow)
             {
-                throw new AppException(ErrorCode.Unauthorized, "OTP has expired, Please request send a new OTP ");
+                throw new AppException(ErrorCode.OtpExpired, "The verification code has expired. Please request a new code.");
             }
 
             var cacheKey = $"reset-password-otp-attempts:{user.Id}:{otpEntity.Id}";
 
             if(memory.TryGetValue(cacheKey, out int attemptCount) && attemptCount >= MaxAttempts)
             {
-                throw new AppException(ErrorCode.Unauthorized, "Maximum OTP attempts exceeded, Please request system sent new OTP to you!!!.");
+                throw new AppException(ErrorCode.OtpMaxAttemptsExceeded, "Maximum verification attempts exceeded. Please request a new code.");
             }
 
             var isOtpValid = otpService.VerifyOtp(request.Otp, otpEntity.OtpHash);
@@ -75,11 +75,11 @@ namespace Parking.Identity.Application.UseCase.Authentication.ResetPassword
 
                 if(remainingAttempts <= 0)
                 {
-                    throw new AppException(ErrorCode.Unauthorized, "Maximum OTP attempt exceed, Please request a new OTP");
+                    throw new AppException(ErrorCode.OtpMaxAttemptsExceeded, "Maximum verification attempts exceeded. Please request a new code.");
                 }
 
 
-                throw new AppException(ErrorCode.Unauthorized, $"Invalid OTO, You have {remainingAttempts} attempt(s) remaining");
+                throw new AppException(ErrorCode.OtpInvalid, $"The verification code is incorrect. You have {remainingAttempts} attempt(s) remaining.");
             }
 
             using var transaction = await unit.BeginTransactionAsync(cancellationToken);

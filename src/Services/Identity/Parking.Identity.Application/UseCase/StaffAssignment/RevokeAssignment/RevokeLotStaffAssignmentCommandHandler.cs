@@ -1,11 +1,5 @@
 ﻿using MediatR;
 using Parking.Identity.Application.Common.Interface;
-using Parking.Identity.Application.DTOs;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Parking.Identity.Application.UseCase.StaffAssignment.RevokeAssignment
 {
@@ -22,17 +16,17 @@ namespace Parking.Identity.Application.UseCase.StaffAssignment.RevokeAssignment
         {
             var assignment = await repository.GetAssignmentByIdAsync(request.AssignmentId, cancellationToken);
 
-            if(assignment is null)
+            if (assignment is null)
             {
                 return RevokeAssignmentResult.NotFound;
             }
 
-            if(assignment.RevokedAt is not null)
+            if (assignment.RevokedAt is not null)
             {
                 return RevokeAssignmentResult.AlreadyRevoked;
             }
 
-            if(assignment.RoleCode != "PARKING_STAFF")
+            if (assignment.RoleCode != "PARKING_STAFF")
             {
                 return RevokeAssignmentResult.InvalidTarget;
             }

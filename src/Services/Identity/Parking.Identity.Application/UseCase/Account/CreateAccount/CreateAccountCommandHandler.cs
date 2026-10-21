@@ -22,6 +22,8 @@ namespace Parking.Identity.Application.UseCase.Account.CreateAccount
         }
         public async Task<AppUserDto> Handle(CreateAccountCommand request, CancellationToken cancellationToken)
         {
+            ArgumentNullException.ThrowIfNull(request.EmailNormalized);
+            ArgumentNullException.ThrowIfNull(request.PhoneE164);
             // Chuẩn hóa email
             var email = request.EmailNormalized.Trim().ToUpperInvariant();
 
@@ -29,14 +31,14 @@ namespace Parking.Identity.Application.UseCase.Account.CreateAccount
 
             if(existingEmail != null)
             {
-                throw new AppException(ErrorCode.EmailAlreadyExists, "Email AlreadyExits");
+                throw new AppException(ErrorCode.EmailAlreadyExists, "An account with this email address already exists.");
             }
 
             var existingPhone = await repository.GetUserByPhone(request.PhoneE164);
 
             if (existingPhone != null)
             {
-                throw new AppException(ErrorCode.PhoneAlreadyExists, "Your phone already exit!!!");
+                throw new AppException(ErrorCode.PhoneAlreadyExists, "An account with this phone number already exists.");
             }
 
             //Validate role
@@ -58,7 +60,7 @@ namespace Parking.Identity.Application.UseCase.Account.CreateAccount
 
             if (invalidRoles.Count > 0) 
             { 
-                throw new AppException(ErrorCode.InvalidRequest ,$"Invalid role(s): {string.Join(", ", invalidRoles)}");
+                throw new AppException(ErrorCode.InvalidRequest, $"Invalid role(s): {string.Join(", ", invalidRoles)}.");
             }
 
             Guid userId = Guid.NewGuid();

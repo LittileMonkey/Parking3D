@@ -1,4 +1,4 @@
-﻿using Parking.Identity.Application.Common.AppException;
+using Parking.Identity.Application.Common.AppException;
 using Parking.Identity.Application.Common.Enum;
 using Parking.Identity.Application.Common.Interface;
 using Parking.Identity.Application.DTOs;
@@ -23,17 +23,17 @@ namespace Parking.Identity.Application.UseCase.Account.UpdateAccount
 
             if (account == null)
             {
-                throw new AppException(ErrorCode.AccountNotFound, "Account Not Found");
+                throw new AppException(ErrorCode.AccountNotFound, "The requested account could not be found.");
             }
-            var email = request.EmailNormalized.Trim().ToLowerInvariant();
+            var email = request.EmailNormalized.Trim().ToUpperInvariant();
 
             if (account.EmailNormalized != email)
             {
-                var exitingEmail = await repository.GetUserByEmail(email);
+                var existingEmail = await repository.GetUserByEmail(email);
 
-                if (exitingEmail != null && exitingEmail.Id != account.Id)
+                if (existingEmail != null && existingEmail.Id != account.Id)
                 {
-                    throw new AppException(ErrorCode.EmailAlreadyExists, "Email already exists");
+                    throw new AppException(ErrorCode.EmailAlreadyExists, "An account with this email address already exists.");
                 }
 
 

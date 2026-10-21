@@ -1,7 +1,7 @@
-﻿using Parking.Identity.Domain.Entities;
-using Microsoft.EntityFrameworkCore;
-using Parking.Identity.Persistence.DataAccessLayer;
+﻿using Microsoft.EntityFrameworkCore;
 using Parking.Identity.Application.Common.Interface;
+using Parking.Identity.Domain.Entities;
+using Parking.Identity.Persistence.DataAccessLayer;
 
 namespace Parking.Identity.Persistence.Repositories
 {
