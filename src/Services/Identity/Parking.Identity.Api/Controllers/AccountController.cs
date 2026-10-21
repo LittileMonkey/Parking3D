@@ -6,6 +6,7 @@ using Microsoft.IdentityModel.JsonWebTokens;
 using Parking.Identity.Application.DTOs;
 using Parking.Identity.Application.DTOs.Response;
 using Parking.Identity.Application.UseCase.Account.GetAccountById;
+using Parking.Identity.Application.UseCase.Account.UpdateAccount;
 using Parking.Identity.Application.UseCase.Authentication.ChangePassword;
 using System.Security.Claims;
 
@@ -58,6 +59,25 @@ namespace Parking.Identity.Api.Controllers
             var result = await sender.Send(command, cancellationToken);
 
             var response = ApiResponse<bool>.Success(result, "Change Password Successfully!!!", 200);
+
+            return Ok(response);
+        }
+
+        [HttpPost("update-information")]
+        [Authorize]
+        public async Task<IActionResult> UpdateAccountInformation(UpdateAccountCommand command, CancellationToken cancellationToken)
+        {
+            var userId = User.FindFirst(JwtRegisteredClaimNames.Sub) ?? User.FindFirst(ClaimTypes.NameIdentifier);
+
+            if (userId == null || !Guid.TryParse(userId.Value, out var guidId))
+            {
+                return Unauthorized(ApiResponse<AppUserDto>.Failure("Invalid user identity", 401));
+            }
+
+            command.Id = guidId;
+
+            var result = await sender.Send(command, cancellationToken);
+            var response = ApiResponse<AppUserDto>.Success(result, "Update Successfully!!!", 200);
 
             return Ok(response);
         }

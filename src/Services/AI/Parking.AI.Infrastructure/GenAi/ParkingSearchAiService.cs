@@ -10,13 +10,29 @@ using Parking.AI.Infrastructure.GenAi.Prompts;
 namespace Parking.AI.Infrastructure.GenAi;
 
 /// <summary>
-/// Dịch vụ tìm kiếm và gợi ý bãi xe thông minh kết hợp NLP, CSDL ai_lot_catalog và công thức định giá Rule 7
+/// Dịch vụ tìm kiếm và gợi ý bãi xe thông minh kết hợp Xử lý ngôn ngữ tự nhiên (NLP), CSDL PostgreSQL và thuật toán định giá Rule 7.
+/// <para>
+/// <b>Thuật toán & Công nghệ toán học chủ chốt:</b>
+/// <list type="bullet">
+///   <item><description><b>Công thức lượng giác Haversine (<see cref="CalculateHaversineDistanceMeters"/>):</b> Tính khoảng cách đường chim bay giữa 2 tọa độ GPS (Vĩ độ - Kinh độ) trên mặt cầu Trái Đất với bán kính $R \approx 6,371,000$ mét.</description></item>
+///   <item><description><b>Động cơ định giá theo Baseline Rule 7 (<see cref="CalculateRule7EstimatedPrice"/>):</b> Tính phí gửi xe chính xác theo block 15 phút (4 block/giờ), kết hợp mức giá trần theo ngày (Daily Cap = 8 giờ giá chuẩn) nhằm bảo vệ quyền lợi của khách gửi xe dài ngày.</description></item>
+///   <item><description><b>Kỹ thuật SQL PostgreSQL <c>LEFT JOIN LATERAL</c>:</b> Truy vấn ảnh chụp trạng thái công suất lấp đầy mới nhất (<c>occupancy_snapshots</c>) tương ứng với từng bãi xe trong bảng danh mục (<c>ai_lot_catalog</c>) với hiệu năng $O(N)$.</description></item>
+///   <item><description><b>NLP Intent Extraction:</b> Dùng LLM bóc tách câu thoại tự do (VD: <i>"Tôi muốn tìm bãi đỗ xe ô tô gần Landmark 81 dưới 20k/h"</i>) thành bộ tiêu chí tìm kiếm có cấu trúc.</description></item>
+///   <item><description><b>Hệ thống tự động nạp dữ liệu mồi (Auto-Seeding Catalog):</b> Tự động kiểm tra và khởi tạo dữ liệu bãi xe mẫu vào CSDL nếu bảng danh mục ban đầu rỗng.</description></item>
+/// </list>
+/// </para>
 /// </summary>
 public class ParkingSearchAiService(
     GeminiApiClient geminiClient,
     NpgsqlDataSource db,
     ILogger<ParkingSearchAiService> logger) : IParkingSearchAiService
 {
+    /// <summary>
+    /// Sử dụng LLM để trích xuất các tiêu chí tìm kiếm có cấu trúc (Địa điểm, Loại xe, Bán kính, Chiến lược ưu tiên) từ câu nói tự nhiên.
+    /// </summary>
+    /// <param name="naturalLanguagePrompt">Câu yêu cầu bằng ngôn ngữ tự nhiên của người dùng</param>
+    /// <param name="cancellationToken">CancellationToken</param>
+    /// <returns>DTO <see cref="SmartSearchCriteriaDto"/> chứa các thuộc tính đã được chuẩn hóa</returns>
     public async Task<SmartSearchCriteriaDto> ParseSearchIntentAsync(string naturalLanguagePrompt, CancellationToken cancellationToken = default)
     {
         var (rawAiOutput, _) = await geminiClient.GenerateTextWithStatusAsync(
@@ -24,6 +40,7 @@ public class ParkingSearchAiService(
             SmartSearchParserPrompts.BuildUserQueryPrompt(naturalLanguagePrompt),
             cancellationToken);
 
+        // Bóc tách khối JSON sạch, loại bỏ các ký tự Markdown bao quanh nếu có
         var cleanedJson = ExtractJsonBlock(rawAiOutput);
 
         try
@@ -43,6 +60,7 @@ public class ParkingSearchAiService(
             logger.LogWarning(ex, "Không thể parse JSON từ phản hồi của Gemini: {RawText}", rawAiOutput);
         }
 
+        // Giá trị dự phòng mặc định nếu LLM không thể phân tích cú pháp
         return new SmartSearchCriteriaDto
         {
             DestinationName = "Khu vực trung tâm",
@@ -53,6 +71,12 @@ public class ParkingSearchAiService(
         };
     }
 
+    /// <summary>
+    /// Đánh giá, chấm điểm (Scoring) và xếp hạng danh sách bãi xe tối ưu nhất dựa trên tiêu chí tìm kiếm.
+    /// </summary>
+    /// <param name="criteria">Bộ tiêu chí tìm kiếm đã chuẩn hóa</param>
+    /// <param name="cancellationToken">CancellationToken</param>
+    /// <returns>Danh sách các bãi xe được sắp xếp theo điểm số phù hợp giảm dần kèm lời giải thích trực quan</returns>
     public async Task<ParkingRecommendationDto> RecommendParkingAsync(SmartSearchCriteriaDto criteria, CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
@@ -65,6 +89,7 @@ public class ParkingSearchAiService(
 
         var scoredItems = candidateLots.Select(lot =>
         {
+            // Tính khoảng cách Haversine giữa vị trí khách muốn đến và tọa độ thực tế của bãi xe
             var distanceMeters = CalculateHaversineDistanceMeters(originLat, originLon, lot.Latitude, lot.Longitude);
             var pricePerHour = criteria.VehicleType == VehicleType.Motorbike ? lot.MotorbikePricePerHour : lot.CarPricePerHour;
 
@@ -74,16 +99,20 @@ public class ParkingSearchAiService(
             var totalCapacity = Math.Max(1, lot.TotalSlots);
             var occupancyPercent = (double)(totalCapacity - lot.AvailableSlots) / totalCapacity * 100.0;
 
+            // 3. Thuật toán chấm điểm Match Score: Khởi điểm 100 điểm
             double score = 100.0;
             if (criteria.PriorityStrategy.Equals("NEAREST", StringComparison.OrdinalIgnoreCase))
             {
+                // Ưu tiên gần: Càng xa điểm đến thì trừ điểm (mỗi 50m trừ 1 điểm)
                 score -= (distanceMeters / 50.0);
             }
             else
             {
+                // Ưu tiên rẻ: Chi phí ước tính càng cao thì trừ điểm (mỗi 1.000đ trừ 1 điểm)
                 score -= (double)(estimatedTotal / 1000m);
             }
 
+            // Phạt nặng nếu bãi đã hết sạch chỗ trống (-100 điểm)
             if (lot.AvailableSlots <= 0) score -= 100.0;
 
             var reason = criteria.PriorityStrategy.Equals("CHEAPEST", StringComparison.OrdinalIgnoreCase)
@@ -127,6 +156,9 @@ public class ParkingSearchAiService(
         };
     }
 
+    /// <summary>
+    /// Pipeline hoàn chỉnh: Nhận câu lệnh tự nhiên, chuyển đổi sang tiêu chí và đề xuất bãi xe tối ưu nhất trong 1 bước duy nhất.
+    /// </summary>
     public async Task<ParkingRecommendationDto> SmartSearchAsync(
         string naturalLanguagePrompt,
         double? userLatitude = null,
@@ -176,13 +208,21 @@ public class ParkingSearchAiService(
     }
 
     /// <summary>
-    /// Tính giá theo Baseline Rule 7: Block 15 phút (4 block/giờ) kèm trần giá ngày (Daily Cap)
+    /// Tính toán chi phí đỗ xe ước tính theo quy định chuẩn <b>Baseline Rule 7</b>:
+    /// <list type="bullet">
+    ///   <item><description>Block tính phí cơ bản là <b>15 phút</b> (tương đương 4 block trong 1 giờ).</description></item>
+    ///   <item><description>Thời gian gửi lẻ được làm tròn lên (<see cref="Math.Ceiling(double)"/>) block 15 phút tiếp theo.</description></item>
+    ///   <item><description>Áp dụng mức giá trần theo ngày (<b>Daily Cap</b> = 8 giờ đơn giá chuẩn): Khách gửi trong ngày vượt quá 8 giờ sẽ chỉ phải trả tối đa bằng mức trần.</description></item>
+    /// </list>
     /// </summary>
+    /// <param name="basePricePerHour">Đơn giá gửi xe cơ sở theo giờ</param>
+    /// <param name="durationHours">Tổng số giờ dự kiến gửi xe</param>
+    /// <returns>Tổng số tiền ước tính làm tròn đến đơn vị đồng</returns>
     private static decimal CalculateRule7EstimatedPrice(decimal basePricePerHour, double durationHours)
     {
         if (durationHours <= 0) durationHours = 1.0;
         var pricePerBlock = basePricePerHour / 4.0m;
-        var dailyCap = basePricePerHour * 8.0m; // Trần giá 8 giờ/ngày
+        var dailyCap = basePricePerHour * 8.0m; // Giá trần tối đa trong 1 ngày (tương đương 8 giờ)
 
         var fullDays = (int)(durationHours / 24.0);
         var remainingHours = durationHours % 24.0;
@@ -192,11 +232,17 @@ public class ParkingSearchAiService(
         return Math.Round(fullDays * dailyCap + remainingCost, 0);
     }
 
+    /// <summary>
+    /// Truy vấn danh mục bãi đỗ xe và số lượng chỗ trống thực tế từ PostgreSQL.
+    /// Sử dụng cú pháp <c>LEFT JOIN LATERAL</c> để lấy snapshot công suất mới nhất của từng bãi xe.
+    /// Nếu bảng trống, hệ thống sẽ tự động kích hoạt nạp dữ liệu mồi (Auto-seed) để bảo đảm API luôn sẵn sàng.
+    /// </summary>
     private async Task<List<LotData>> GetLotsAsync(CancellationToken ct)
     {
         var list = new List<LotData>();
         try
         {
+            // LEFT JOIN LATERAL: Cho phép subquery tham chiếu tới cột c.lot_id của bảng ngoài ai_lot_catalog
             await using var cmd = db.CreateCommand("""
                 SELECT c.lot_id, c.name,
                        COALESCE(s.usable_capacity, 200) AS capacity,
@@ -226,6 +272,7 @@ public class ParkingSearchAiService(
             logger.LogWarning(ex, "Truy vấn ai_lot_catalog không thành công hoặc bảng trống. Tự động dùng danh mục tiêu chuẩn.");
         }
 
+        // Tự động seed dữ liệu bãi xe mẫu nếu CSDL chưa có bản ghi
         if (list.Count == 0)
         {
             list = GetDefaultParkingLots();
@@ -253,9 +300,25 @@ public class ParkingSearchAiService(
         return list;
     }
 
+    /// <summary>
+    /// Công thức lượng giác Haversine tính toán khoảng cách đường cong (đại viên) trên mặt cầu Trái Đất giữa 2 tọa độ GPS.
+    /// <para>
+    /// Công thức:
+    /// <code>
+    /// a = sin²(Δlat/2) + cos(lat1) * cos(lat2) * sin²(Δlon/2)
+    /// c = 2 * atan2(√a, √(1−a))
+    /// d = R * c (với bán kính Trái Đất R = 6,371,000 mét)
+    /// </code>
+    /// </para>
+    /// </summary>
+    /// <param name="lat1">Vĩ độ điểm bắt đầu (degrees)</param>
+    /// <param name="lon1">Kinh độ điểm bắt đầu (degrees)</param>
+    /// <param name="lat2">Vĩ độ điểm kết thúc (degrees)</param>
+    /// <param name="lon2">Kinh độ điểm kết thúc (degrees)</param>
+    /// <returns>Khoảng cách theo đơn vị mét (m)</returns>
     private static double CalculateHaversineDistanceMeters(double lat1, double lon1, double lat2, double lon2)
     {
-        const double earthRadiusMeters = 6371000.0;
+        const double earthRadiusMeters = 6371000.0; // Bán kính trung bình của Trái Đất
         var dLat = ToRadians(lat2 - lat1);
         var dLon = ToRadians(lon2 - lon1);
 
@@ -267,8 +330,14 @@ public class ParkingSearchAiService(
         return earthRadiusMeters * c;
     }
 
+    /// <summary>
+    /// Đổi đơn vị góc từ độ (degrees) sang radian: $rad = deg \times \frac{\pi}{180}$
+    /// </summary>
     private static double ToRadians(double degrees) => degrees * Math.PI / 180.0;
 
+    /// <summary>
+    /// Tách khối mã JSON thuần từ chuỗi phản hồi có thể chứa thẻ Markdown (```json ... ```) của LLM.
+    /// </summary>
     private static string ExtractJsonBlock(string raw)
     {
         var trimmed = raw.Trim();

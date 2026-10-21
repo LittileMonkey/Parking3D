@@ -16,11 +16,12 @@ public interface ILicensePlateRecognitionService
     /// Nhận diện biển số xe trực tiếp từ mảng byte của file ảnh
     /// </summary>
     Task<PlateRecognitionResultDto> RecognizePlateFromBytesAsync(
-        byte[] imageBytes,
-        string gateId,
-        string direction,
-        Guid? parkingLotId = null,
-        string? idempotencyKey = null,
-        Guid? uploadedBy = null,
-        CancellationToken cancellationToken = default);
+                                    byte[] imageBytes,
+                                    string gateId,
+                                    string direction,
+                                    Guid? parkingLotId = null,
+                                    string? idempotencyKey = null,
+                                    Guid? uploadedBy = null,
+                                    CancellationToken cancellationToken = default
+                                    );
 }

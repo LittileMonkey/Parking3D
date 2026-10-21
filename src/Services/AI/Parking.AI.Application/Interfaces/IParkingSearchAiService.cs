@@ -3,7 +3,7 @@ using Parking.AI.Application.DTOs.ParkingSearch;
 namespace Parking.AI.Application.Interfaces;
 
 /// <summary>
-/// Giao diện dịch vụ tìm kiếm bãi xe thông minh bằng NLP & GenAI (Google Gemini / Local LLM)
+/// Giao diện dịch vụ tìm kiếm bãi xe thông minh bằng NLP &amp; GenAI (Google Gemini / Local LLM)
 /// </summary>
 public interface IParkingSearchAiService
 {
