@@ -1,13 +1,6 @@
 ﻿using MediatR;
-using Parking.Identity.Application.Common.AppException;
-using Parking.Identity.Application.Common.Enum;
 using Parking.Identity.Application.Common.Interface;
 using Parking.Identity.Domain.Entities;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Parking.Identity.Application.UseCase.Authentication.ForgetPassword
 {
@@ -58,7 +51,7 @@ namespace Parking.Identity.Application.UseCase.Authentication.ForgetPassword
 
 
             await unit.SaveChangesAsync(cancellationToken);
-            
+
 
             await emailService.SendPasswordResetOtpAsync(user.EmailNormalized!, otp, cancellationToken);
 

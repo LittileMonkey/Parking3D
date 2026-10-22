@@ -1,4 +1,4 @@
-﻿using Parking.Identity.Application.Common.AppException;
+using Parking.Identity.Application.Common.AppException;
 using Parking.Identity.Application.Common.Enum;
 using Parking.Identity.Application.Common.Interface;
 using Parking.Identity.Application.DTOs;
@@ -28,8 +28,8 @@ namespace Parking.Identity.Application.UseCase.Authentication.TokenRefresh
             if (string.IsNullOrWhiteSpace(request.refreshToken))
             {
                 throw new AppException(
-                    ErrorCode.Unauthorized,
-                    "Refresh token is required.");
+                    ErrorCode.TokenMissing,
+                    "Authentication refresh token is required.");
             }
 
             // 2. Hash token từ client
@@ -44,15 +44,15 @@ namespace Parking.Identity.Application.UseCase.Authentication.TokenRefresh
             if (authToken == null)
             {
                 throw new AppException(
-                    ErrorCode.Unauthorized,
-                    "Refresh token is invalid.");
+                    ErrorCode.InvalidToken,
+                    "The provided refresh token is invalid.");
             }
 
             // 4. Kiểm tra purpose
             if (authToken.Purpose != "RefreshToken")
             {
                 throw new AppException(
-                    ErrorCode.Unauthorized,
+                    ErrorCode.InvalidToken,
                     "Invalid token purpose.");
             }
 
@@ -60,16 +60,16 @@ namespace Parking.Identity.Application.UseCase.Authentication.TokenRefresh
             if (authToken.RevokedAt != null)
             {
                 throw new AppException(
-                    ErrorCode.Unauthorized,
-                    "Refresh token has been revoked.");
+                    ErrorCode.InvalidToken,
+                    "The refresh token has been revoked.");
             }
 
             // 6. Kiểm tra thời hạn
             if (authToken.ExpiresAt <= DateTime.UtcNow)
             {
                 throw new AppException(
-                    ErrorCode.Unauthorized,
-                    "Refresh token has expired.");
+                    ErrorCode.TokenExpired,
+                    "The authentication token has expired. Please sign in again.");
             }
 
             // 7. Phát hiện token đã được sử dụng
@@ -80,8 +80,8 @@ namespace Parking.Identity.Application.UseCase.Authentication.TokenRefresh
                     cancellationToken);
 
                 throw new AppException(
-                    ErrorCode.Unauthorized,
-                    "Refresh token reuse detected.");
+                    ErrorCode.InvalidToken,
+                    "Refresh token reuse detected. All sessions have been revoked.");
             }
 
             // 8. Tìm user sở hữu refresh token
@@ -93,15 +93,15 @@ namespace Parking.Identity.Application.UseCase.Authentication.TokenRefresh
             {
                 throw new AppException(
                     ErrorCode.AccountNotFound,
-                    "User does not exist.");
+                    "The requested account could not be found.");
             }
 
             // 9. Kiểm tra trạng thái tài khoản
             if (user.Status != AppUserStatus.Active)
             {
                 throw new AppException(
-                    ErrorCode.Unauthorized,
-                    "User is inactive.");
+                    ErrorCode.AccountInactive,
+                    "The account is currently inactive.");
             }
 
             // 10. Đánh dấu token cũ đã sử dụng
@@ -140,11 +140,6 @@ namespace Parking.Identity.Application.UseCase.Authentication.TokenRefresh
             // 14. Trả về thông tin xác thực mới
             return new AuthenticationResponseDto
             {
-                UserId = user.Id,
-                FullName = user.FullName,
-                EmailNormalized = user.EmailNormalized,
-                Role = user.PlatformUserRoles
-                    .FirstOrDefault()?.RoleCode ?? string.Empty,
                 AccessToken = newAccessToken,
                 RefreshToken = newRefreshToken
             };

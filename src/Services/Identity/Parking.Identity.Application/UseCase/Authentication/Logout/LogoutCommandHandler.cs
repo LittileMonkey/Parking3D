@@ -1,4 +1,4 @@
-﻿using Parking.Identity.Application.Common.AppException;
+using Parking.Identity.Application.Common.AppException;
 using Parking.Identity.Application.Common.Enum;
 using Parking.Identity.Application.Common.Interface;
 using MediatR;
@@ -18,7 +18,7 @@ namespace Parking.Identity.Application.UseCase.Authentication.Logout
         {
             if (string.IsNullOrWhiteSpace(request.RefreshToken))
             {
-                throw new AppException(ErrorCode.TokenMissing, "Can Not Hash Token");
+                throw new AppException(ErrorCode.TokenMissing, "Authentication token is missing from the request.");
             }
             // Hash Refresh Token
             var tokenHash = accessToken.HashToken(request.RefreshToken);
@@ -29,13 +29,13 @@ namespace Parking.Identity.Application.UseCase.Authentication.Logout
 
             if (authToken == null)
             {
-                throw new AppException(ErrorCode.Unauthorized, "Refresh Invalid.");
+                throw new AppException(ErrorCode.InvalidToken, "The provided refresh token is invalid.");
             }
 
             //Đã revoke rồi
             if (authToken.RevokedAt != null)
             {
-                throw new AppException(ErrorCode.Unauthorized, "Refresh token đã bị revoke.");
+                throw new AppException(ErrorCode.InvalidToken, "The refresh token has already been revoked.");
             }
 
             //Revoke

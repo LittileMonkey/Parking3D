@@ -1,4 +1,4 @@
-﻿using Parking.Identity.Application.Common.AppException;
+using Parking.Identity.Application.Common.AppException;
 using Parking.Identity.Application.Common.Enum;
 using Parking.Identity.Application.Common.Interface;
 using Parking.Identity.Application.DTOs;
@@ -18,7 +18,7 @@ namespace Parking.Identity.Application.UseCase.Account.GetAccountById
             var user = await repository.GetUserByIdAsync(request.Id, cancellationToken);
             if (user == null)
             {
-                throw new AppException(ErrorCode.AccountNotFound, "Account Not Found");
+                throw new AppException(ErrorCode.AccountNotFound, "The requested account could not be found.");
             }
 
             return new AppUserDto

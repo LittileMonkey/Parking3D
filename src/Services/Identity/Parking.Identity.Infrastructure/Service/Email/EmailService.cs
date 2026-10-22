@@ -1,10 +1,9 @@
 ﻿
+using MailKit.Net.Smtp;
+using MailKit.Security;
 using Microsoft.Extensions.Configuration;
 using MimeKit;
 using Parking.Identity.Application.Common.Interface;
-using MailKit.Net;
-using MailKit.Net.Smtp;
-using MailKit.Security;
 
 namespace Parking.Identity.Infrastructure.Service.Email
 {
@@ -31,12 +30,22 @@ namespace Parking.Identity.Infrastructure.Service.Email
 
             message.Body = new TextPart("plain")
             {
-                Text = $"""
-                Your password reset OTP is: {otp}
+                   Text = $"""
+                          PARKINGLOTS SYSTEM
+                          PASSWORD RESET VERIFICATION
+                          Hello,
 
-                This OTP expires in 5 minutes.
-                If you did not request this, ignore this email.
-                """
+                          We received a request to reset the password for your ParkingLots System account.
+
+                          Your password reset OTP is: {otp}
+
+                          This OTP is valid for 5 minutes. For your security, do not share this code with anyone.
+
+                          If you did not request a password reset, please ignore this email. Your account will remain unchanged.
+
+                          Best regards,
+                          ParkingLots System Team
+                          """
             };
 
             var SmtpServer = Email["SmtpServer"] ?? throw new InvalidOperationException("Email:SmtpServer is missing.");
@@ -64,7 +73,7 @@ namespace Parking.Identity.Infrastructure.Service.Email
 
             await client.DisconnectAsync(true, cancellationToken);
 
-         
+
         }
     }
 }

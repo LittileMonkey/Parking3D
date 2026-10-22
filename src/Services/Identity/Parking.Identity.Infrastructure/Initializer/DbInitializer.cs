@@ -1,7 +1,7 @@
-﻿using Parking.Identity.Application.Common.Constants;
+﻿using Microsoft.Extensions.Configuration;
+using Parking.Identity.Application.Common.Constants;
 using Parking.Identity.Application.Common.Interface;
 using Parking.Identity.Domain.Entities;
-using Microsoft.Extensions.Configuration;
 
 namespace Parking.Identity.Infrastructure.Initializer
 {
@@ -78,7 +78,7 @@ namespace Parking.Identity.Infrastructure.Initializer
             }
 
             var existingEmail = await accountRepository.GetUserByEmail(email);
-            if(existingEmail != null)
+            if (existingEmail != null)
             {
                 return;
             }
@@ -100,7 +100,7 @@ namespace Parking.Identity.Infrastructure.Initializer
                 }
             };
 
-            appUser.PasswordHash =  passwordHasher.HashPassword(appUser, password);
+            appUser.PasswordHash = passwordHasher.HashPassword(appUser, password);
             await accountRepository.Register(appUser);
             await unitOfWork.SaveChangesAsync(cancellationToken);
 

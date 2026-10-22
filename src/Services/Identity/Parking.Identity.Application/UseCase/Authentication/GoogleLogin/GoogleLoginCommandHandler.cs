@@ -1,15 +1,9 @@
-﻿using MediatR;
+using MediatR;
 using Parking.Identity.Application.Common.AppException;
 using Parking.Identity.Application.Common.Constants;
 using Parking.Identity.Application.Common.Enum;
 using Parking.Identity.Application.Common.Interface;
-using Parking.Identity.Application.DTOs;
 using Parking.Identity.Domain.Entities;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Parking.Identity.Application.UseCase.Authentication.GoogleLogin
 {
@@ -48,13 +42,13 @@ namespace Parking.Identity.Application.UseCase.Authentication.GoogleLogin
 
             var user = await googleSubjectLogin.GetByGoogleSubject(googleUserInfo.GoogleSubject, cancellationToken);
 
-            if(user == null)
+            if (user == null)
             {
                 user = await repository.GetUserByEmail(normalizedEmail);
 
                 if (user != null)
                 {
-                    throw new AppException(ErrorCode.EmailAlreadyExists, "Email already exists. Please login with password or link your Google account securely.");
+                    throw new AppException(ErrorCode.EmailAlreadyExists, "An account with this email address already exists. Please sign in with your password.");
                 }
                 else
                 {
@@ -68,8 +62,8 @@ namespace Parking.Identity.Application.UseCase.Authentication.GoogleLogin
                         EmailVerifiedAt = DateTime.UtcNow,
                         Status = AppUserStatus.Active,
                         PasswordHash = null,
-                        PlatformUserRoles = new List<PlatformUserRole> 
-                        { 
+                        PlatformUserRoles = new List<PlatformUserRole>
+                        {
                             new PlatformUserRole
                             {
                                 UserId = userId,
@@ -77,25 +71,27 @@ namespace Parking.Identity.Application.UseCase.Authentication.GoogleLogin
                             }
                         }
                     };
-                    
+
                     await repository.Register(user);
 
                 }
             }
 
-            if(user.Status == AppUserStatus.Deactivate)
+            if (user.Status == AppUserStatus.Deactivate)
             {
-                throw new AppException(ErrorCode.AccountInactive, "This account is deactivated.");
+                throw new AppException(ErrorCode.AccountInactive, "The account has been deactivated.");
             }
 
             if (user.LockedUntil.HasValue && user.LockedUntil.Value > DateTime.UtcNow)
             {
-                throw new AppException(ErrorCode.AccountLocked, "This account is locked.");
+                throw new AppException(ErrorCode.AccountLocked, "The account is temporarily locked. Please try again later.");
             }
 
             var accessToken = accessTokenService.GenerateAccessToken(user);
 
             var refreshToken = accessTokenService.GenerateRefreshToken();
+
+            var refreshTokenHash = accessTokenService.HashToken(refreshToken);
 
             var familyId = Guid.NewGuid();
 
@@ -103,7 +99,7 @@ namespace Parking.Identity.Application.UseCase.Authentication.GoogleLogin
             {
                 Id = Guid.NewGuid(),
                 UserId = user.Id,
-                TokenHash = refreshToken,
+                TokenHash = refreshTokenHash,
                 FamilyId = familyId,
                 Purpose = "RefreshToken",
                 ExpiresAt = DateTime.UtcNow.AddDays(7),
@@ -119,7 +115,7 @@ namespace Parking.Identity.Application.UseCase.Authentication.GoogleLogin
                  AccessToken: accessToken,
                  RefreshToken: refreshToken
             );
-               
+
         }
     }
 }

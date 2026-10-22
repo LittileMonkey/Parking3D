@@ -1,4 +1,4 @@
-﻿using Parking.Identity.Application.Common.AppException;
+using Parking.Identity.Application.Common.AppException;
 using Parking.Identity.Application.Common.Enum;
 using Parking.Identity.Application.Common.Interface;
 using Parking.Identity.Application.DTOs;
@@ -21,7 +21,7 @@ namespace Parking.Identity.Application.UseCase.Account.GetAccountByEmail
 
             if (existingEmail == null)
             {
-                throw new AppException(ErrorCode.EmailNotFound, "Email Not Found");
+                throw new AppException(ErrorCode.EmailNotFound, "The specified email address was not found.");
             }
 
             return new AppUserDto
