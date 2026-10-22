@@ -233,3 +233,19 @@ export interface OccupancyForecastResult {
   modelVersion: string;
   isAdvisory: boolean;
 }
+
+export interface PlateRecognitionResult {
+  recognitionId?: string;
+  displayPlate: string;
+  plateNumber: string;
+  normalizedPlate?: string;
+  rawPlate?: string;
+  confidence: number;
+  plateType?: string;
+  croppedPlateBase64?: string;
+  status?: string | number;
+  vehicleTypeSuggestion?: string | number;
+  processingTimeMs?: number;
+  isFallback?: boolean;
+}
+

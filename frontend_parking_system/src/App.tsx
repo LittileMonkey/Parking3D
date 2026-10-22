@@ -18,6 +18,15 @@ import LiveParkingView from "./pages/staff/LiveParkingView";
 import IncidentsExceptions from "./pages/staff/IncidentsExceptions";
 import ShiftManagement from "./pages/staff/ShiftManagement";
 
+// Manager Operations Dashboard Components
+import ManagerLayout from "./components/manager/ManagerLayout";
+import ManagerDashboard from "./pages/manager/ManagerDashboard";
+import PricingPolicyPage from "./pages/manager/PricingPolicyPage";
+import FacilityLayoutPage from "./pages/manager/FacilityLayoutPage";
+import StaffShiftsPage from "./pages/manager/StaffShiftsPage";
+import IncidentsApprovalsPage from "./pages/manager/IncidentsApprovalsPage";
+import ReportsAuditPage from "./pages/manager/ReportsAuditPage";
+
 const Booking = lazy(() => import("./pages/Booking"));
 
 export default function App() {
@@ -43,6 +52,17 @@ export default function App() {
         <Route path="parking" element={<LiveParkingView />} />
         <Route path="incidents" element={<IncidentsExceptions />} />
         <Route path="shifts" element={<ShiftManagement />} />
+      </Route>
+
+      {/* Manager Operations Portal Routes */}
+      <Route path="/manager" element={<ManagerLayout />}>
+        <Route index element={<Navigate to="/manager/dashboard" replace />} />
+        <Route path="dashboard" element={<ManagerDashboard />} />
+        <Route path="pricing" element={<PricingPolicyPage />} />
+        <Route path="facility-layout" element={<FacilityLayoutPage />} />
+        <Route path="staff-shifts" element={<StaffShiftsPage />} />
+        <Route path="incidents-approvals" element={<IncidentsApprovalsPage />} />
+        <Route path="reports-audit" element={<ReportsAuditPage />} />
       </Route>
 
       <Route path="*" element={<Home />} />

@@ -209,7 +209,9 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  if (init.body) headers.set("Content-Type", "application/json");
+  if (init.body && !(init.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
 
   const token = sessionStorage.getItem("parking.accessToken");
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -463,4 +465,42 @@ export const api = {
       isAdvisory: boolean;
     }>(`/api/v1/parking-lots/${encodeURIComponent(lotId)}/occupancy-forecasts?${params.toString()}`);
   },
+
+  /**
+   * [REAL API AI] Nhận diện biển số xe bằng AI (ANPR OCR) qua upload file ảnh
+   */
+  async scanLicensePlate(
+    file: File,
+    gateId: string = "GATE_IN_01",
+    direction: "IN" | "OUT" = "IN",
+    parkingLotId?: string
+  ): Promise<PlateRecognitionResult> {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("gateId", gateId);
+    formData.append("direction", direction);
+    if (parkingLotId) {
+      formData.append("parkingLotId", parkingLotId);
+    }
+
+    return request<PlateRecognitionResult>("/api/v1/ai/license-plate/scan", {
+      method: "POST",
+      body: formData,
+    });
+  },
 };
+
+export interface PlateRecognitionResult {
+  recognitionId?: string;
+  displayPlate: string;
+  plateNumber: string;
+  normalizedPlate?: string;
+  rawPlate?: string;
+  confidence: number;
+  plateType?: string;
+  croppedPlateBase64?: string;
+  status?: string | number;
+  vehicleTypeSuggestion?: string | number;
+  processingTimeMs?: number;
+  isFallback?: boolean;
+}

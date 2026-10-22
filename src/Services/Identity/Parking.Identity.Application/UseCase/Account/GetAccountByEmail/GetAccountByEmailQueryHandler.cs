@@ -15,7 +15,9 @@ namespace Parking.Identity.Application.UseCase.Account.GetAccountByEmail
         }
         public async Task<AppUserDto> Handle(GetAccountByEmailQuery request, CancellationToken cancellationToken)
         {
-            var existingEmail = await repository.GetUserByEmail(request.emailNormalized);
+            var email = request.emailNormalized.Trim().ToLowerInvariant();
+
+            var existingEmail = await repository.GetUserByEmail(email);
 
             if (existingEmail == null)
             {

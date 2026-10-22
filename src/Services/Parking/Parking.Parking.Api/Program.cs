@@ -32,6 +32,8 @@ builder.Services.AddControllers().ConfigureApiBehaviorOptions(options =>
     options.InvalidModelStateResponseFactory = context => new BadRequestObjectResult(
         new Parking.ServiceDefaults.ApiResponse<object>(null, false, 400, "Invalid request parameters.")));
 
+builder.Services.AddSingleton<IQrTokenService, QrTokenService>();
+builder.Services.AddApplicationServices();
 var app = builder.Build();
 app.UseParkingDefaults("parking");
 app.UseMiddleware<ExceptionHandlingMiddleware>();

@@ -1,0 +1,524 @@
+{
+  "info": {
+    "name": "Hàn — SCRUM-48 & SCRUM-49",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Điền biến trong collection bằng dữ liệu local thật: Customer có verified vehicle access; Staff có assignment đúng lot. Mật khẩu/token không được export. Payment xác nhận qua Payment service; không sửa status booking bằng tay. Bộ test tự động chạy toàn bộ luồng trên database riêng: scripts/Test-ParkingScrum48-49.ps1."
+  },
+  "variable": [
+    {
+      "key": "identityUrl",
+      "value": "http://127.0.0.1:5041",
+      "type": "string"
+    },
+    {
+      "key": "parkingUrl",
+      "value": "http://127.0.0.1:8080",
+      "type": "string"
+    },
+    {
+      "key": "customerEmail",
+      "value": "testingparking2026@gmail.com",
+      "type": "string"
+    },
+    {
+      "key": "customerPassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "staffEmail",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "staffPassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "customerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "staffToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "lotId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "slotId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "vehicleId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "gateId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bookingId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "qrPayload",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bookingKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "checkInKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "startsAt",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "endsAt",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "detectedPlate",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Đăng nhập Customer",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{identityUrl}}/api/v1/auth/login",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"emailNormalized\": \"{{customerEmail}}\",\n  \"password\": \"{{customerPassword}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "if (pm.response.code === 200) pm.collectionVariables.set('customerToken', pm.response.json().result.accessToken);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Đăng nhập Staff đã được gán bãi",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{identityUrl}}/api/v1/auth/login",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"emailNormalized\": \"{{staffEmail}}\",\n  \"password\": \"{{staffPassword}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "if (pm.response.code === 200) pm.collectionVariables.set('staffToken', pm.response.json().result.accessToken);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 SCRUM-48 Availability",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{parkingUrl}}/api/v1/parking-lots/{{lotId}}/availability?vehicleType=CAR",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Tạo booking thuộc Customer hiện tại",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{bookingKey}}"
+          }
+        ],
+        "url": "{{parkingUrl}}/api/v1/bookings",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{customerToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"lotId\": \"{{lotId}}\",\n  \"slotId\": \"{{slotId}}\",\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"startsAt\": \"{{startsAt}}\",\n  \"endsAt\": \"{{endsAt}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "if (pm.response.code === 200) pm.collectionVariables.set('bookingId', pm.response.json().result.id);"
+            ]
+          }
+        },
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.collectionVariables.get('bookingKey')) {",
+              " pm.collectionVariables.set('bookingKey', pm.variables.replaceIn('{{$guid}}'));",
+              " pm.collectionVariables.set('startsAt', new Date(Date.now()+120000).toISOString());",
+              " pm.collectionVariables.set('endsAt', new Date(Date.now()+3720000).toISOString());",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 SCRUM-48 Booking detail — owner",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{parkingUrl}}/api/v1/bookings/{{bookingId}}",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{customerToken}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 QR khi CHƯA thanh toán — phải 409",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{parkingUrl}}/api/v1/bookings/{{bookingId}}/qr",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{customerToken}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Unpaid booking rejected', () => pm.response.to.have.status(409));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Sau payment CONFIRMED — cấp QR",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{parkingUrl}}/api/v1/bookings/{{bookingId}}/qr",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{customerToken}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "if (pm.response.code === 200) pm.collectionVariables.set('qrPayload', pm.response.json().result.qrPayload);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Customer tự check-in — phải 403",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "customer-must-not-admit"
+          }
+        ],
+        "url": "{{parkingUrl}}/api/v1/check-in",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{customerToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"lotId\": \"{{lotId}}\",\n  \"gateId\": \"{{gateId}}\",\n  \"qrPayload\": \"{{qrPayload}}\",\n  \"detectedPlate\": \"{{detectedPlate}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Customer denied', () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Staff đúng bãi / đúng biển số — check-in",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{checkInKey}}"
+          }
+        ],
+        "url": "{{parkingUrl}}/api/v1/check-in",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{staffToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"lotId\": \"{{lotId}}\",\n  \"gateId\": \"{{gateId}}\",\n  \"qrPayload\": \"{{qrPayload}}\",\n  \"detectedPlate\": \"{{detectedPlate}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "if (pm.response.code === 200) pm.collectionVariables.set('sessionId', pm.response.json().result.sessionId);"
+            ]
+          }
+        },
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.collectionVariables.get('checkInKey')) pm.collectionVariables.set('checkInKey', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 Quét lại QR bằng key MỚI — phải 409",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{$guid}}"
+          }
+        ],
+        "url": "{{parkingUrl}}/api/v1/check-in",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{staffToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"lotId\": \"{{lotId}}\",\n  \"gateId\": \"{{gateId}}\",\n  \"qrPayload\": \"{{qrPayload}}\",\n  \"detectedPlate\": \"{{detectedPlate}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('QR cannot create another session', () => pm.response.to.have.status(409));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 SCRUM-48 Availability sau check-in — OCCUPIED",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{parkingUrl}}/api/v1/parking-lots/{{lotId}}/availability?vehicleType=CAR",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

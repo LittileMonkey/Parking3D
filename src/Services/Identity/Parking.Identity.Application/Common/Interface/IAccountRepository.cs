@@ -9,11 +9,11 @@ namespace Parking.Identity.Application.Common.Interface
         Task<AppUser> UpdateAccount(AppUser appUser);
         Task<IEnumerable<AppUser>> GetAllAccountUser();
 
-        Task<AppUser?> GetUserByIdAsync(Guid userId, CancellationToken cancellationToken);
-        Task<AppUser?> GetUserByEmail(string email);
+        Task<AppUser> GetUserByIdAsync(Guid userId, CancellationToken cancellationToken);
+        Task<AppUser> GetUserByEmail(string email);
 
         Task<bool> DeleteUserById(string userId);
 
-        Task<AppUser?> GetUserByPhone(string phone);
+        Task<AppUser> GetUserByPhone(string phone);
     }
 }

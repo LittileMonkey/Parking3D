@@ -23,7 +23,7 @@ namespace Parking.Identity.Infrastructure.Initializer
         {
             var seedAdmin = configuration.GetSection("SeedAdmin");
 
-            var email = seedAdmin["Email"];
+            var email = seedAdmin["Email"]?.Trim().ToUpperInvariant();
 
             var password = seedAdmin["Password"];
 
@@ -46,7 +46,7 @@ namespace Parking.Identity.Infrastructure.Initializer
                 FullName = fullName,
                 EmailNormalized = email,
                 PhoneE164 = "+84383900873",
-                Status = "Active",
+                Status = AppUserStatus.Active,
                 CreatedAt = DateTime.UtcNow,
                 PlatformUserRoles = new List<PlatformUserRole>
                 {
@@ -68,7 +68,7 @@ namespace Parking.Identity.Infrastructure.Initializer
         {
             var seedStaff = configuration.GetSection("SeedStaff");
 
-            var email = seedStaff["Email"];
+            var email = seedStaff["Email"]?.Trim().ToUpperInvariant();
             var password = seedStaff["Password"];
             var fullName = seedStaff["FullName"];
 
@@ -90,7 +90,7 @@ namespace Parking.Identity.Infrastructure.Initializer
                 FullName = fullName,
                 EmailNormalized = email,
                 PhoneE164 = "+84339603819",
-                Status = "Active",
+                Status = AppUserStatus.Active,
                 PlatformUserRoles = new List<PlatformUserRole> {
                     new PlatformUserRole
                     {

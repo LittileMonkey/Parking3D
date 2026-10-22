@@ -21,6 +21,8 @@ $lines=@(
  ('BOOTSTRAP_PASSWORD='+(New-TaskSecret))
  'OCR_ENDPOINT='
  'OCR_API_KEY='
+ 'GEMINI_API_KEY='
+ 'GEMINI_MODEL=gemini-2.5-flash'
 )
 [IO.File]::WriteAllLines($destination,$lines,[Text.UTF8Encoding]::new($false))
 Write-Host 'Created ignored .env with generated Development secrets. Read BOOTSTRAP_EMAIL/PASSWORD locally to sign in; do not commit or share this file.'
