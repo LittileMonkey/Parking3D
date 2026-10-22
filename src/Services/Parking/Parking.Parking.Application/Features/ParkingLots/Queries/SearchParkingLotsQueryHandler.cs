@@ -1,4 +1,4 @@
-﻿using MediatR;
+using MediatR;
 using Parking.Parking.Application.DTOs;
 using Parking.Parking.Application.Interfaces;
 using Parking.Parking.Domain;
@@ -40,7 +40,6 @@ namespace Parking.Parking.Application.Features.ParkingLots.Queries
                         lot.Longitude);
                     distance = distanceInMeters / 1000.0;
                 }
-                // Gọi (Fake) Service tính giá cho TOÀN BỘ thời lượng đỗ
                 var pricing = await _priceService.CalculateEstimatedFeeAsync(
                     lot.Id,
                     request.VehicleType,
@@ -50,7 +49,9 @@ namespace Parking.Parking.Application.Features.ParkingLots.Queries
                 resultItems.Add(new ParkingLotItemDto
                 {
                     ParkingLotId = lot.Id,
+                    Code = lot.Code,
                     Name = lot.Name,
+                    Address = lot.Address,
                     Latitude = lot.Latitude,
                     Longitude = lot.Longitude,
                     DistanceKm = Math.Round(distance, 2), // Làm tròn 2 chữ số (VD: 1.25 km)
