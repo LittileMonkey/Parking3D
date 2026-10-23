@@ -8,17 +8,17 @@ import {
   Users,
   AlertTriangle,
   Bell,
-  ChevronLeft,
-  ChevronRight,
-  Menu,
-  X,
   Search,
   RotateCw,
   ParkingCircle,
-  ExternalLink,
   DollarSign,
   Sliders,
   FileText,
+  Sun,
+  Moon,
+  ArrowLeftRight,
+  Menu,
+  X,
 } from "lucide-react";
 import { managerApi } from "../../services/manager/managerApi";
 import type { ManagerFacilitySummary, ReportingPeriod } from "../../types/manager";
@@ -28,7 +28,9 @@ export default function ManagerLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    return (localStorage.getItem("pm-manager-theme") as "dark" | "light") || "dark";
+  });
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [facilities, setFacilities] = useState<ManagerFacilitySummary[]>([]);
   const [selectedLotId, setSelectedLotId] = useState<string>("all");
@@ -36,6 +38,13 @@ export default function ManagerLayout() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  // Sync theme with localStorage
+  const toggleTheme = () => {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    setTheme(nextTheme);
+    localStorage.setItem("pm-manager-theme", nextTheme);
+  };
 
   // Load facility list for the header selector
   useEffect(() => {
@@ -59,124 +68,133 @@ export default function ManagerLayout() {
   const navItems = [
     {
       to: "/manager/dashboard",
-      label: "Tổng quan điều hành",
-      icon: <LayoutDashboard size={20} />,
+      label: "Overview",
+      fullName: "Tổng quan điều hành",
+      icon: <LayoutDashboard size={21} />,
     },
     {
       to: "/manager/pricing",
-      label: "Biểu phí & Chính sách",
-      icon: <DollarSign size={20} />,
+      label: "Biểu phí",
+      fullName: "Biểu phí & Chính sách",
+      icon: <DollarSign size={21} />,
     },
     {
       to: "/manager/facility-layout",
-      label: "Sơ đồ & Ô đỗ (Slots)",
-      icon: <Sliders size={20} />,
+      label: "Sơ đồ Ô đỗ",
+      fullName: "Sơ đồ & Ô đỗ (Slots)",
+      icon: <Sliders size={21} />,
     },
     {
       to: "/manager/staff-shifts",
-      label: "Ca trực & Đối soát quỹ",
-      icon: <Users size={20} />,
+      label: "Nhân sự",
+      fullName: "Ca trực & Đối soát quỹ",
+      icon: <Users size={21} />,
     },
     {
       to: "/manager/incidents-approvals",
-      label: "Phê duyệt ngoại lệ",
-      icon: <AlertTriangle size={20} />,
+      label: "Ngoại lệ",
+      fullName: "Phê duyệt ngoại lệ",
+      icon: <AlertTriangle size={21} />,
       badge: 3,
     },
     {
       to: "/manager/reports-audit",
-      label: "Báo cáo & Audit logs",
-      icon: <FileText size={20} />,
+      label: "Báo cáo",
+      fullName: "Báo cáo & Audit logs",
+      icon: <FileText size={21} />,
     },
     {
       to: "/booking",
-      label: "Bản đồ 3D bãi xe",
-      icon: <Box size={20} />,
-      isExternalLike: true,
+      label: "Bản đồ 3D",
+      fullName: "Bản đồ 3D bãi xe",
+      icon: <Box size={21} />,
     },
     {
       to: "/staff/operations",
-      label: "Cổng kiểm soát xe",
-      icon: <Car size={20} />,
-      isExternalLike: true,
+      label: "Kiểm soát xe",
+      fullName: "Cổng kiểm soát xe",
+      icon: <Car size={21} />,
     },
   ];
 
   return (
-    <div className="pm-manager-shell">
-      {/* ─── Left Sidebar / Rail (Admin Dashboard V7 Style) ─────────────── */}
-      <aside
-        className={`pm-manager-sidebar ${sidebarCollapsed ? "collapsed" : ""} ${
-          mobileSidebarOpen ? "mobile-open" : ""
-        }`}
-        aria-label="Thanh điều hướng quản lý"
-      >
-        {/* Brand Header */}
-        <div className="pm-sidebar-brand">
+    <div className={`pm-manager-shell pm-theme-${theme}`}>
+      {/* ─── Floating Left Capsule Dock (Inspired by Screenshot) ─────────────── */}
+      <aside className="pm-floating-dock" aria-label="Thanh điều hướng nhanh">
+        {/* Top Logo / Brand Icon */}
+        <div className="pm-dock-top">
           <div
-            className="pm-sidebar-logo-icon"
+            className="pm-dock-brand-icon"
             onClick={() => navigate("/manager/dashboard")}
             role="button"
             tabIndex={0}
-            title="ParkMatrix Manager"
+            title="ParkMatrix Smart 3D System"
           >
             <ParkingCircle size={24} />
           </div>
-          {!sidebarCollapsed && (
-            <div className="pm-sidebar-logo-text">
-              <span className="pm-sidebar-brand-name">
-                Park<span>Matrix</span>
-              </span>
-              <span className="pm-sidebar-brand-sub">Manager V7</span>
-            </div>
-          )}
+
+          <button
+            type="button"
+            className="pm-dock-link"
+            style={{ width: "36px", height: "36px", opacity: 0.7 }}
+            onClick={() => navigate("/staff/operations")}
+            title="Chuyển chế độ điều phối"
+          >
+            <ArrowLeftRight size={17} />
+          </button>
         </div>
 
-        {/* Navigation List */}
-        <nav className="pm-sidebar-nav">
+        {/* Vertical Icon Navigation List */}
+        <nav className="pm-dock-nav">
           {navItems.map((item) => {
             const isActive = location.pathname === item.to;
             return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive: active }) =>
-                  `pm-sidebar-link ${active || isActive ? "active" : ""}`
-                }
-                title={sidebarCollapsed ? item.label : undefined}
-                onClick={() => setMobileSidebarOpen(false)}
-              >
-                <span className="pm-nav-icon">{item.icon}</span>
-                {!sidebarCollapsed && <span>{item.label}</span>}
-                {!sidebarCollapsed && item.badge && (
-                  <span className="pm-sidebar-badge">{item.badge}</span>
-                )}
-                {!sidebarCollapsed && item.isExternalLike && (
-                  <ExternalLink size={12} style={{ marginLeft: "auto", opacity: 0.5 }} />
-                )}
-              </NavLink>
+              <div key={item.to} className="pm-dock-item-wrap">
+                <NavLink
+                  to={item.to}
+                  className={({ isActive: active }) =>
+                    `pm-dock-link ${active || isActive ? "active" : ""}`
+                  }
+                  aria-label={item.fullName}
+                >
+                  {item.icon}
+                  {item.badge && <span className="pm-dock-badge" />}
+                </NavLink>
+                {/* Floating Tooltip just like the "Overview" tooltip in screenshot! */}
+                <div className="pm-dock-tooltip">{item.label}</div>
+              </div>
             );
           })}
         </nav>
 
-        {/* Sidebar Collapse & Logout Footer */}
-        <div className="pm-sidebar-footer">
+        {/* Bottom Theme Toggle & Profile Avatar */}
+        <div className="pm-dock-bottom">
           <button
             type="button"
-            className="pm-sidebar-collapse-btn"
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            title={sidebarCollapsed ? "Mở rộng thanh điều hướng" : "Thu gọn"}
+            className="pm-dock-theme-toggle"
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Chuyển sang giao diện Sáng (Light Mode)" : "Chuyển sang giao diện Tối (Dark Mode)"}
+            aria-label="Đổi giao diện Sáng / Tối"
           >
-            {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-            {!sidebarCollapsed && <span>Thu gọn thanh trượt</span>}
+            {theme === "dark" ? <Sun size={20} /> : <Moon size={20} />}
           </button>
+
+          <div
+            className="pm-dock-avatar"
+            onClick={() => setShowProfileMenu(!showProfileMenu)}
+            role="button"
+            tabIndex={0}
+            title="Tài khoản Quản lý"
+          >
+            QL
+          </div>
         </div>
       </aside>
 
       {/* ─── Main Content Canvas ────────────────────────────────────────── */}
-      <main className="pm-manager-main">
+      <main className="pm-manager-main" style={{ flex: 1, minWidth: 0, paddingRight: "16px" }}>
         {/* Top Header Bar */}
-        <header className="pm-manager-header">
+        <header className="pm-manager-header" style={{ marginBottom: "16px" }}>
           {/* Header Left: Mobile toggle & Facility Selector */}
           <div className="pm-header-left">
             <button
@@ -231,13 +249,27 @@ export default function ManagerLayout() {
             </button>
           </div>
 
-          {/* Header Right: Search, Refresh, Alerts, Profile */}
+          {/* Header Right: Search, Theme Toggle, Refresh, Alerts, Profile */}
           <div className="pm-header-right">
-            <div className="pm-header-search">
-              <Search size={14} style={{ color: "#7aa5ae" }} />
-              <input type="text" placeholder="Tra cứu biển số, mã đặt chỗ..." />
-              <span className="pm-search-shortcut">⌘K</span>
-            </div>
+            {/* Theme Toggle Pill Button */}
+            <button
+              type="button"
+              className="pm-v8-theme-pill-btn"
+              onClick={toggleTheme}
+              title={theme === "dark" ? "Chuyển sang giao diện Sáng (Light Mode)" : "Chuyển sang giao diện Tối (Dark Mode)"}
+            >
+              {theme === "dark" ? (
+                <>
+                  <Sun size={15} style={{ color: "#ff7828" }} />
+                  <span>Chế độ Sáng</span>
+                </>
+              ) : (
+                <>
+                  <Moon size={15} style={{ color: "#087f8c" }} />
+                  <span>Chế độ Tối</span>
+                </>
+              )}
+            </button>
 
             <button
               type="button"
@@ -267,7 +299,7 @@ export default function ManagerLayout() {
             >
               <div className="pm-avatar-img">QL</div>
               <div className="pm-profile-meta">
-                <span className="pm-profile-name">Trần Anh Tuấn</span>
+                <span className="pm-profile-name">Lionel Messi</span>
                 <span className="pm-profile-role">PARKING MANAGER</span>
               </div>
             </div>
@@ -279,32 +311,32 @@ export default function ManagerLayout() {
                   position: "absolute",
                   top: "65px",
                   right: "24px",
-                  background: "rgba(10, 28, 38, 0.95)",
-                  backdropFilter: "blur(16px)",
-                  border: "1px solid rgba(255, 255, 255, 0.15)",
-                  borderRadius: "14px",
+                  background: "var(--pm-card-bg)",
+                  backdropFilter: "blur(18px)",
+                  border: "1px solid var(--pm-card-border)",
+                  borderRadius: "16px",
                   padding: "8px",
-                  boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
-                  zIndex: 50,
-                  minWidth: "190px",
+                  boxShadow: "var(--pm-card-shadow)",
+                  zIndex: 80,
+                  minWidth: "210px",
                 }}
               >
-                <div style={{ padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.08)", color: "#a8cdd0", fontSize: "11px" }}>
-                  Tài khoản Quản lý cơ sở
+                <div style={{ padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.08)", color: "var(--pm-text-muted)", fontSize: "11px" }}>
+                  Tài khoản Quản lý cơ sở (@manager)
                 </div>
                 <button
                   type="button"
-                  style={{ width: "100%", background: "none", border: "none", color: "#fff", textAlign: "left", padding: "8px 12px", borderRadius: "8px", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", fontSize: "12px" }}
+                  style={{ width: "100%", background: "none", border: "none", color: "var(--pm-text-heading)", textAlign: "left", padding: "10px 12px", borderRadius: "10px", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", fontSize: "12px", fontWeight: 600 }}
                   onClick={() => { setShowProfileMenu(false); navigate("/staff/dashboard"); }}
                 >
-                  <Users size={14} /> Chuyển Cổng Nhân Viên
+                  <Users size={14} style={{ color: "#ff7828" }} /> Chuyển Cổng Nhân Viên
                 </button>
                 <button
                   type="button"
-                  style={{ width: "100%", background: "none", border: "none", color: "#fff", textAlign: "left", padding: "8px 12px", borderRadius: "8px", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", fontSize: "12px" }}
+                  style={{ width: "100%", background: "none", border: "none", color: "var(--pm-text-heading)", textAlign: "left", padding: "10px 12px", borderRadius: "10px", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", fontSize: "12px", fontWeight: 600 }}
                   onClick={() => { setShowProfileMenu(false); navigate("/"); }}
                 >
-                  <Building2 size={14} /> Về Trang Chủ Khách Hàng
+                  <Building2 size={14} style={{ color: "#14afbe" }} /> Về Trang Chủ Khách Hàng
                 </button>
               </div>
             )}
@@ -320,9 +352,12 @@ export default function ManagerLayout() {
             setPeriod,
             refreshKey,
             handleRefresh,
+            theme,
+            toggleTheme,
           }}
         />
       </main>
     </div>
   );
 }
+
