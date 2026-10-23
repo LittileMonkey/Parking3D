@@ -313,7 +313,10 @@ public sealed class PaymentService(
             var now     = DateTimeOffset.UtcNow;
 
             // Lấy thông tin bổ sung để tạo event
-            Guid lotId; Guid bookingId; string currency;
+            Guid lotId; 
+            Guid bookingId; 
+            string currency;
+
             await using (var infoCmd = new NpgsqlCommand(
                 "SELECT a.lot_id, a.booking_id, a.currency " +
                 "FROM billing_accounts a " +

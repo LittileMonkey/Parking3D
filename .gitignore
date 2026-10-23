@@ -99,8 +99,8 @@ wheels/
 
 # 10. AI Agent Local Workspace Config & Rules
 .agents/
-docs/*SCRUM-56*.md
-*SCRUM-56*.md
+docs/*SCRUM-*.md
+*SCRUM-*.md
 docs/*Giai_Thich*.md
 *Giai_Thich*.md
 
