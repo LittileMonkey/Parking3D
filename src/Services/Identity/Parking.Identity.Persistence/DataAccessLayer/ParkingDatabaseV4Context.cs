@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Parking.Identity.Domain.Entities;
 
 namespace Parking.Identity.Persistence.DataAccessLayer;
@@ -31,6 +31,9 @@ public partial class ParkingDatabaseV4Context : DbContext
     public virtual DbSet<ServiceSchemaVersion> ServiceSchemaVersions { get; set; }
 
     public virtual DbSet<PasswordResetOtp> PasswordResetOtps { get; set; }
+    public virtual DbSet<UserVehicle> UserVehicles { get; set; }
+
+    public virtual DbSet<UserMembership> UserMemberships { get; set; }
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder
@@ -257,10 +260,89 @@ public partial class ParkingDatabaseV4Context : DbContext
                 .HasColumnName("used_at");
 
             entity.Property(x => x.AttemptCount)
+                .HasDefaultValue(0)
                 .HasColumnName("attempt_count");
 
             entity.Property(x => x.CreatedAt)
                 .HasColumnName("created_at");
+        });
+
+        modelBuilder.Entity<UserVehicle>(entity =>
+        {
+            entity.ToTable("user_vehicles");
+
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Id)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("id");
+
+            entity.Property(e => e.UserId)
+                .HasColumnName("user_id");
+
+            entity.Property(e => e.LicensePlate)
+                .HasMaxLength(16)
+                .HasColumnName("license_plate")
+                .IsRequired();
+
+            entity.Property(e => e.VehicleType)
+                .HasMaxLength(10)
+                .HasColumnName("vehicle_type")
+                .IsRequired();
+
+            entity.Property(e => e.IsDefault)
+                .HasDefaultValue(false)
+                .HasColumnName("is_default");
+
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("now()")
+                .HasColumnName("created_at");
+
+            entity.Property(e => e.UpdatedAt)
+                .HasDefaultValueSql("now()")
+                .HasColumnName("updated_at");
+
+            entity.HasIndex(e => new { e.UserId, e.LicensePlate })
+                .IsUnique()
+                .HasDatabaseName("uq_user_vehicles_user_plate");
+
+            entity.HasIndex(e => e.UserId)
+                .HasDatabaseName("ix_user_vehicles_user_id");
+
+            entity.HasIndex(e => e.UserId)
+                .IsUnique()
+                .HasFilter("is_default = true")
+                .HasDatabaseName("ux_user_vehicles_default");
+
+            entity.HasOne(e => e.User)
+                .WithMany(e => e.UserVehicles)
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<UserMembership>(entity =>
+        {
+            entity.ToTable("user_memberships");
+
+            entity.HasKey(e => e.UserId);
+
+            entity.Property(e => e.UserId)
+                .HasColumnName("user_id");
+
+            entity.Property(e => e.TierCode)
+                .HasMaxLength(20)
+                .HasDefaultValue("STANDARD")
+                .HasColumnName("tier_code")
+                .IsRequired();
+
+            entity.Property(e => e.UpdatedAt)
+                .HasDefaultValueSql("now()")
+                .HasColumnName("updated_at");
+
+            entity.HasOne(e => e.User)
+                .WithOne(e => e.Membership)
+                .HasForeignKey<UserMembership>(e => e.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         OnModelCreatingPartial(modelBuilder);

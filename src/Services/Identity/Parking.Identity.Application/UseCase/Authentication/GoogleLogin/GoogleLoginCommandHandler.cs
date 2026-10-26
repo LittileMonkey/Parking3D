@@ -14,6 +14,7 @@ namespace Parking.Identity.Application.UseCase.Authentication.GoogleLogin
         private readonly IAccessTokenService accessTokenService;
         private readonly IGoogleTokenValidator googleTokenValidator;
         private readonly IAuthTokenRepository authTokenRepository;
+        private readonly IUserMembershipRepository userMembershipRepository;
         private readonly IUnitOfWork unitOfWork;
 
         public GoogleLoginCommandHandler(IAccountRepository repository,
@@ -21,14 +22,16 @@ namespace Parking.Identity.Application.UseCase.Authentication.GoogleLogin
             IAccessTokenService accessTokenService,
             IGoogleTokenValidator googleTokenValidator,
             IAuthTokenRepository authTokenRepository,
+            IUserMembershipRepository userMembershipRepository,
             IUnitOfWork unitOfWork)
         {
             this.repository = repository;
             this.googleSubjectLogin = googleSubjectLogin;
             this.accessTokenService = accessTokenService;
             this.googleTokenValidator = googleTokenValidator;
-            this.unitOfWork = unitOfWork;
             this.authTokenRepository = authTokenRepository;
+            this.userMembershipRepository = userMembershipRepository;
+            this.unitOfWork = unitOfWork;
         }
         public async Task<GoogleLoginResult> Handle(GoogleLoginCommand request, CancellationToken cancellationToken)
         {
@@ -74,6 +77,13 @@ namespace Parking.Identity.Application.UseCase.Authentication.GoogleLogin
 
                     await repository.Register(user);
 
+                    var memberShip = new UserMembership
+                    {
+                        UserId = userId,
+                        TierCode = UserMembershipTierCode.STANDARD,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    await userMembershipRepository.AddUserMembershipAsync(memberShip, cancellationToken);
                 }
             }
 

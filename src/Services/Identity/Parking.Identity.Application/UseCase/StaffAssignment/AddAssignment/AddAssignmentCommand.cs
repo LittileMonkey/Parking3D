@@ -1,10 +1,12 @@
-﻿using MediatR;
+using MediatR;
 using Parking.Identity.Application.DTOs;
 
-namespace Parking.Identity.Application.UseCase.LotStaffAssignment.AddAssignment
+namespace Parking.Identity.Application.UseCase.StaffAssignment.AddAssignment
 {
     public record AddAssignmentCommand : IRequest<LotsAssignmentDto>
     {
+        public Guid ActorId { get; set; }
+
         public Guid UserId { get; init; }
 
         public Guid LotId { get; init; }

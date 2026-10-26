@@ -1,4 +1,4 @@
-﻿using Parking.Identity.Application.Common.Interface;
+using Parking.Identity.Application.Common.Interface;
 using Parking.Identity.Application.DTOs;
 using MediatR;
 
@@ -23,8 +23,12 @@ namespace Parking.Identity.Application.UseCase.Account.GetAllAccount
                 EmailNormalized = x.EmailNormalized,
                 PhoneE164 = x.PhoneE164,
                 Status = x.Status,
+                EmailVerifiedAt = x.EmailVerifiedAt,
+                PhoneVerifiedAt = x.PhoneVerifiedAt,
+                LockedUntil = x.LockedUntil,
                 CreatedAt = x.CreatedAt,
-                UpdatedAt = x.UpdatedAt
+                UpdatedAt = x.UpdatedAt,
+                Roles = x.PlatformUserRoles.Select(r => r.RoleCode).ToList()
             });
         }
     }

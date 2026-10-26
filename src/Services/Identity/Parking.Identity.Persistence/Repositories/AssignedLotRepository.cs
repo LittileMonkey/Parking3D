@@ -83,7 +83,7 @@ namespace Parking.Identity.Persistence.Repositories
 
         public async Task<bool> CheckAccessAsync(Guid userId, Guid lotId, string capability, CancellationToken cancellationToken)
         {
-            if (userId == Guid.Empty || capability is not ("USER" or "ADMIN" or "OCR" or "GATE" or "CASH" or "REPORT"))
+            if (userId == Guid.Empty || capability is not ("USER" or "ADMIN" or "OCR" or "GATE" or "CASH" or "REPORT" or "LOOKUP" or "CHECK_IN"))
                 return false;
 
             var now = DateTime.UtcNow;
@@ -100,7 +100,7 @@ namespace Parking.Identity.Persistence.Repositories
                 "ADMIN" => await context.PlatformUserRoles
                     .AsNoTracking()
                     .AnyAsync(r => r.UserId == userId && r.RoleCode == "ADMIN", cancellationToken),
-                "OCR" => await context.LotStaffAssignments
+                "OCR" or "GATE" or "CASH" or "LOOKUP" or "CHECK_IN" => await context.LotStaffAssignments
                     .AsNoTracking()
                     .AnyAsync(a => a.UserId == userId
                                 && a.LotId == lotId
@@ -108,14 +108,6 @@ namespace Parking.Identity.Persistence.Repositories
                                 && a.ValidFrom <= now
                                 && (a.ValidUntil == null || now < a.ValidUntil)
                                 && (a.RoleCode == "PARKING_STAFF" || a.RoleCode == "PARKING_MANAGER"), cancellationToken),
-                "GATE" or "CASH" => await context.LotStaffAssignments
-                    .AsNoTracking()
-                    .AnyAsync(a => a.UserId == userId
-                                && a.LotId == lotId
-                                && a.RevokedAt == null
-                                && a.ValidFrom <= now
-                                && (a.ValidUntil == null || now < a.ValidUntil)
-                                && a.RoleCode == "PARKING_STAFF", cancellationToken),
                 "REPORT" => await context.LotStaffAssignments
                     .AsNoTracking()
                     .AnyAsync(a => a.UserId == userId

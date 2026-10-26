@@ -24,18 +24,16 @@ namespace Parking.Identity.Application.UseCase.Account.GetAccountById
             return new AppUserDto
             {
                 Id = user.Id,
-
                 FullName = user.FullName,
-
                 EmailNormalized = user.EmailNormalized,
-
                 PhoneE164 = user.PhoneE164,
-
                 Status = user.Status,
-
+                EmailVerifiedAt = user.EmailVerifiedAt,
+                PhoneVerifiedAt = user.PhoneVerifiedAt,
+                LockedUntil = user.LockedUntil,
                 CreatedAt = user.CreatedAt,
-
-                UpdatedAt = user.UpdatedAt
+                UpdatedAt = user.UpdatedAt,
+                Roles = user.PlatformUserRoles.Select(r => r.RoleCode).ToList()
             };
         }
     }

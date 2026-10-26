@@ -25,23 +25,45 @@ namespace Parking.Identity.Application.UseCase.Account.UpdateAccount
             {
                 throw new AppException(ErrorCode.AccountNotFound, "The requested account could not be found.");
             }
-            var email = request.EmailNormalized.Trim().ToUpperInvariant();
 
-            if (account.EmailNormalized != email)
+            if (!string.IsNullOrWhiteSpace(request.EmailNormalized))
             {
-                var existingEmail = await repository.GetUserByEmail(email);
-
-                if (existingEmail != null && existingEmail.Id != account.Id)
+                var email = request.EmailNormalized.Trim().ToUpperInvariant();
+                if (account.EmailNormalized != email)
                 {
-                    throw new AppException(ErrorCode.EmailAlreadyExists, "An account with this email address already exists.");
+                    var existingEmail = await repository.GetUserByEmail(email);
+                    if (existingEmail != null && existingEmail.Id != account.Id)
+                    {
+                        throw new AppException(ErrorCode.EmailAlreadyExists, "An account with this email address already exists.");
+                    }
+                    account.EmailNormalized = email;
+                    account.EmailVerifiedAt = null;
                 }
-
-
-                account.EmailNormalized = email;
             }
 
-            account.FullName = request.FullName;
-            account.PhoneE164 = request.PhoneE164;
+            if (request.PhoneE164 != null)
+            {
+                var phoneE164 = request.PhoneE164.Trim();
+                if (account.PhoneE164 != phoneE164)
+                {
+                    if (!string.IsNullOrWhiteSpace(phoneE164))
+                    {
+                        var existingPhone = await repository.GetUserByPhone(phoneE164);
+                        if (existingPhone != null && existingPhone.Id != account.Id)
+                        {
+                            throw new AppException(ErrorCode.PhoneAlreadyExists, "An account with this phone number already exists.");
+                        }
+                    }
+                    account.PhoneE164 = string.IsNullOrWhiteSpace(phoneE164) ? null : phoneE164;
+                    account.PhoneVerifiedAt = null;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.FullName))
+            {
+                account.FullName = request.FullName.Trim();
+            }
+
             account.UpdatedAt = DateTime.UtcNow;
 
             await repository.UpdateAccount(account);
@@ -54,8 +76,12 @@ namespace Parking.Identity.Application.UseCase.Account.UpdateAccount
                 EmailNormalized = account.EmailNormalized,
                 PhoneE164 = account.PhoneE164,
                 Status = account.Status,
+                EmailVerifiedAt = account.EmailVerifiedAt,
+                PhoneVerifiedAt = account.PhoneVerifiedAt,
+                LockedUntil = account.LockedUntil,
                 CreatedAt = account.CreatedAt,
-                UpdatedAt = account.UpdatedAt
+                UpdatedAt = account.UpdatedAt,
+                Roles = account.PlatformUserRoles.Select(r => r.RoleCode).ToList()
             };
         }
     }
