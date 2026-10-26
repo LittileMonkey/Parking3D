@@ -120,6 +120,7 @@ CREATE TABLE public.password_reset_otps
     created_at TIMESTAMPTZ NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL,
     used_at TIMESTAMPTZ NULL,
+    attempt_count INT NOT NULL DEFAULT 0,
 
     CONSTRAINT fk_password_reset_otps_app_users
         FOREIGN KEY (user_id)
@@ -132,5 +133,71 @@ CREATE INDEX ix_password_reset_otps_user_id
 
 CREATE INDEX ix_password_reset_otps_user_id_created_at
     ON public.password_reset_otps(user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS public.user_vehicles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    user_id UUID NOT NULL,
+    license_plate VARCHAR(16) NOT NULL,
+    vehicle_type VARCHAR(10) NOT NULL,
+    is_default BOOLEAN NOT NULL DEFAULT FALSE,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT fk_user_vehicles_app_users
+        FOREIGN KEY (user_id)
+        REFERENCES public.app_users(id)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT ck_user_vehicles_type
+        CHECK (vehicle_type IN ('Car', 'EV', 'Bike')),
+
+    CONSTRAINT uq_user_vehicles_user_plate
+        UNIQUE (user_id, license_plate)
+);
+
+CREATE INDEX IF NOT EXISTS ix_user_vehicles_user_id
+    ON public.user_vehicles(user_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_user_vehicles_default
+    ON public.user_vehicles(user_id)
+    WHERE is_default = TRUE;
+
+
+CREATE TABLE IF NOT EXISTS public.user_memberships (
+    user_id UUID PRIMARY KEY,
+
+    tier_code VARCHAR(20) NOT NULL DEFAULT 'STANDARD',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT fk_user_memberships_app_users
+        FOREIGN KEY (user_id)
+        REFERENCES public.app_users(id)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT ck_user_memberships_tier
+        CHECK (
+            tier_code IN (
+                'STANDARD',
+                'SILVER',
+                'GOLD_STAR'
+            )
+        )
+);
+
+
+INSERT INTO public.user_memberships (
+    user_id,
+    tier_code,
+    updated_at
+)
+SELECT
+    id,
+    'STANDARD',
+    NOW()
+FROM public.app_users
+ON CONFLICT (user_id) DO NOTHING;
+
 
 COMMIT;
