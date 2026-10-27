@@ -10,6 +10,7 @@ public sealed class CheckInCommandHandler(
     IParkingRepository repository, IQrTokenService qrTokens, IFacilityAccess access)
     : IRequestHandler<CheckInCommand, CheckInResponseDto>
 {
+    /// <summary>Hỏi Identity quyền CHECK_IN và xác minh QR trước khi gọi transaction tạo phiên một lần.</summary>
     public async Task<CheckInResponseDto> Handle(CheckInCommand command, CancellationToken ct)
     {
         // Hỏi Identity trước khi giữ khóa DB, tránh chờ mạng trong transaction.

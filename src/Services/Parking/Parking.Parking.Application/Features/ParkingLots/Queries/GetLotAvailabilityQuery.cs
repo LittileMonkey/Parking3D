@@ -3,12 +3,12 @@ using Parking.Parking.Application.DTOs;
 
 namespace Parking.Parking.Application.Features.ParkingLots.Queries;
 
-// Query tra cứu khả dụng bãi xe theo khung thời gian và loại xe
-public class GetLotAvailabilityQuery : IRequest<LotAvailabilityDto>
+// Đầu vào tra cứu; Repository bổ sung thời gian mặc định nếu người dùng bỏ trống.
+public sealed class GetLotAvailabilityQuery : IRequest<LotAvailabilityDto>
 {
-    public Guid LotId { get; set; }
-    public DateTimeOffset? StartTime { get; set; }
-    public DateTimeOffset? EndTime { get; set; }
-    public string? VehicleType { get; set; }
-    public Guid? LevelId { get; set; }
+    public Guid LotId { get; init; }
+    public DateTimeOffset? StartTime { get; init; }
+    public DateTimeOffset? EndTime { get; init; }
+    public string? VehicleType { get; init; }
+    public Guid? LevelId { get; init; }
 }

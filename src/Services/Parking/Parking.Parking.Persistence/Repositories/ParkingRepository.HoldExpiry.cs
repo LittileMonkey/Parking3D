@@ -6,8 +6,10 @@ namespace Parking.Parking.Persistence.Repositories;
 public sealed partial class ParkingRepository
 {
     // Chỉ hết hạn hold pending; không giải phóng slot đang có xe vật lý.
+    /// <summary>Xử lý tối đa 100 hold pending hết hạn; kiểm tra lại dưới khóa, bảo vệ booking đã xác nhận và xe đang đỗ vật lý.</summary>
     public Task<int> ExpireHoldsAsync(CancellationToken ct) => ExpireHoldsAsync(ct, null, null);
 
+    /// <summary>Xử lý tối đa 100 hold pending hết hạn; kiểm tra lại dưới khóa, bảo vệ booking đã xác nhận và xe đang đỗ vật lý.</summary>
     private async Task<int> ExpireHoldsAsync(CancellationToken ct, Guid? vehicleId, Guid? slotId)
     {
         var candidates = new List<(Guid Booking, Guid Vehicle)>();
@@ -26,35 +28,37 @@ public sealed partial class ParkingRepository
             cmd.Parameters.Add("vehicle", NpgsqlDbType.Uuid).Value = (object?)vehicleId ?? DBNull.Value;
             cmd.Parameters.Add("slot", NpgsqlDbType.Uuid).Value = (object?)slotId ?? DBNull.Value;
             await using var reader = await cmd.ExecuteReaderAsync(ct);
-            while (await reader.ReadAsync(ct)) candidates.Add((reader.GetGuid(0),reader.GetGuid(1)));
+            while (await reader.ReadAsync(ct)) candidates.Add((reader.GetGuid(0), reader.GetGuid(1)));
         }
+        // Mỗi booking có transaction riêng; lỗi hoặc bỏ qua sẽ rollback khi transaction được giải phóng.
         var count = 0;
         foreach (var candidate in candidates)
         {
             await using var tx = await conn.BeginTransactionAsync(ct);
-            await using (var cmd = new NpgsqlCommand("SELECT lock_parking_resource('VEHICLE',@vehicle)",conn,tx))
+            await using (var cmd = new NpgsqlCommand("SELECT lock_parking_resource('VEHICLE',@vehicle)", conn, tx))
             {
-                cmd.Parameters.AddWithValue("vehicle",candidate.Vehicle);
+                cmd.Parameters.AddWithValue("vehicle", candidate.Vehicle);
                 await cmd.ExecuteNonQueryAsync(ct);
             }
+            // Sắp xếp slot để mọi luồng lấy khóa cùng thứ tự, giảm nguy cơ deadlock.
             var slots = new SortedSet<Guid>();
-            await using (var cmd = new NpgsqlCommand("SELECT slot_id FROM slot_reservations WHERE booking_id=@id AND status IN ('HELD','CONFIRMED')",conn,tx))
+            await using (var cmd = new NpgsqlCommand("SELECT slot_id FROM slot_reservations WHERE booking_id=@id AND status IN ('HELD','CONFIRMED')", conn, tx))
             {
-                cmd.Parameters.AddWithValue("id",candidate.Booking);
+                cmd.Parameters.AddWithValue("id", candidate.Booking);
                 await using var reader = await cmd.ExecuteReaderAsync(ct);
-                while(await reader.ReadAsync(ct)) slots.Add(reader.GetGuid(0));
+                while (await reader.ReadAsync(ct)) slots.Add(reader.GetGuid(0));
             }
             foreach (var slot in slots)
             {
-                await using var cmd = new NpgsqlCommand("SELECT lock_parking_resource('SLOT',@slot)",conn,tx);
-                cmd.Parameters.AddWithValue("slot",slot);
+                await using var cmd = new NpgsqlCommand("SELECT lock_parking_resource('SLOT',@slot)", conn, tx);
+                cmd.Parameters.AddWithValue("slot", slot);
                 await cmd.ExecuteNonQueryAsync(ct);
             }
-            // The candidate list is only a hint. Recheck under the same resource locks as payment/booking.
-            await using (var cmd = new NpgsqlCommand("SELECT id FROM bookings WHERE id=@id AND vehicle_id=@vehicle AND status='PENDING_PAYMENT' AND hold_expires_at<=clock_timestamp() FOR UPDATE",conn,tx))
+            // Danh sách ban đầu chỉ để chọn ứng viên; phải kiểm tra lại dưới khóa dùng chung với payment/booking.
+            await using (var cmd = new NpgsqlCommand("SELECT id FROM bookings WHERE id=@id AND vehicle_id=@vehicle AND status='PENDING_PAYMENT' AND hold_expires_at<=clock_timestamp() FOR UPDATE", conn, tx))
             {
-                cmd.Parameters.AddWithValue("id",candidate.Booking);
-                cmd.Parameters.AddWithValue("vehicle",candidate.Vehicle);
+                cmd.Parameters.AddWithValue("id", candidate.Booking);
+                cmd.Parameters.AddWithValue("vehicle", candidate.Vehicle);
                 if (await cmd.ExecuteScalarAsync(ct) is null) continue;
             }
             var currentSlots = new SortedSet<Guid>();
@@ -63,17 +67,20 @@ public sealed partial class ParkingRepository
                 SELECT r.slot_id,r.status::text,EXISTS(SELECT 1 FROM session_slot_assignments a
                   WHERE a.slot_id=r.slot_id AND a.vacated_at IS NULL)
                 FROM slot_reservations r WHERE r.booking_id=@id AND r.status IN ('HELD','CONFIRMED') FOR UPDATE OF r
-                """,conn,tx))
+                """, conn, tx))
             {
-                cmd.Parameters.AddWithValue("id",candidate.Booking);
-                await using var reader=await cmd.ExecuteReaderAsync(ct);
-                while(await reader.ReadAsync(ct))
+                cmd.Parameters.AddWithValue("id", candidate.Booking);
+                await using var reader = await cmd.ExecuteReaderAsync(ct);
+                while (await reader.ReadAsync(ct))
                 {
                     currentSlots.Add(reader.GetGuid(0));
-                    protectedResource |= reader.GetString(1)!="HELD" || reader.GetBoolean(2);
+                    protectedResource |= reader.GetString(1) != "HELD" || reader.GetBoolean(2);
                 }
             }
-            if (protectedResource || !currentSlots.SetEquals(slots)) continue;
+            if (protectedResource || !currentSlots.SetEquals(slots))
+            {
+                continue;
+            }
             await using (var cmd = new NpgsqlCommand("""
                 UPDATE slot_reservations SET status='RELEASED',released_at=clock_timestamp(),release_reason='HOLD_EXPIRED'
                   WHERE booking_id=@id AND status='HELD';
@@ -82,9 +89,9 @@ public sealed partial class ParkingRepository
                 INSERT INTO audit_logs(id,lot_id,actor_type,action,entity_type,entity_id,reason,created_at)
                   SELECT gen_random_uuid(),lot_id,'SYSTEM','EXPIRE_HOLD','BOOKING',id::text,'Configured hold deadline elapsed',clock_timestamp()
                   FROM bookings WHERE id=@id;
-                """,conn,tx))
+                """, conn, tx))
             {
-                cmd.Parameters.AddWithValue("id",candidate.Booking);
+                cmd.Parameters.AddWithValue("id", candidate.Booking);
                 await cmd.ExecuteNonQueryAsync(ct);
             }
             await tx.CommitAsync(ct);

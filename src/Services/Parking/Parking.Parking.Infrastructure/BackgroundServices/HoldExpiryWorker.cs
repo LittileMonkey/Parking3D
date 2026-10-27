@@ -5,10 +5,12 @@ using Parking.Parking.Application;
 
 namespace Parking.Parking.Infrastructure.BackgroundServices;
 
+// Quét booking quá hạn mỗi 10 giây; mỗi lượt tạo scope riêng cho Repository.
 public sealed class HoldExpiryWorker(
     IServiceScopeFactory scopeFactory,
     ILogger<HoldExpiryWorker> logger) : BackgroundService
 {
+    /// <summary>Quét hold mỗi 10 giây với scope riêng mỗi lượt; hỗ trợ hủy khi tắt ứng dụng và ghi lỗi để lượt sau tiếp tục.</summary>
     protected override async Task ExecuteAsync(
         CancellationToken stoppingToken)
     {

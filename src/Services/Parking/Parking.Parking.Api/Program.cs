@@ -27,7 +27,7 @@ builder.Services.AddMemoryCache();
 // 2. Đăng ký Repository và Service tính giá THẬT (thay thế Fake)
 builder.Services.AddScoped<IParkingLotRepository, ParkingLotRepository>();
 builder.Services.AddScoped<IEstimatedPriceService, EstimatedPriceService>();
-builder.Services.AddApplicationServices();
+
 builder.Services.AddControllers().ConfigureApiBehaviorOptions(options =>
     options.InvalidModelStateResponseFactory = context => new BadRequestObjectResult(
         new Parking.ServiceDefaults.ApiResponse<object>(null, false, 400, "Invalid request parameters.")));
@@ -41,7 +41,7 @@ app.MapGrpcService<ParkingCatalogGrpc>();
 app.MapGrpcService<BookingPaymentQueryGrpc>();
 app.MapGrpcService<PaymentEventsGrpc>();
 
-app.MapGet("/api/v1/parking-lots", async (IParkingRepository repo, CancellationToken ct) => 
+app.MapGet("/api/v1/parking-lots", async (IParkingRepository repo, CancellationToken ct) =>
     Responses.Ok(await repo.ListLotsAsync(ct)));
 
 app.MapPost("/api/v1/bookings", async (BookingRequest request, HttpContext context, IFacilityAccess access, IParkingRepository repo, CancellationToken ct) =>
