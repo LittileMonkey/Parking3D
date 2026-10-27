@@ -70,3 +70,11 @@ Các tests Repository Parking, transaction/check-in/hold/QR, Domain/Validator v�
 Đã chạy lại riêng 7 tests chưa qua, không đổi code hoặc chính sách Windows: 0 pass, 7 fail, 0 skip. Tất cả vẫn bị chặn nạp Parking.AI.Application.dll hoặc Parking.Parking.Api.dll với 0x800711C7. Đọc Code Integrity event log bằng tiến trình agent cũng bị từ chối quyền; chưa xác định chính xác cơ chế/policy Windows nào gây chặn. Không kết luận rằng chạy terminal khác chắc chắn sẽ giải quyết được.
 
 Log retry: C:/Users/LOQ/Documents/Codex/2026-10-17/hi/work/parking-cleanup-retry-blocked.log. TRX: artifacts/microservices/cleanup-20261027/results/cleanup-retry-blocked.trx.
+
+## Đồng bộ Git trước khi push theo yêu cầu của Hàn
+
+Đã commit riêng 48 file Parking/tests/báo cáo với tác giả XuanHan105205, email lexuanhan105@gmail.com (db0e9ca), rồi merge dev de746a2 thành công không conflict. Các chỉnh sửa local-only của Identity/shared/solution được cất nguyên trong stash, không đưa vào commit Parking và không tự áp lại lên source mới của nhóm.
+
+Sau merge, đã bỏ một lần đăng ký AddApplicationServices bị trùng trong Parking API. Build lại Parking API và project tests đều 0 warnings, 0 errors. Chưa chạy lại toàn bộ tests runtime sau merge theo yêu cầu hoãn test của Hàn; kết quả 45/52 là lượt trước đồng bộ dev, không phải chứng nhận phiên bản hiện tại. Chưa merge PR vào dev.
+
+Diff so với dev đã kiểm tra: chỉ có src/Services/Parking/*.cs, bốn file tests và hai báo cáo; không có Identity, Payment, AI, shared, schema hoặc solution trong thay đổi đề xuất.
