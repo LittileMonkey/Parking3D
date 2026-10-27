@@ -218,10 +218,7 @@ export default function Home() {
 
           <nav className={`main-nav-light ${mobileMenu ? "is-open" : ""}`} aria-label="Điều hướng chính">
             <Link to="/booking" onClick={() => setMobileMenu(false)} className="nav-item">
-              {lang === "en" ? "Book a slot" : "Đặt chỗ 3D"}
-            </Link>
-            <Link to="/search" onClick={() => setMobileMenu(false)} className="nav-item">
-              {t("nav.find")}
+              {lang === "en" ? "Find & book" : "Tìm và đặt chỗ"}
             </Link>
             <a href="#gis-section" onClick={() => setMobileMenu(false)} className="nav-item">
               {t("nav.map")}
@@ -332,7 +329,7 @@ export default function Home() {
                   <strong>{lang === "en" ? "Find a parking lot" : "Tìm bãi đỗ xe phù hợp"}</strong>
                   <span>{lang === "en" ? "Compare distance, availability and estimated price." : "So sánh khoảng cách, chỗ trống và giá ước tính theo thời gian gửi."}</span>
                 </div>
-                <Link className="search-submit-btn" to="/search">
+                <Link className="search-submit-btn" to="/booking">
                   <Search size={18} /> {lang === "en" ? "Search lots" : "Tìm bãi"}
                 </Link>
               </div>
@@ -472,7 +469,7 @@ export default function Home() {
               {lang === "en"
                 ? "The homepage map is illustrative. Use live lot search for current availability and duration-based price estimates."
                 : "Bản đồ trang chủ mang tính minh họa. Dùng tìm kiếm bãi để xem chỗ trống và giá ước tính từ API."}
-              {" "}<Link to="/search">{lang === "en" ? "Search lots" : "Tìm bãi đỗ"}</Link>
+              {" "}<Link to="/booking">{lang === "en" ? "Search lots" : "Tìm và đặt chỗ"}</Link>
             </p>
 
             {/* Interactive Vector GIS Canvas */}
