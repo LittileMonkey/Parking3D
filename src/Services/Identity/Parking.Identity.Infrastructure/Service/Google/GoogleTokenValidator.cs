@@ -14,7 +14,7 @@ namespace Parking.Identity.Infrastructure.Service.Google
         {
             clientId = configuration["Google:ClientId"];
 
-            if(string.IsNullOrWhiteSpace(clientId))
+            if (string.IsNullOrWhiteSpace(clientId))
             {
                 throw new AppException(ErrorCode.ClientIDNotFound, "Google:ClientId is not configured.");
             }
@@ -38,10 +38,10 @@ namespace Parking.Identity.Infrastructure.Service.Google
 
             return new GoogleUserDto
             (
-                GoogleSubject : payload.Subject,
-                Email : payload.Email,
-                EmailVerified : payload.EmailVerified,
-                FullName : payload.Name
+                GoogleSubject: payload.Subject,
+                Email: payload.Email,
+                EmailVerified: payload.EmailVerified,
+                FullName: payload.Name
             );
         }
     }

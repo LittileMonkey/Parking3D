@@ -97,3 +97,10 @@ wheels/
 *.egg
 .pytest_cache/
 
+# 10. AI Agent Local Workspace Config & Rules
+.agents/
+docs/*SCRUM-*.md
+*SCRUM-*.md
+docs/*Giai_Thich*.md
+*Giai_Thich*.md
+

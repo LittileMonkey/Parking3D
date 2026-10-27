@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace Parking.Identity.Domain.Entities;
+﻿namespace Parking.Identity.Domain.Entities;
 
 public partial class AppUser
 {
@@ -33,4 +30,7 @@ public partial class AppUser
     public virtual ICollection<LotStaffAssignment> LotStaffAssignments { get; set; } = new List<LotStaffAssignment>();
 
     public virtual ICollection<PlatformUserRole> PlatformUserRoles { get; set; } = new List<PlatformUserRole>();
+    public virtual ICollection<UserVehicle> UserVehicles { get; set; } = new List<UserVehicle>();
+
+    public virtual UserMembership? Membership { get; set; }
 }

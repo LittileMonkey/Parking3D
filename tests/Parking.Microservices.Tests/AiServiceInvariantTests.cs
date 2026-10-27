@@ -36,4 +36,51 @@ public sealed class AiServiceInvariantTests
         Assert.True(ImageRules.IsNormalizedPlate(sanitized));
         Assert.Equal("51K88888", sanitized);
     }
+
+    [Fact]
+    public void ImageRules_ValidatesMagicBytes_ForJpegAndPng()
+    {
+        // 1. Giả lập Header Magic Bytes chuẩn của ảnh JPEG (FF D8 FF)
+        byte[] validJpegBytes = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46];
+        Assert.True(ImageRules.IsSupported(validJpegBytes, "image/jpeg"));
+
+        // 2. Giả lập Header Magic Bytes chuẩn của ảnh PNG (89 50 4E 47 0D 0A 1A 0A)
+        byte[] validPngBytes = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00];
+        Assert.True(ImageRules.IsSupported(validPngBytes, "image/png"));
+
+        // 3. Giả lập file độc hại (.exe hoặc văn bản đổi tên thành .jpg)
+        byte[] fakeExeBytes = [0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00]; // Chữ ký MZ của file thực thi PE
+        Assert.False(ImageRules.IsSupported(fakeExeBytes, "image/jpeg"), "Hệ thống phải từ chối file exe giả mạo đuôi ảnh");
+    }
+
+    [Fact]
+    public void PythonPlateDetectionResponse_DeserializesLayoutEnrichedResponse()
+    {
+        var json = """
+        {
+            "plate_text": "59-P1 678.90",
+            "confidence": 0.94,
+            "plate_type": "TwoLine",
+            "cropped_image_base64": "iVBORw0KGgoAAAANSUhEUgAA",
+            "processing_time_ms": 78,
+            "status": "valid",
+            "format_valid": true,
+            "error": null
+        }
+        """;
+
+        var response = System.Text.Json.JsonSerializer.Deserialize<PythonPlateDetectionResponse>(json, new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
+
+        Assert.NotNull(response);
+        Assert.Equal("59-P1 678.90", response.PlateText);
+        Assert.Equal(0.94, response.Confidence);
+        Assert.Equal("TwoLine", response.PlateType);
+        Assert.Equal("valid", response.Status);
+        Assert.True(response.FormatValid);
+        Assert.Equal(78, response.ProcessingTimeMs);
+    }
 }
+

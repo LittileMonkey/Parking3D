@@ -1,4 +1,4 @@
-﻿
+
 using Parking.Identity.Application.Common.AppException;
 using Parking.Identity.Application.Common.Constants;
 using Parking.Identity.Application.Common.Enum;
@@ -10,18 +10,22 @@ namespace Parking.Identity.Application.UseCase.Account.CreateAccount
 {
     public class CreateAccountCommandHandler : IRequestHandler<CreateAccountCommand, AppUserDto>
     {
-        public readonly IAccountRepository repository;
+        private readonly IAccountRepository repository;
         private readonly IUnitOfWork unitOfWork;
         private readonly IPasswordHasherService passwordHasher;
+        private readonly IUserMembershipRepository userMembershipRepository;
 
-        public CreateAccountCommandHandler(IAccountRepository repository, IUnitOfWork unitOfWork, IPasswordHasherService passwordHasher)
+        public CreateAccountCommandHandler(IAccountRepository repository, IUnitOfWork unitOfWork, IPasswordHasherService passwordHasher, IUserMembershipRepository userMembershipRepository)
         {
             this.repository = repository;
             this.unitOfWork = unitOfWork;
             this.passwordHasher = passwordHasher;
+            this.userMembershipRepository = userMembershipRepository;
         }
         public async Task<AppUserDto> Handle(CreateAccountCommand request, CancellationToken cancellationToken)
         {
+            ArgumentNullException.ThrowIfNull(request.EmailNormalized);
+            ArgumentNullException.ThrowIfNull(request.PhoneE164);
             // Chuẩn hóa email
             var email = request.EmailNormalized.Trim().ToUpperInvariant();
 
@@ -29,36 +33,19 @@ namespace Parking.Identity.Application.UseCase.Account.CreateAccount
 
             if(existingEmail != null)
             {
-                throw new AppException(ErrorCode.EmailAlreadyExists, "Email AlreadyExits");
+                throw new AppException(ErrorCode.EmailAlreadyExists, "An account with this email address already exists.");
             }
 
-            var existingPhone = await repository.GetUserByPhone(request.PhoneE164);
+            var existingPhone = await repository.GetUserByPhone(request.PhoneE164.Trim());
 
             if (existingPhone != null)
             {
-                throw new AppException(ErrorCode.PhoneAlreadyExists, "Your phone already exit!!!");
+                throw new AppException(ErrorCode.PhoneAlreadyExists, "An account with this phone number already exists.");
             }
 
-            //Validate role
-            var roles = request.Roles
-                .Where(x => !string.IsNullOrWhiteSpace(x))
-                .Select(x => x.Trim().ToUpperInvariant())
-                .Distinct().ToList();
-
-            if(roles.Count == 0)
+            if (request.Roles != null && request.Roles.Any(r => !string.IsNullOrWhiteSpace(r) && !string.Equals(r.Trim(), AppUserRoles.Customer, StringComparison.OrdinalIgnoreCase)))
             {
-                roles.Add(AppUserRoles.Customer);
-            }
-
-            //Validate Not Match
-
-            var invalidRoles = roles
-                .Where(role => !AppUserRoles.All.Contains(role))
-                .ToList();
-
-            if (invalidRoles.Count > 0) 
-            { 
-                throw new AppException(ErrorCode.InvalidRequest ,$"Invalid role(s): {string.Join(", ", invalidRoles)}");
+                throw new AppException(ErrorCode.InvalidRequest, "Public registration cannot assign administrative roles.");
             }
 
             Guid userId = Guid.NewGuid();
@@ -73,21 +60,22 @@ namespace Parking.Identity.Application.UseCase.Account.CreateAccount
                 UpdatedAt = DateTime.UtcNow
             };
 
-            appUser.PasswordHash = passwordHasher.HashPassword(appUser, request.Password);
-            var verifyTest = passwordHasher.VerifiedPassword( appUser, request.Password, appUser.PasswordHash);
-
-            Console.WriteLine($"REGISTER VERIFY = {verifyTest}");
-
-            foreach (var role in roles)
+            var memberShip = new UserMembership
             {
-                appUser.PlatformUserRoles.Add(new PlatformUserRole
-                {
+                UserId = appUser.Id,
+                TierCode = UserMembershipTierCode.STANDARD
+            };
+
+             appUser.PasswordHash = passwordHasher.HashPassword(appUser, request.Password);
+
+             appUser.PlatformUserRoles.Add(new PlatformUserRole
+             {
                     UserId = userId,
-                    RoleCode = role
-                });
-            }
+                    RoleCode = AppUserRoles.Customer
+             });
 
             await repository.Register(appUser);
+            await userMembershipRepository.AddUserMembershipAsync(memberShip, cancellationToken);
 
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -103,7 +91,10 @@ namespace Parking.Identity.Application.UseCase.Account.CreateAccount
 
                 Status = appUser.Status,
 
-                Roles = roles,
+                Roles = new List<string>()
+                {
+                    AppUserRoles.Customer
+                },
 
                 CreatedAt = appUser.CreatedAt,
 

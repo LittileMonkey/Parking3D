@@ -1,10 +1,5 @@
-﻿using Parking.Identity.Application.DTOs;
-using MediatR;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using MediatR;
+using Parking.Identity.Application.DTOs;
 
 namespace Parking.Identity.Application.UseCase.Account.CreateAccount
 {

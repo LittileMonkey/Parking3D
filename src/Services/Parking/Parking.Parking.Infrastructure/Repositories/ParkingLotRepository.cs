@@ -1,4 +1,4 @@
-﻿using Npgsql;
+using Npgsql;
 using Parking.Parking.Application.Interfaces;
 using Parking.Parking.Domain;
 
@@ -25,7 +25,9 @@ public class ParkingLotRepository : IParkingLotRepository
                 (l.latitude)::float8,
                 (l.longitude)::float8,
                 l.status,
-                COALESCE(slots_stat.available_count, 0) AS available_slots
+                COALESCE(slots_stat.available_count, 0) AS available_slots,
+                l.code,
+                l.address
             FROM parking_lots l
             JOIN lot_vehicle_policies p ON p.lot_id = l.id AND p.vehicle_type = @vehicleType
             LEFT JOIN (
@@ -69,7 +71,9 @@ public class ParkingLotRepository : IParkingLotRepository
                 Latitude = reader.GetDouble(2),
                 Longitude = reader.GetDouble(3),
                 Status = reader.GetString(4),
-                AvailableSlots = reader.GetInt32(5)
+                AvailableSlots = reader.GetInt32(5),
+                Code = reader.IsDBNull(6) ? string.Empty : reader.GetString(6),
+                Address = reader.IsDBNull(7) ? string.Empty : reader.GetString(7)
             });
         }
 

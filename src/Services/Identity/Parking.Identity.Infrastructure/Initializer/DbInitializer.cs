@@ -1,7 +1,7 @@
-﻿using Parking.Identity.Application.Common.Constants;
+﻿using Microsoft.Extensions.Configuration;
+using Parking.Identity.Application.Common.Constants;
 using Parking.Identity.Application.Common.Interface;
 using Parking.Identity.Domain.Entities;
-using Microsoft.Extensions.Configuration;
 
 namespace Parking.Identity.Infrastructure.Initializer
 {
@@ -31,7 +31,7 @@ namespace Parking.Identity.Infrastructure.Initializer
 
             if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password) || string.IsNullOrWhiteSpace(fullName))
             {
-                throw new InvalidOperationException("Chưa cấu hình thông tin tài khoản Admin.");
+                throw new InvalidOperationException("Have Not Config Account Admin Yet!!!");
             }
             var existingEmail = await accountRepository.GetUserByEmail(email);
 
@@ -44,7 +44,7 @@ namespace Parking.Identity.Infrastructure.Initializer
             {
                 Id = userId,
                 FullName = fullName,
-                EmailNormalized = email,
+                EmailNormalized = email.ToUpperInvariant(),
                 PhoneE164 = "+84383900873",
                 Status = AppUserStatus.Active,
                 CreatedAt = DateTime.UtcNow,
@@ -74,11 +74,11 @@ namespace Parking.Identity.Infrastructure.Initializer
 
             if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password) || string.IsNullOrWhiteSpace(fullName))
             {
-                throw new InvalidOperationException("Have not config account Staff yet!!!.");
+                throw new InvalidOperationException("Have Not Config Account Staff yet!!!.");
             }
 
             var existingEmail = await accountRepository.GetUserByEmail(email);
-            if(existingEmail != null)
+            if (existingEmail != null)
             {
                 return;
             }
@@ -88,7 +88,7 @@ namespace Parking.Identity.Infrastructure.Initializer
             {
                 Id = userId,
                 FullName = fullName,
-                EmailNormalized = email,
+                EmailNormalized = email.ToUpperInvariant(),
                 PhoneE164 = "+84339603819",
                 Status = AppUserStatus.Active,
                 PlatformUserRoles = new List<PlatformUserRole> {
@@ -100,7 +100,7 @@ namespace Parking.Identity.Infrastructure.Initializer
                 }
             };
 
-            appUser.PasswordHash =  passwordHasher.HashPassword(appUser, password);
+            appUser.PasswordHash = passwordHasher.HashPassword(appUser, password);
             await accountRepository.Register(appUser);
             await unitOfWork.SaveChangesAsync(cancellationToken);
 

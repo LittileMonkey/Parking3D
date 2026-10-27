@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Parking.Payment.Api.Common;
 using Parking.Payment.Application.DTOs;
+using Parking.Payment.Application.UseCase.CalculateFee;
 using Parking.Payment.Application.UseCase.ConfirmCashPayment;
 using Parking.Payment.Application.UseCase.GetPaymentStatus;
 using System;
@@ -80,7 +81,30 @@ namespace Parking.Payment.Api.Controllers
             return Ok(response);
         }
 
+        /// <summary>
+        /// Ước tính hoặc tính toán tiền cước đỗ xe theo Block 15p, Giờ cao điểm 1.2x, Trần ngày và Chiết khấu Gold Star
+        /// </summary>
+        [HttpPost("calculate-fee")]
+        public async Task<IActionResult> CalculateFee([FromBody] CalculateFeeRequestDto requestDto, CancellationToken cancellationToken)
+        {
+            // 1. Chuyển đổi từ DTO sang CQRS Query
+            var query = new CalculateFeeQuery(
+                requestDto.ParkingLotId,
+                requestDto.EntryTime,
+                requestDto.ExitTime,
+                requestDto.IsGoldStarMember,
+                requestDto.VehicleType
+            );
+            // 2. Gửi qua MediatR (tự động chạy qua CalculateFeeQueryValidator để kiểm tra tính hợp lệ)
+            var resultDto = await _mediator.Send(query, cancellationToken);
 
+            // 3. Bọc kết quả vào phong bì ApiResponse chuẩn 200 OK của dự án
+            var response = ApiResponse<FeeCalculationResultDto>.Success(
+                resultDto, "Calculated parking fee successfully.",200);
+            return Ok(response);
+
+
+        }
 
     }
 }

@@ -12,7 +12,7 @@ namespace Parking.Identity.Persistence.Service.Google
         {
             this.context = context;
         }
-        public async Task<AppUser> GetByGoogleSubject(string googleSubject, CancellationToken cancellationToken)
+        public async Task<AppUser?> GetByGoogleSubject(string googleSubject, CancellationToken cancellationToken)
         {
             return await context.AppUsers
                 .Include(x => x.PlatformUserRoles)

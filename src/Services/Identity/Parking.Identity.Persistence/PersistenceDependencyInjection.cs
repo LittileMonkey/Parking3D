@@ -1,4 +1,4 @@
-﻿using Parking.Identity.Application.Common.Interface;
+using Parking.Identity.Application.Common.Interface;
 using Parking.Identity.Persistence.DataAccessLayer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Parking.Identity.Persistence.Repositories;
@@ -18,8 +18,17 @@ namespace Parking.Identity.Persistence
     {
         public static IServiceCollection AddPersistenceDependencyInjection(this IServiceCollection services, IConfiguration configuration)
         {
-            services.AddDbContext<ParkingDatabaseV4Context>(options =>
-            options.UseNpgsql(configuration.GetConnectionString("DefaultConnectionString")));
+            var connStr = configuration.GetConnectionString("Service") ?? configuration.GetConnectionString("DefaultConnectionString");
+
+            if (string.IsNullOrWhiteSpace(connStr))
+            {
+                throw new InvalidOperationException(
+                    "Database connection string is missing. " +
+                    "Configure ConnectionStrings:Service or " +
+                    "ConnectionStrings:DefaultConnectionString.");
+            }
+
+            services.AddDbContext<ParkingDatabaseV4Context>(options => options.UseNpgsql(connStr));
 
             services.AddScoped<IAccountRepository, AccountRepository>();
             services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -33,7 +42,7 @@ namespace Parking.Identity.Persistence
                     options.TokenValidationParameters = new TokenValidationParameters
                     {
                         ValidateIssuerSigningKey = true,
-                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["Jwt:Key"])),
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["Jwt:Key"] ?? "")),
 
                         ValidateIssuer = true,
                         ValidIssuer = configuration["Jwt:Issuer"],
@@ -49,6 +58,9 @@ namespace Parking.Identity.Persistence
 
             services.AddScoped<IGoogleSubjectLogin, GoogleSubjectLogin>();
             services.AddScoped<IPasswordResetOtpRepository, PasswordResetOtpRepository>();
+            services.AddScoped<IUserVehicleRepository, UserVehicleRepository>();
+            services.AddScoped<IUserMembershipRepository, UserMembershipRepository>();
+            services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 
             return services;
         }

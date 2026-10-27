@@ -1,4 +1,4 @@
-﻿using Parking.Identity.Application.Common.AppException;
+using Parking.Identity.Application.Common.AppException;
 using Parking.Identity.Application.Common.Enum;
 using Parking.Identity.Application.Common.Interface;
 using Parking.Identity.Application.DTOs;
@@ -15,30 +15,33 @@ namespace Parking.Identity.Application.UseCase.Account.GetAccountByEmail
         }
         public async Task<AppUserDto> Handle(GetAccountByEmailQuery request, CancellationToken cancellationToken)
         {
-            var email = request.emailNormalized.Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(request.emailNormalized))
+            {
+                throw new AppException(ErrorCode.RequiredFieldMissing, "Email address is required.");
+            }
+
+            var email = request.emailNormalized.Trim().ToUpperInvariant();
 
             var existingEmail = await repository.GetUserByEmail(email);
 
             if (existingEmail == null)
             {
-                throw new AppException(ErrorCode.EmailNotFound, "Email Not Found");
+                throw new AppException(ErrorCode.EmailNotFound, "The specified email address was not found.");
             }
 
             return new AppUserDto
             {
                 Id = existingEmail.Id,
-
                 FullName = existingEmail.FullName,
-
                 EmailNormalized = existingEmail.EmailNormalized,
-
                 PhoneE164 = existingEmail.PhoneE164,
-
                 Status = existingEmail.Status,
-
+                EmailVerifiedAt = existingEmail.EmailVerifiedAt,
+                PhoneVerifiedAt = existingEmail.PhoneVerifiedAt,
+                LockedUntil = existingEmail.LockedUntil,
                 CreatedAt = existingEmail.CreatedAt,
-
-                UpdatedAt = existingEmail.UpdatedAt
+                UpdatedAt = existingEmail.UpdatedAt,
+                Roles = existingEmail.PlatformUserRoles.Select(r => r.RoleCode).ToList()
             };
         }
     }

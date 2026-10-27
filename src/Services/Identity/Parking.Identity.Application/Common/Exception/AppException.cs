@@ -1,17 +1,12 @@
-﻿using Parking.Identity.Application.Common.Enum;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using Parking.Identity.Application.Common.Enum;
 
 namespace Parking.Identity.Application.Common.AppException
 {
     public class AppException : Exception
     {
-        public ErrorCode ErrorCode { get; set; }
+        public string ErrorCode { get; set; } = string.Empty;
         public AppException() { }
-        public AppException(ErrorCode errorCode, string message) : base(message)
+        public AppException(string errorCode, string message) : base(message)
         {
             ErrorCode = errorCode;
         }

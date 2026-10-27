@@ -1,13 +1,7 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Parking.Identity.Application.Common.Interface;
 using Parking.Identity.Domain.Entities;
 using Parking.Identity.Persistence.DataAccessLayer;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using static System.Net.WebRequestMethods;
 
 namespace Parking.Identity.Persistence.Repositories
 {
@@ -20,14 +14,13 @@ namespace Parking.Identity.Persistence.Repositories
         }
         public async Task AddNewOtpAsync(PasswordResetOtp otp, CancellationToken cancellationToken)
         {
-             await context.PasswordResetOtps.AddAsync(otp, cancellationToken);
+            await context.PasswordResetOtps.AddAsync(otp, cancellationToken);
         }
 
-        public async Task<PasswordResetOtp> GetLatestUnusedOtpAsync(Guid userId, CancellationToken cancellationToken)
+        public async Task<PasswordResetOtp?> GetLatestUnusedOtpAsync(Guid userId, CancellationToken cancellationToken)
         {
             var now = DateTimeOffset.UtcNow;
             return await context.PasswordResetOtps
-                .AsNoTracking()
                 .Where(x => x.UserId == userId && x.UsedAt == null && x.ExpiresAt > now)
                 .OrderByDescending(x => x.CreatedAt)
                 .FirstOrDefaultAsync(cancellationToken);

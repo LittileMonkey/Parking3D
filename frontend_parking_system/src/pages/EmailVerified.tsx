@@ -1,4 +1,4 @@
-import { Check } from "lucide-react";
+  import { Check } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
 export default function EmailVerified() {

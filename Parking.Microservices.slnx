@@ -21,6 +21,7 @@
     <Project Path="src/Services/Identity/Parking.Identity.Application/Parking.Identity.Application.csproj" />
     <Project Path="src/Services/Identity/Parking.Identity.Domain/Parking.Identity.Domain.csproj" />
     <Project Path="src/Services/Identity/Parking.Identity.Infrastructure/Parking.Identity.Infrastructure.csproj" />
+    <Project Path="src/Services/Identity/Parking.Identity.Persistence/Parking.Identity.Persistence.csproj" />
   </Folder>
   <Folder Name="/src/Services/Parking/">
     <Project Path="src/Services/Parking/Parking.Parking.Api/Parking.Parking.Api.csproj" />

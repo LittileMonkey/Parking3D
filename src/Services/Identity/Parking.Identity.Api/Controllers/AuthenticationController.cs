@@ -1,6 +1,7 @@
-﻿using MediatR;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Parking.Identity.Application.DTOs;
 using Parking.Identity.Application.DTOs.Response;
 using Parking.Identity.Application.UseCase.Account.CreateAccount;
@@ -25,6 +26,7 @@ namespace Parking.Identity.Api.Controllers
             this.sender = sender;
         }
         [HttpPost("login")]
+        [EnableRateLimiting("auth-rate-limit")]
         [AllowAnonymous]
         public async Task<IActionResult> Login(LoginCommand command, CancellationToken cancellationToken)
         {
@@ -45,56 +47,61 @@ namespace Parking.Identity.Api.Controllers
         }
 
         [HttpPost("register")]
+        [EnableRateLimiting("auth-rate-limit")]
         [AllowAnonymous]
         public async Task<IActionResult> Register(CreateAccountCommand command, CancellationToken cancellation)
         {
             var result = await sender.Send(command, cancellation);
 
-            var response = ApiResponse<AppUserDto>.Success(result, "Register Successfully", 200);
+            var response = ApiResponse<AppUserDto>.Success(result, "Register Successfully", StatusCodes.Status200OK);
 
             return Ok(response);
         }
 
         [HttpPost("google")]
+        [EnableRateLimiting("auth-rate-limit")]
         [AllowAnonymous]
         public async Task<IActionResult> LoginByGoogle(GoogleLoginCommand command, CancellationToken cancellationToken)
         {
             var result = await sender.Send(command, cancellationToken);
 
-            var response = ApiResponse<GoogleLoginResult>.Success(result, "Login Successfully", 200);
+            var response = ApiResponse<GoogleLoginResult>.Success(result, "Login Successfully", StatusCodes.Status200OK);
 
             return Ok(response);
 
         }
 
         [HttpPost("forget-password")]
+        [EnableRateLimiting("auth-rate-limit")]
         [AllowAnonymous]
         public async Task<IActionResult> ForgetPassword(ForgotPasswordCommand command, CancellationToken cancellationToken)
         {
             var result = await sender.Send(command, cancellationToken);
 
-            var response = ApiResponse<ForgotPasswordResult>.Success(result, "Send Otp Successfully!!!, Pleas Check Your Mail", 200);
+            var response = ApiResponse<ForgotPasswordResult>.Success(result, "Send Otp Successfully!!!, Pleas Check Your Mail", StatusCodes.Status200OK);
 
             return Ok(response);
         }
 
         [HttpPost("reset-password")]
+        [EnableRateLimiting("auth-rate-limit")]
         [AllowAnonymous]
         public async Task<IActionResult> ResetPassword(ResetPasswordCommand command, CancellationToken cancellationToken)
         {
             var result = await sender.Send(command, cancellationToken);
-            var response = ApiResponse<bool>.Success(result, "Reset Password Successfully", 200);
+            var response = ApiResponse<bool>.Success(result, "Reset Password Successfully", StatusCodes.Status200OK);
 
             return Ok(response);
         }
 
         [HttpPost("refresh-token")]
-        [Authorize]
+        [EnableRateLimiting("auth-rate-limit")]
+        [AllowAnonymous]
         public async Task<IActionResult> RefreshToken(RefreshTokenCommand command, CancellationToken cancellationToken)
         {     
             var result = await sender.Send(command, cancellationToken);
 
-            var response = ApiResponse<AuthenticationResponseDto>.Success(result, "Reset Password Successfully", 200);
+            var response = ApiResponse<AuthenticationResponseDto>.Success(result, "Refresh Token Successfully", StatusCodes.Status200OK);
 
             return Ok(response);
         }

@@ -22,9 +22,12 @@ builder.Services.AddScoped<IRecognitionClient, RecognitionClient>();
 builder.Services.AddParkingPersistence();
 builder.Services.AddHostedService<OccupancyWorker>();
 builder.Services.AddHostedService<HoldExpiryWorker>();
-builder.Services.AddScoped<IParkingLotRepository, ParkingLotRepository>();
+// 1. Thêm bộ nhớ đệm Memory Cache (hỗ trợ cho EstimatedPriceService)
 builder.Services.AddMemoryCache();
+// 2. Đăng ký Repository và Service tính giá THẬT (thay thế Fake)
+builder.Services.AddScoped<IParkingLotRepository, ParkingLotRepository>();
 builder.Services.AddScoped<IEstimatedPriceService, EstimatedPriceService>();
+builder.Services.AddApplicationServices();
 builder.Services.AddControllers().ConfigureApiBehaviorOptions(options =>
     options.InvalidModelStateResponseFactory = context => new BadRequestObjectResult(
         new Parking.ServiceDefaults.ApiResponse<object>(null, false, 400, "Invalid request parameters.")));

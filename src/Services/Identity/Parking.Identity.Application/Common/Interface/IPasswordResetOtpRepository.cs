@@ -1,9 +1,4 @@
 ﻿using Parking.Identity.Domain.Entities;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Parking.Identity.Application.Common.Interface
 {
@@ -16,6 +11,6 @@ namespace Parking.Identity.Application.Common.Interface
         Task AddNewOtpAsync(PasswordResetOtp otp, CancellationToken cancellationToken);
 
         //lấy OTP mới nhất chưa sử dụng để xác minh.
-        Task<PasswordResetOtp> GetLatestUnusedOtpAsync(Guid userId, CancellationToken cancellationToken);
+        Task<PasswordResetOtp?> GetLatestUnusedOtpAsync(Guid userId, CancellationToken cancellationToken);
     }
 }

@@ -1,11 +1,10 @@
-﻿using MediatR;
+using MediatR;
 using Parking.Identity.Application.Common.AppException;
 using Parking.Identity.Application.Common.Constants;
 using Parking.Identity.Application.Common.Enum;
 using Parking.Identity.Application.Common.Interface;
 using Parking.Identity.Application.DTOs;
 using Parking.Identity.Domain.Entities;
-using System.Linq;
 
 namespace Parking.Identity.Application.UseCase.Authorization.UpdateAuthorization
 {
@@ -23,31 +22,27 @@ namespace Parking.Identity.Application.UseCase.Authorization.UpdateAuthorization
             this.unitOfWork = unit;
         }
 
-        public async Task<AppUserDto> Handle(
-            UpdateAuthorizationStaffCommand request,
-            CancellationToken cancellationToken)
+        public async Task<AppUserDto> Handle(UpdateAuthorizationStaffCommand request, CancellationToken cancellationToken)
         {
             // 1. Tìm tài khoản cần thay đổi role
-            var user = await accountRepository.GetUserByIdAsync(
-                request.userId,
-                cancellationToken);
+            var user = await accountRepository.GetUserByIdAsync(request.userId, cancellationToken);
 
             if (user == null)
             {
-                throw new AppException(ErrorCode.AccountNotFound,"Account Not Found");
+                throw new AppException(ErrorCode.AccountNotFound, "The requested account could not be found.");
             }
 
             // 2. Kiểm tra role mới
             if (string.IsNullOrWhiteSpace(request.RoleCode))
             {
-                throw new AppException(ErrorCode.Unauthorized,"RoleCode is required");
+                throw new AppException(ErrorCode.RequiredFieldMissing, "RoleCode is required.");
             }
 
             var newRole = request.RoleCode.Trim().ToUpperInvariant();
 
             if (newRole != AppUserRoles.Customer && newRole != AppUserRoles.Manager && newRole != AppUserRoles.Staff)
             {
-                throw new AppException(ErrorCode.Unauthorized,"Invalid role");
+                throw new AppException(ErrorCode.InvalidRequest, "The specified role is invalid.");
             }
 
             // 3. Không cho thay đổi tài khoản ADMIN
@@ -56,7 +51,7 @@ namespace Parking.Identity.Application.UseCase.Authorization.UpdateAuthorization
 
             if (isAdmin)
             {
-                throw new AppException(ErrorCode.Unauthorized,"Cannot change ADMIN role");
+                throw new AppException(ErrorCode.Forbidden, "Cannot modify system administrator role.");
             }
 
             // 4. Kiểm tra tài khoản đã có role mới chưa
@@ -65,7 +60,7 @@ namespace Parking.Identity.Application.UseCase.Authorization.UpdateAuthorization
 
             if (roleAlreadyExist)
             {
-                throw new AppException(ErrorCode.Unauthorized,"Account already has this role");
+                throw new AppException(ErrorCode.InvalidRequest, "The account already has this role assigned.");
             }
 
             // 5. Xóa role hiện tại

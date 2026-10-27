@@ -69,10 +69,17 @@ export interface ParkingLot {
 }
 
 export interface EstimatedPricing {
-  expectedDurationMinutes: number;
-  estimatedTotalFee: number;
-  currency: string;
+  expectedDurationMinutes?: number | null;
+  estimatedTotalFee?: number | null;
+  currency?: string | null;
   billingDetails?: string;
+}
+
+export interface UserVehicle {
+  id: string;
+  licensePlate: string;
+  vehicleType: string;
+  isDefault: boolean;
 }
 
 export interface ParkingSearchItem {
@@ -163,7 +170,7 @@ export interface BookingDetail {
   holdExpiresAt?: string | null;
   arrivalDeadline: string;
   status: string;
-  totalAmount: number;
+  totalAmount?: number | null;
   qrToken?: string | null;
   createdAt: string;
 }
@@ -172,7 +179,7 @@ export interface Payment {
   id: string;
   lotId: string;
   bookingId: string;
-  amount: number;
+  amount?: number | null;
   currency: string;
   method: string;
   status: string;
@@ -271,6 +278,10 @@ export const api = {
 
   async getParkingLots(): Promise<ParkingLot[]> {
     return request<ParkingLot[]>("/api/v1/parking-lots");
+  },
+
+  async getUserVehicles(): Promise<UserVehicle[]> {
+    return request<UserVehicle[]>("/api/v1/user-vehicles");
   },
 
   async getAvailability(

@@ -1,92 +1,115 @@
-﻿namespace Parking.Identity.Application.Common.Enum
+namespace Parking.Identity.Application.Common.Enum
 {
-    public enum ErrorCode
+    public static class ErrorCode
     {
         // =========================
         // ACCOUNT
         // =========================
 
-        AccountNotFound = 1001,
-        AccountAlreadyExists = 1002,
-        InvalidAccount = 1003,
-        AccountCreationFailed = 1004,
-        AccountUpdateFailed = 1005,
-        AccountDeleteFailed = 1006,
+        public const string AccountNotFound = "ACCOUNT_NOT_FOUND";
+        public const string AccountAlreadyExists = "ACCOUNT_ALREADY_EXISTS";
+        public const string InvalidAccount = "INVALID_ACCOUNT";
+        public const string AccountCreationFailed = "ACCOUNT_CREATION_FAILED";
+        public const string AccountUpdateFailed = "ACCOUNT_UPDATE_FAILED";
+        public const string AccountDeleteFailed = "ACCOUNT_DELETE_FAILED";
 
         // =========================
         // EMAIL
         // =========================
 
-        EmailAlreadyExists = 1101,
-        EmailNotFound = 1102,
-        InvalidEmail = 1103,
-        EmailNotVerified = 1104,
-        EmailAlreadyVerified = 1105,
+        public const string EmailAlreadyExists = "EMAIL_ALREADY_EXISTS";
+        public const string EmailNotFound = "EMAIL_NOT_FOUND";
+        public const string InvalidEmail = "INVALID_EMAIL";
+        public const string EmailNotVerified = "EMAIL_NOT_VERIFIED";
+        public const string EmailAlreadyVerified = "EMAIL_ALREADY_VERIFIED";
 
         // =========================
         // PHONE
         // =========================
 
-        PhoneAlreadyExists = 1201,
-        PhoneNotFound = 1202,
-        InvalidPhone = 1203,
-        PhoneNotVerified = 1204,
-        PhoneAlreadyVerified = 1205,
+        public const string PhoneAlreadyExists = "PHONE_ALREADY_EXISTS";
+        public const string PhoneNotFound = "PHONE_NOT_FOUND";
+        public const string InvalidPhone = "INVALID_PHONE";
+        public const string PhoneNotVerified = "PHONE_NOT_VERIFIED";
+        public const string PhoneAlreadyVerified = "PHONE_ALREADY_VERIFIED";
 
         // =========================
         // AUTHENTICATION
         // =========================
 
-        InvalidCredentials = 1301,
-        InvalidPassword = 1302,
-        PasswordIncorrect = 1303,
-        PasswordChangeFailed = 1304,
+        public const string InvalidCredentials = "INVALID_CREDENTIALS";
+        public const string InvalidPassword = "INVALID_PASSWORD";
+        public const string PasswordIncorrect = "PASSWORD_INCORRECT";
+        public const string PasswordChangeFailed = "PASSWORD_CHANGE_FAILED";
 
         // =========================
         // AUTHORIZATION
         // =========================
 
-        Unauthorized = 1401,
-        Forbidden = 1402,
-        TokenMissing = 1403,
-        InvalidToken = 1404,
-        TokenExpired = 1405,
+        public const string Unauthorized = "UNAUTHORIZED";
+        public const string Forbidden = "FORBIDDEN";
+        public const string TokenMissing = "TOKEN_MISSING";
+        public const string InvalidToken = "INVALID_TOKEN";
+        public const string TokenExpired = "TOKEN_EXPIRED";
 
         // =========================
         // ACCOUNT STATUS
         // =========================
 
-        AccountLocked = 1501,
-        AccountDisabled = 1502,
-        AccountInactive = 1503,
+        public const string AccountLocked = "ACCOUNT_LOCKED";
+        public const string AccountDisabled = "ACCOUNT_DISABLED";
+        public const string AccountInactive = "ACCOUNT_INACTIVE";
 
         // =========================
         // VALIDATION
         // =========================
 
-        InvalidRequest = 1601,
-        RequiredFieldMissing = 1602,
-        InvalidId = 1603,
+        public const string InvalidRequest = "INVALID_REQUEST";
+        public const string RequiredFieldMissing = "REQUIRED_FIELD_MISSING";
+        public const string InvalidId = "INVALID_ID";
 
         // =========================
         // SYSTEM
         // =========================
 
-        DatabaseError = 9001,
-        InternalServerError = 9002,
-        ServiceUnavailable = 9003,
+        public const string DatabaseError = "DATABASE_ERROR";
+        public const string InternalServerError = "INTERNAL_SERVER_ERROR";
+        public const string ServiceUnavailable = "SERVICE_UNAVAILABLE";
 
-        ClientIDNotFound = 9004,
+        public const string ClientIDNotFound = "CLIENT_ID_NOT_FOUND";
 
         // =========================
         // OTP (Mới bổ sung cho tính năng quên mật khẩu)
         // =========================
 
-        OtpNotFound = 1351,
-        OtpExpired = 1352,
-        OtpInvalid = 1353,
-        OtpAlreadyUsed = 1354,
-        OtpMaxAttemptsExceeded = 1355,
+        public const string OtpNotFound = "OTP_NOT_FOUND";
+        public const string OtpExpired = "OTP_EXPIRED";
+        public const string OtpInvalid = "OTP_INVALID";
+        public const string OtpAlreadyUsed = "OTP_ALREADY_USED";
+        public const string OtpMaxAttemptsExceeded = "OTP_MAX_ATTEMPTS_EXCEEDED";
+
+
+        public const string AssignmentAlreadyRevoked = "ASSIGNMENT_ALREADY_REVOKED";
+        public const string InvalidAssignmentTarget = "INVALID_ASSIGNMENT_TARGET";
+
+        // User Vehicles
+        public const string VehicleNotFound = "VEHICLE_NOT_FOUND";
+        public const string VehicleAlreadyExists = "VEHICLE_ALREADY_EXISTS";
+        public const string VehicleLimitExceeded = "VEHICLE_LIMIT_EXCEEDED";
+        public const string InvalidLicensePlate = "INVALID_LICENSE_PLATE";
+        public const string InvalidVehicleType = "INVALID_VEHICLE_TYPE";
+        public const string VehicleAlreadyDefault = "VEHICLE_ALREADY_DEFAULT";
+        public const string CannotDeleteDefaultVehicle = "CANNOT_DELETE_DEFAULT_VEHICLE";
+        public const string VehicleOwnershipViolation = "VEHICLE_OWNERSHIP_VIOLATION";
+
+        // User Membership
+        public const string MembershipNotFound = "MEMBERSHIP_NOT_FOUND";
+        public const string InvalidMembershipTier = "INVALID_MEMBERSHIP_TIER";
+        public const string MembershipAlreadyExists = "MEMBERSHIP_ALREADY_EXISTS";
+        public const string MembershipUpdateForbidden = "MEMBERSHIP_UPDATE_FORBIDDEN";
+        public const string ValidationError = "VALIDATION_ERROR";
+
+        public const string RateLimitExceeded = "RATE_LIMIT_EXCEEDED";
     }
 }
 

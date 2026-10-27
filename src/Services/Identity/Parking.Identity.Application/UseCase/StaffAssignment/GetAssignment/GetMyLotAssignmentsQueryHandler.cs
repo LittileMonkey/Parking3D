@@ -1,16 +1,10 @@
 ﻿using MediatR;
 using Parking.Identity.Application.Common.Interface;
 using Parking.Identity.Application.DTOs;
-using System;
-using System.Collections.Frozen;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Parking.Identity.Application.UseCase.StaffAssignment.GetAssignment
 {
-    public class GetMyLotAssignmentsQueryHandler : IRequestHandler<GetMyLotAssignmentsQuery , IReadOnlyList<LotsAssignmentDto>>
+    public class GetMyLotAssignmentsQueryHandler : IRequestHandler<GetMyLotAssignmentsQuery, IReadOnlyList<LotsAssignmentDto>>
     {
         private readonly IAssignedLotRepository repository;
         private readonly IUnitOfWork unitOfWork;
@@ -22,7 +16,7 @@ namespace Parking.Identity.Application.UseCase.StaffAssignment.GetAssignment
 
         public async Task<IReadOnlyList<LotsAssignmentDto>> Handle(GetMyLotAssignmentsQuery request, CancellationToken cancellationToken)
         {
-            var assignments  =  await repository.GetActiveStaffAssignedById(request.userId, cancellationToken);
+            var assignments = await repository.GetActiveStaffAssignedById(request.userId, cancellationToken);
 
             var result = assignments.Select(x => new LotsAssignmentDto
             {
