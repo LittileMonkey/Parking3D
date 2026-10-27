@@ -14,11 +14,11 @@ export interface ModelSlot {
 }
 
 const slotColors: Record<string, number> = {
-  AVAILABLE: 0x16a34a,
-  HELD: 0xf59e0b,
-  RESERVED: 0xf59e0b,
-  OCCUPIED: 0xdc2626,
-  MAINTENANCE: 0x64748b
+  AVAILABLE: 0x14b8a6,
+  HELD: 0xfbbf24,
+  RESERVED: 0xfbbf24,
+  OCCUPIED: 0xf87171,
+  MAINTENANCE: 0x94a3b8
 };
 
 export default function ParkingViewer({ slots, selectedId, onSelect }: {
@@ -28,6 +28,11 @@ export default function ParkingViewer({ slots, selectedId, onSelect }: {
 }) {
   const host = useRef<HTMLDivElement>(null);
   const meshes = useRef<THREE.Mesh[]>([]);
+  const colorTransitions = useRef(new Map<THREE.Mesh, {
+    from: THREE.Color;
+    to: THREE.Color;
+    startedAt: number;
+  }>());
   const resetCameraRef = useRef<(() => void) | null>(null);
   const selectCallback = useRef(onSelect);
   const slotsRef = useRef(slots);
@@ -107,6 +112,14 @@ export default function ParkingViewer({ slots, selectedId, onSelect }: {
     renderer.domElement.addEventListener("pointerdown", pointerDown);
     renderer.domElement.addEventListener("pointerup", pointerUp);
     renderer.setAnimationLoop(() => {
+      const now = performance.now();
+      colorTransitions.current.forEach((transition, mesh) => {
+        const progress = Math.min(1, (now - transition.startedAt) / 180);
+        (mesh.material as THREE.MeshStandardMaterial).color
+          .copy(transition.from)
+          .lerp(transition.to, progress);
+        if (progress === 1) colorTransitions.current.delete(mesh);
+      });
       controls.update();
       renderer.render(scene, camera);
     });
@@ -127,6 +140,7 @@ export default function ParkingViewer({ slots, selectedId, onSelect }: {
       renderer.dispose();
       renderer.domElement.remove();
       meshes.current = [];
+      colorTransitions.current.clear();
       resetCameraRef.current = null;
     };
   }, [layoutKey]);
@@ -138,9 +152,16 @@ export default function ParkingViewer({ slots, selectedId, onSelect }: {
       if (!slot) return;
       mesh.userData = { ...slot };
       const material = mesh.material as THREE.MeshStandardMaterial;
-      material.color.setHex(slot.slotId === selectedId
+      const target = new THREE.Color(slot.slotId === selectedId
         ? 0xef4444
         : slotColors[slot.status.toUpperCase()] ?? 0x64748b);
+      if (!material.color.equals(target)) {
+        colorTransitions.current.set(mesh, {
+          from: material.color.clone(),
+          to: target,
+          startedAt: performance.now(),
+        });
+      }
     });
   }, [selectedId, slots]);
 

@@ -1,11 +1,11 @@
 import * as THREE from "three";
 
 const slotColors = {
-    AVAILABLE: 0x16a34a,
-    HELD: 0xf59e0b,
-    RESERVED: 0xf59e0b,
-    OCCUPIED: 0xdc2626,
-    MAINTENANCE: 0x64748b
+    AVAILABLE: 0x14b8a6,
+    HELD: 0xfbbf24,
+    RESERVED: 0xfbbf24,
+    OCCUPIED: 0xf87171,
+    MAINTENANCE: 0x94a3b8
 };
 
 export function createParkingArea(slots) {
