@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ApiError, api, type LotAvailability, type ParkingSearchItem, type UserVehicle } from "../services/api";
+import { ApiError, api, type LotAvailability, type ParkingSearchItem, type ParkingLevelAvailability, type UserVehicle } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import ParkingViewer, { type ModelSlot } from "../components/parking/ParkingViewer";
+import { applySlotStatusChanges, type SlotStatusChange } from "../components/parking/parkingRealtime";
+import { useParkingHub } from "../components/parking/useParkingHub";
 import "./Booking.css";
 
 type VehicleType = "Car" | "Motorbike";
@@ -327,6 +329,30 @@ export default function SearchPage() {
     new Date(availability.queryRange.startsAt).getTime() === new Date(currentRange.startsAt).getTime() &&
     new Date(availability.queryRange.endsAt).getTime() === new Date(currentRange.endsAt).getTime(),
   );
+  const applyRealtimeStatusChanges = useCallback((changes: SlotStatusChange[]) => {
+    setAvailability(current => {
+      if (!current) return current;
+      const levels = current.levels.map((level: ParkingLevelAvailability) => ({
+        ...level,
+        slots: applySlotStatusChanges(level.slots, changes, current.lotId),
+      }));
+      const slots = levels.flatMap(level => level.slots)
+        .filter(slot => slot.supportedVehicleTypes.includes(vehicleType));
+      return {
+        ...current,
+        levels,
+        availableCount: slots.filter(slot => slot.status.toUpperCase() === "AVAILABLE").length,
+        heldCount: slots.filter(slot => ["HELD", "RESERVED"].includes(slot.status.toUpperCase())).length,
+        occupiedCount: slots.filter(slot => slot.status.toUpperCase() === "OCCUPIED").length,
+        maintenanceCount: slots.filter(slot => slot.status.toUpperCase() === "MAINTENANCE").length,
+      };
+    });
+  }, [vehicleType]);
+  const parkingHubStatus = useParkingHub(
+    availabilityIsCurrent,
+    selectedLot?.parkingLotId ?? null,
+    applyRealtimeStatusChanges,
+  );
   const compatibleVehicles = vehicles.filter(vehicle => normalizeVehicleType(vehicle.vehicleType) === vehicleType);
   const selectedVehicle = compatibleVehicles.find(vehicle => vehicle.id === vehicleId)
     ?? compatibleVehicles.find(vehicle => vehicle.isDefault)
@@ -511,6 +537,14 @@ export default function SearchPage() {
                 ))}
               </select>
             </label>
+          )}
+          {availability && availabilityIsCurrent && (
+            <p className="booking-realtime-status" role="status" aria-live="polite">
+              {parkingHubStatus === "connected" && "Cập nhật trạng thái ô theo thời gian thực."}
+              {parkingHubStatus === "connecting" && "Đang kết nối cập nhật trạng thái thời gian thực..."}
+              {parkingHubStatus === "reconnecting" && "Đang kết nối lại realtime; trạng thái vẫn được làm mới định kỳ."}
+              {parkingHubStatus === "disconnected" && "Realtime chưa kết nối; trạng thái vẫn được làm mới định kỳ."}
+            </p>
           )}
           {availability && availabilityIsCurrent && levelSlots.length === 0 && (
             <div className="customer-empty">Tầng này không có slot phù hợp với loại xe đã chọn.</div>
