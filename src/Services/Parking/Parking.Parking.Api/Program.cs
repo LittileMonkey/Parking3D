@@ -38,7 +38,7 @@ app.MapGrpcService<ParkingCatalogGrpc>();
 app.MapGrpcService<BookingPaymentQueryGrpc>();
 app.MapGrpcService<PaymentEventsGrpc>();
 
-app.MapGet("/api/v1/parking-lots", async (IParkingRepository repo, CancellationToken ct) => 
+app.MapGet("/api/v1/parking-lots", async (IParkingRepository repo, CancellationToken ct) =>
     Responses.Ok(await repo.ListLotsAsync(ct)));
 
 app.MapPost("/api/v1/bookings", async (BookingRequest request, HttpContext context, IFacilityAccess access, IParkingRepository repo, CancellationToken ct) =>

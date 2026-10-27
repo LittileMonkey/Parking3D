@@ -4,9 +4,10 @@ using Parking.ServiceDefaults;
 
 namespace Parking.Parking.Api.Middleware;
 
-// Application failures are handled here; infrastructure failures stay in UseParkingDefaults.
+// Đổi lỗi Application thành HTTP envelope; lỗi hạ tầng do UseParkingDefaults xử lý.
 public sealed class ExceptionHandlingMiddleware(RequestDelegate next)
 {
+    /// <summary>Đổi lỗi validation, không tìm thấy, thiếu quyền hoặc xung đột của Application thành HTTP envelope chuẩn.</summary>
     public async Task InvokeAsync(HttpContext context)
     {
         try { await next(context); }
@@ -22,7 +23,7 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next)
                 _ => 500
             };
             context.Response.StatusCode = status;
-            await context.Response.WriteAsJsonAsync(new ApiResponse<object>(null,false,status,exception.Message),
+            await context.Response.WriteAsJsonAsync(new ApiResponse<object>(null, false, status, exception.Message),
                 cancellationToken: context.RequestAborted);
         }
 

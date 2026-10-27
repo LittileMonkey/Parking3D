@@ -131,8 +131,13 @@ public sealed partial class ParkingWorkflowTests : IAsyncLifetime
     {
         var payment = new PaymentSucceeded
         {
-            EventId = Guid.NewGuid().ToString(), PaymentId = Guid.NewGuid().ToString(), BookingId = booking.Id.ToString(),
-            LotId = Lot.ToString(), AmountMinor = booking.EstimatedAmount, Currency = "VND", PaidAtUnixSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+            EventId = Guid.NewGuid().ToString(),
+            PaymentId = Guid.NewGuid().ToString(),
+            BookingId = booking.Id.ToString(),
+            LotId = Lot.ToString(),
+            AmountMinor = booking.EstimatedAmount,
+            Currency = "VND",
+            PaidAtUnixSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
         };
         var grpc = new PaymentEventsGrpc(data);
         Assert.Equal("CONFIRMED", (await grpc.DeliverPaymentSucceeded(payment, new CallContext())).Outcome);
