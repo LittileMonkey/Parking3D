@@ -20,16 +20,12 @@ namespace Parking.Identity.Application.UseCase.Authentication.TokenRefresh
             this.accessTokenService = accessTokenService;
         }
 
-        public async Task<AuthenticationResponseDto> Handle(
-     RefreshTokenCommand request,
-     CancellationToken cancellationToken)
+        public async Task<AuthenticationResponseDto> Handle(RefreshTokenCommand request, CancellationToken cancellationToken)
         {
             // 1. Validate input
             if (string.IsNullOrWhiteSpace(request.refreshToken))
             {
-                throw new AppException(
-                    ErrorCode.TokenMissing,
-                    "Authentication refresh token is required.");
+                throw new AppException( ErrorCode.TokenMissing, "Authentication refresh token is required.");
             }
 
             // 2. Hash token từ client

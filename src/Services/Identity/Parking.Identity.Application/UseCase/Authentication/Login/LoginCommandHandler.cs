@@ -4,6 +4,7 @@ using Parking.Identity.Application.Common.Interface;
 using Parking.Identity.Application.DTOs;
 using MediatR;
 using Parking.Identity.Domain.Entities;
+using Parking.Identity.Application.Common.Constants;
 
 namespace Parking.Identity.Application.UseCase.Authentication.Login
 {
@@ -23,13 +24,12 @@ namespace Parking.Identity.Application.UseCase.Authentication.Login
         }
         async Task<AuthenticationResponseDto> IRequestHandler<LoginCommand, AuthenticationResponseDto>.Handle(LoginCommand request, CancellationToken cancellationToken)
         {
-            if (string.IsNullOrEmpty(request.Email))
+            if (string.IsNullOrWhiteSpace(request.Email))
             {
                 throw new AppException(ErrorCode.InvalidEmail, "The provided email address is invalid.");
             }
 
             var email = request.Email.Trim().ToUpperInvariant();
-
 
             var user = await accountRepository.GetUserByEmail(email);
 
@@ -38,7 +38,7 @@ namespace Parking.Identity.Application.UseCase.Authentication.Login
                 throw new AppException(ErrorCode.InvalidCredentials, "The email address or password is incorrect.");
             }
 
-            if (user.Status != "ACTIVE")
+            if (user.Status != AppUserStatus.Active)
             {
                 throw new AppException(ErrorCode.AccountInactive, "The account is currently inactive.");
             }

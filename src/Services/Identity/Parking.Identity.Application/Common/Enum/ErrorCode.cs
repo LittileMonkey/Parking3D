@@ -87,6 +87,29 @@ namespace Parking.Identity.Application.Common.Enum
         public const string OtpInvalid = "OTP_INVALID";
         public const string OtpAlreadyUsed = "OTP_ALREADY_USED";
         public const string OtpMaxAttemptsExceeded = "OTP_MAX_ATTEMPTS_EXCEEDED";
+
+
+        public const string AssignmentAlreadyRevoked = "ASSIGNMENT_ALREADY_REVOKED";
+        public const string InvalidAssignmentTarget = "INVALID_ASSIGNMENT_TARGET";
+
+        // User Vehicles
+        public const string VehicleNotFound = "VEHICLE_NOT_FOUND";
+        public const string VehicleAlreadyExists = "VEHICLE_ALREADY_EXISTS";
+        public const string VehicleLimitExceeded = "VEHICLE_LIMIT_EXCEEDED";
+        public const string InvalidLicensePlate = "INVALID_LICENSE_PLATE";
+        public const string InvalidVehicleType = "INVALID_VEHICLE_TYPE";
+        public const string VehicleAlreadyDefault = "VEHICLE_ALREADY_DEFAULT";
+        public const string CannotDeleteDefaultVehicle = "CANNOT_DELETE_DEFAULT_VEHICLE";
+        public const string VehicleOwnershipViolation = "VEHICLE_OWNERSHIP_VIOLATION";
+
+        // User Membership
+        public const string MembershipNotFound = "MEMBERSHIP_NOT_FOUND";
+        public const string InvalidMembershipTier = "INVALID_MEMBERSHIP_TIER";
+        public const string MembershipAlreadyExists = "MEMBERSHIP_ALREADY_EXISTS";
+        public const string MembershipUpdateForbidden = "MEMBERSHIP_UPDATE_FORBIDDEN";
+        public const string ValidationError = "VALIDATION_ERROR";
+
+        public const string RateLimitExceeded = "RATE_LIMIT_EXCEEDED";
     }
 }
 

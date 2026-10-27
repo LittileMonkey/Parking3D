@@ -52,7 +52,7 @@ namespace Parking.Identity.Persistence.Service
                 issuer: issuer,
                 audience: audience,
                 claims: claim,
-                expires: DateTime.UtcNow.AddMinutes(double.Parse(jwt["AccessTokenExpirationMinutes"])),
+                expires: DateTime.UtcNow.AddMinutes(double.Parse(jwt["AccessTokenExpirationMinutes"] ?? "")),
                 signingCredentials: credentials
             );
 

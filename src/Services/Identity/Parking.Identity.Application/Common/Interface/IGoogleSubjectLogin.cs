@@ -4,6 +4,6 @@ namespace Parking.Identity.Application.Common.Interface
 {
     public interface IGoogleSubjectLogin
     {
-        Task<AppUser> GetByGoogleSubject(string googleSubject, CancellationToken cancellationToken);
+        Task<AppUser?> GetByGoogleSubject(string googleSubject, CancellationToken cancellationToken);
     }
 }

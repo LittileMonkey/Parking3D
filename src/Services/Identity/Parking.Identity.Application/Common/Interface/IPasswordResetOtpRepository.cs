@@ -11,6 +11,6 @@ namespace Parking.Identity.Application.Common.Interface
         Task AddNewOtpAsync(PasswordResetOtp otp, CancellationToken cancellationToken);
 
         //lấy OTP mới nhất chưa sử dụng để xác minh.
-        Task<PasswordResetOtp> GetLatestUnusedOtpAsync(Guid userId, CancellationToken cancellationToken);
+        Task<PasswordResetOtp?> GetLatestUnusedOtpAsync(Guid userId, CancellationToken cancellationToken);
     }
 }
