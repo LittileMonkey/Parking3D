@@ -1,3 +1,4 @@
+using Parking.Contracts.Catalog.V1;
 using Parking.Contracts.Identity.V1;
 using Parking.Contracts.Payments.V1;
 using Parking.Payment.Api.Middleware;
@@ -16,6 +17,12 @@ builder.Services.AddGrpcClient<FacilityAuthorization.FacilityAuthorizationClient
 builder.Services.AddGrpcClient<BookingPaymentQuery.BookingPaymentQueryClient>(o=>o.Address=new Uri(builder.Configuration["Services:ParkingGrpc"]??"http://parking:8081"));
 
 builder.Services.AddGrpcClient<ParkingPaymentEvents.ParkingPaymentEventsClient>(o=>o.Address=new Uri(builder.Configuration["Services:ParkingGrpc"]??"http://parking:8081"));
+
+// THÊM: Đăng ký ParkingCatalogClient để gọi sang Parking lấy biểu giá
+builder.Services.AddGrpcClient<ParkingCatalog.ParkingCatalogClient>(o=>o.Address=new Uri(builder.Configuration["Services:ParkingGrpc"]??"http://parking:8081"));
+// THÊM: Bật bộ nhớ đệm MemoryCache trong Payment để đệm biểu giá 30 phút
+builder.Services.AddMemoryCache();
+
 
 // 2. Đăng ký các dịch vụ gốc của Payment (Database & Outbox Worker ngầm)
 builder.Services.AddScoped<IPaymentService,PaymentService>();

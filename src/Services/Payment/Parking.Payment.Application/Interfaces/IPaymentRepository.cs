@@ -12,8 +12,6 @@ namespace Parking.Payment.Application.Interfaces
     {
         Task<PaymentStatusDto?> GetPaymentStatusByBookingIdAsync(Guid bookingId, CancellationToken cancellationToken = default);
 
-        Task<ConfirmCashPaymentResultDto> ConfirmCashPaymentAsync(ConfirmCashPaymentCommand command, CancellationToken cancellationToken = default);
-
         /// <summary>
         /// Tra cứu và khởi tạo thông tin biên lai điện tử (E-Receipt) kèm mã băm SHA-256 đối soát.
         /// </summary>
