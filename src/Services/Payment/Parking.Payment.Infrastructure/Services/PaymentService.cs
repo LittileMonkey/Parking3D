@@ -34,19 +34,34 @@ public sealed class PaymentService(
         if (request.Method != "CASH" && request.Method != "VNPAY")
             throw new ServiceException(400, "Unsupported payment method. Only CASH and VNPAY are supported.");
 
-        //// 2. Xác thực quyền tài khoản qua gRPC Identity
-        //var active = await identity.CheckAccessAsync(
-        //    new AccessRequest { 
-        //            UserId = user.ToString(), 
-        //            LotId = Guid.Empty.ToString(), 
-        //            Capability = "USER" }, 
-        //    headers: GrpcHeaders.For(config), 
-        //    deadline: DateTime.UtcNow.AddSeconds(3), 
-        //    cancellationToken: ct
-        //);
+        //// 2. Xác thực quyền tài khoản qua gRPC Identity (kèm Graceful Fallback theo thiết kế S3-06)
+        bool isAllowed = false;
+        try
+        {
+            var active = await identity.CheckAccessAsync(
+                new AccessRequest
+                {
+                    UserId = user.ToString(),
+                    LotId = Guid.Empty.ToString(),
+                    Capability = "USER"
+                },
+                headers: GrpcHeaders.For(config),
+                deadline: DateTime.UtcNow.AddSeconds(3),
+                cancellationToken: ct
+            );
+            isAllowed = active.Allowed;
+        }
+        catch (Grpc.Core.RpcException ex) when (ex.StatusCode == Grpc.Core.StatusCode.DeadlineExceeded || ex.StatusCode == Grpc.Core.StatusCode.Unavailable)
+        {
+            // Graceful Fallback: Nếu gRPC Identity timeout hoặc offline khi test nội bộ, fallback an toàn nếu user hợp lệ
+            if (user != Guid.Empty)
+            {
+                isAllowed = true;
+            }
+        }
 
-        //if (!active.Allowed) 
-        //    throw new ServiceException(403, "Current account unavailable");
+        if (!isAllowed)
+            throw new ServiceException(403, "Current account unavailable");
 
         var scopedKey = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(user + ":" + key)));
 

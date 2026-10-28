@@ -1,6 +1,6 @@
 using Npgsql;
 using Parking.Parking.Application.Interfaces;
-using Parking.Parking.Domain;
+using Parking.Parking.Domain.Entities;
 
 namespace Parking.Parking.Infrastructure.Repositories;
 

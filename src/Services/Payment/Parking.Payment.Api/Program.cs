@@ -28,8 +28,16 @@ builder.Services.AddTransient<ExceptionHandlingMiddleware>();   // Đăng ký b�
 builder.Services.AddControllers();                              // Nạp Controller
 
 
-var app =builder.Build();
+
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+var app = builder.Build();
+
 app.UseParkingDefaults("payment");
+app.UseSwagger();
+app.UseSwaggerUI();
+
 
 // 4. Kích hoạt Middleware bắt lỗi ở cổng ngoài cùng
 app.UseMiddleware<ExceptionHandlingMiddleware>();

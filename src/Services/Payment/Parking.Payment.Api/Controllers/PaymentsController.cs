@@ -1,9 +1,11 @@
-﻿using MediatR;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Parking.Payment.Api.Common;
 using Parking.Payment.Application.DTOs;
 using Parking.Payment.Application.UseCase.CalculateFee;
 using Parking.Payment.Application.UseCase.ConfirmCashPayment;
+using Parking.Payment.Application.UseCase.CreatePaymentQrCommand;
+using Parking.Payment.Application.UseCase.GetPaymentReceipt;
 using Parking.Payment.Application.UseCase.GetPaymentStatus;
 using System;
 using System.Collections.Generic;
@@ -105,6 +107,69 @@ namespace Parking.Payment.Api.Controllers
 
 
         }
+
+        /// <summary>
+        /// Sinh mã VNPay-QR thanh toán động theo đơn đặt gửi xe (API 1 - SCRUM-72)
+        /// </summary>
+        [HttpPost("vnpay/create-qr")]
+        public async Task<IActionResult> CreatePaymentQr([FromBody] CreatePaymentQrRequestDto requestDto, CancellationToken cancellationToken)
+        {
+            // 1. Trích xuất UserId từ Token hoặc Header X-User-Id (fallback về customer01 mặc định: 11111111-1111-1111-1111-111111111111)
+            var userIdClaim = User.FindFirst("sub")?.Value 
+                              ?? User.FindFirst("id")?.Value 
+                              ?? Request.Headers["X-User-Id"].FirstOrDefault();
+            var userId = Guid.TryParse(userIdClaim, out var parsedGuid) ? parsedGuid : Guid.Parse("11111111-1111-1111-1111-111111111111");
+
+            // 2. Lấy IP kết nối của khách hàng và Idempotency-Key từ Request Header
+            var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+            var idempotencyKey = Request.Headers["Idempotency-Key"].ToString();
+
+            // 3. Khởi tạo Command gửi qua MediatR
+            var command = new CreatePaymentQrCommand(
+               BookingId: requestDto.BookingId,
+               UserId: userId,
+               IpAddress: ipAddress,
+               IdempotencyKey: string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey
+            );
+
+            // 4. MediatR tự động kích hoạt Validator kiểm tra dữ liệu và chuyển tới CreatePaymentQrCommandHandler
+            var resultDto = await _mediator.Send(command, cancellationToken);
+
+            // 5. Bọc kết quả vào phong bì ApiResponse chuẩn 200 OK
+            var response = ApiResponse<PaymentQrResultDto>.Success(
+                resultDto,
+                "Dynamic VNPay-QR generated successfully. Valid for 5 minutes.",
+                200);
+
+
+            return Ok(response);
+        }
+        /// <summary>
+        /// Tra cứu hóa đơn điện tử (E-Receipt) kèm mã xác thực số theo PaymentId (API 5 - SCRUM-72)
+        /// </summary>
+        [HttpGet("{paymentId:guid}/receipt")]
+        public async Task<IActionResult> GetPaymentReceipt(Guid paymentId, CancellationToken cancellationToken)
+        {
+            var query = new GetPaymentReceiptQuery(paymentId);
+            // 1. Gửi qua MediatR chạy qua ValidationBehavior và Handler
+            var resultDto = await _mediator.Send(query, cancellationToken);
+            // 2. Nếu không tìm thấy bản ghi thanh toán hoặc đơn chưa thanh toán thành công
+            if (resultDto == null)
+            {
+                var notFoundResponse = ApiResponse<EReceiptDto>.Fail(
+                    default!,
+                    "Payment receipt not found or payment is not completed yet.",
+                    404);
+                return NotFound(notFoundResponse);
+            }
+            // 3. Bọc kết quả vào phong bì ApiResponse chuẩn 200 OK
+            var response = ApiResponse<EReceiptDto>.Success(
+                resultDto,
+                "Electronic receipt retrieved successfully.",
+                200);
+            return Ok(response);
+        }
+
 
     }
 }
