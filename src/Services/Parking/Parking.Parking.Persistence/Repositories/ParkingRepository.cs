@@ -32,7 +32,7 @@ public sealed partial class ParkingRepository(NpgsqlDataSource db, TimeProvider 
     public async Task<BookingView> CreateBookingAsync(Guid customerId, BookingRequest request, string key, CancellationToken ct)
     {
         if (request.LotId == Guid.Empty || request.SlotId == Guid.Empty || request.VehicleId == Guid.Empty || request.EndsAt <= request.StartsAt
-            || request.StartsAt < DateTimeOffset.UtcNow || string.IsNullOrWhiteSpace(key) || key.Length > 128)
+            || request.StartsAt < DateTimeOffset.UtcNow.AddMinutes(-5) || string.IsNullOrWhiteSpace(key) || key.Length > 128)
             throw new ServiceException(400, "Valid IDs, future time range and Idempotency-Key required");
         await ExpireHoldsAsync(ct, request.VehicleId, request.SlotId);
         await using var conn = await db.OpenConnectionAsync(ct);
