@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
@@ -7,10 +7,13 @@ import {
   Calendar,
   Car,
   Check,
+  ChevronDown,
+  Clock,
   Cpu,
   CreditCard,
   Droplets,
   FileText,
+  Filter,
   Flame,
   LogOut,
   MapPin,
@@ -109,6 +112,35 @@ export default function Home() {
   const [mobileMenu, setMobileMenu] = useState(false);
   const [mapTab, setMapTab] = useState<"map" | "satellite" | "3d">("map");
 
+  // Navbar Dropdown State
+  const [bookingDropdownOpen, setBookingDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setBookingDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // Search Filter Criteria States
+  const [searchVehicle, setSearchVehicle] = useState<"car" | "bike" | "ev">("car");
+  const [searchLocation, setSearchLocation] = useState<string>("all");
+  const [searchDuration, setSearchDuration] = useState<string>("120"); // 2 hours
+  const [searchRadius, setSearchRadius] = useState<string>("5"); // 5 km
+  const [selectedFilters, setSelectedFilters] = useState<string[]>(["nearest", "cheapest"]);
+
+  const toggleFilter = (filterKey: string) => {
+    setSelectedFilters((prev) =>
+      prev.includes(filterKey) ? prev.filter((k) => k !== filterKey) : [...prev, filterKey]
+    );
+  };
+
   const [envData, setEnvData] = useState<BuildingEnvironment>({
     smokeDensity: "0.014 mg/m³",
     smokeStatus: "AN TOÀN",
@@ -201,50 +233,119 @@ export default function Home() {
         </div>
       </div>
 
-      {/* ── 2. Header / Navbar ── */}
-      <header className="site-header-light">
-        <div className="page-width header-inner">
-          <Link className="brand" to="/" aria-label="ParkMatrix trang chủ">
-            <span className="brand-logo-icon">
-              <ParkingCircle size={24} className="text-cyan-600" />
+      {/* ── 2. Floating Island Pill Navbar (Ảnh 3 nadi. Style) ── */}
+      <header className="site-header-pill-wrapper">
+        <div className="site-header-pill">
+          {/* Brand Logo */}
+          <Link className="brand-pill" to="/" aria-label="ParkMatrix trang chủ">
+            <span className="brand-pill-logo">
+              <ParkingCircle size={22} className="text-cyan-600" />
             </span>
-            <div className="brand-text">
-              <span className="brand-title">
+            <div className="brand-pill-text">
+              <span className="brand-pill-title">
                 Park<span className="brand-cyan">Matrix</span>
+                <span className="brand-pill-dot" />
               </span>
-              <span className="brand-sub">SMART PARKING PLATFORM</span>
             </div>
           </Link>
 
-          <nav className={`main-nav-light ${mobileMenu ? "is-open" : ""}`} aria-label="Điều hướng chính">
-            <Link to="/booking" onClick={() => setMobileMenu(false)} className="nav-item">
-              {lang === "en" ? "Find & book" : "Tìm và đặt chỗ"}
-            </Link>
-            <a href="#gis-section" onClick={() => setMobileMenu(false)} className="nav-item">
-              {t("nav.map")}
-            </a>
-            <Link to="/faq" onClick={() => setMobileMenu(false)} className="nav-item">
-              FAQ
-            </Link>
-            <a href="#solutions" onClick={() => setMobileMenu(false)} className="nav-item">
-              {t("nav.solutions")}
-            </a>
-            <a href="#about" onClick={() => setMobileMenu(false)} className="nav-item">
-              {t("nav.infrastructure")}
-            </a>
-            <Link to="/staff/dashboard" onClick={() => setMobileMenu(false)} className="nav-item" style={{ color: "var(--teal)", fontWeight: 700 }}>
-              {lang === "en" ? "Staff Portal" : "Cổng Vận Hành"}
-            </Link>
-            <Link to="/manager/dashboard" onClick={() => setMobileMenu(false)} className="nav-item" style={{ color: "#087f8c", fontWeight: 700 }}>
-              {lang === "en" ? "Manager V7" : "Quản Lý V7"}
-            </Link>
-          </nav>
-
-          <div className="header-actions-light">
-            <div className="lang-switcher" role="group" aria-label="Chọn ngôn ngữ">
+          {/* Center Navigation */}
+          <nav className={`main-nav-pill ${mobileMenu ? "is-open" : ""}`} aria-label="Điều hướng chính">
+            {/* 1. Combined Dropdown: Gom "Đặt Chỗ 3D", "Tìm Bãi Đỗ", "Sơ Đồ & Đặt Chỗ" */}
+            <div
+              ref={dropdownRef}
+              className="nav-dropdown-wrapper"
+              onMouseEnter={() => setBookingDropdownOpen(true)}
+              onMouseLeave={() => setBookingDropdownOpen(false)}
+            >
               <button
                 type="button"
-                className={`lang-btn ${lang === "vi" ? "active" : ""}`}
+                className={`nav-item-pill nav-dropdown-btn ${bookingDropdownOpen ? "is-active" : ""}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setBookingDropdownOpen((v) => !v);
+                }}
+                aria-expanded={bookingDropdownOpen}
+              >
+                <span>{lang === "en" ? "Parking & Booking" : "Đặt Chỗ & Bãi Đỗ"}</span>
+                <ChevronDown size={14} className={`dropdown-chevron ${bookingDropdownOpen ? "rotate-up" : ""}`} />
+              </button>
+
+              {bookingDropdownOpen && (
+                <div className="nav-dropdown-menu" onClick={(e) => e.stopPropagation()}>
+                  <Link
+                    to="/booking"
+                    onClick={() => {
+                      setBookingDropdownOpen(false);
+                      setMobileMenu(false);
+                    }}
+                    className="dropdown-menu-item"
+                  >
+                    <div className="dropdown-item-icon bg-cyan">
+                      <Car size={18} />
+                    </div>
+                    <div className="dropdown-item-content">
+                      <span className="dropdown-item-title">{lang === "en" ? "3D Interactive Booking" : "Đặt Chỗ 3D Trực Quan"}</span>
+                      <span className="dropdown-item-desc">{lang === "en" ? "Interactive 3D twin, reserve exact slot" : "Mô phỏng 3D bãi đỗ, chọn vị trí chính xác"}</span>
+                    </div>
+                  </Link>
+
+                  <Link
+                    to="/search"
+                    onClick={() => {
+                      setBookingDropdownOpen(false);
+                      setMobileMenu(false);
+                    }}
+                    className="dropdown-menu-item"
+                  >
+                    <div className="dropdown-item-icon bg-blue">
+                      <Search size={18} />
+                    </div>
+                    <div className="dropdown-item-content">
+                      <span className="dropdown-item-title">{lang === "en" ? "Smart Parking Search" : "Tìm Bãi Đỗ Thông Minh"}</span>
+                      <span className="dropdown-item-desc">{lang === "en" ? "Find nearest & cheapest with GPS" : "So sánh khoảng cách & ước tính giá gửi"}</span>
+                    </div>
+                  </Link>
+
+                  <a
+                    href="#gis-section"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setBookingDropdownOpen(false);
+                      setMobileMenu(false);
+                      document.getElementById("gis-section")?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                    className="dropdown-menu-item"
+                  >
+                    <div className="dropdown-item-icon bg-emerald">
+                      <Navigation size={18} />
+                    </div>
+                    <div className="dropdown-item-content">
+                      <span className="dropdown-item-title">{lang === "en" ? "Live GIS Map & Directory" : "Sơ Đồ & Vị Trí Bãi Xe"}</span>
+                      <span className="dropdown-item-desc">{lang === "en" ? "Real-time citywide slot network" : "Bản đồ số GIS thời gian thực toàn thành phố"}</span>
+                    </div>
+                  </a>
+                </div>
+              )}
+            </div>
+
+            <Link to="/faq" onClick={() => setMobileMenu(false)} className="nav-item-pill">
+              FAQ
+            </Link>
+            <a href="#solutions" onClick={() => setMobileMenu(false)} className="nav-item-pill">
+              {t("nav.solutions")}
+            </a>
+            <a href="#about" onClick={() => setMobileMenu(false)} className="nav-item-pill">
+              {t("nav.infrastructure")}
+            </a>
+          </nav>
+
+          {/* Right Actions */}
+          <div className="header-actions-pill">
+            <div className="lang-switcher-pill" role="group" aria-label="Chọn ngôn ngữ">
+              <button
+                type="button"
+                className={`lang-btn-pill ${lang === "vi" ? "active" : ""}`}
                 onClick={() => setLang("vi")}
                 title="Tiếng Việt"
               >
@@ -253,7 +354,7 @@ export default function Home() {
               <span className="lang-sep">|</span>
               <button
                 type="button"
-                className={`lang-btn ${lang === "en" ? "active" : ""}`}
+                className={`lang-btn-pill ${lang === "en" ? "active" : ""}`}
                 onClick={() => setLang("en")}
                 title="English"
               >
@@ -261,30 +362,31 @@ export default function Home() {
               </button>
             </div>
 
-            <button className="icon-btn" aria-label="Thông báo">
-              <Bell size={18} />
+            <button className="icon-btn-pill" aria-label="Thông báo">
+              <Bell size={16} />
             </button>
 
             {isAuthenticated ? (
-              <div className="user-profile-badge">
-                <div className="avatar-circle">
-                  <User size={16} />
+              <div className="user-profile-pill">
+                <div className="avatar-circle-pill">
+                  <User size={15} />
                 </div>
-                <div className="user-info-text">
-                  <span className="user-name">{user?.fullName || user?.userName}</span>
-                  <span className="user-role">{t("nav.vip")}</span>
+                <div className="user-info-pill">
+                  <span className="user-name-pill">{user?.fullName || user?.userName}</span>
+                  <span className="user-role-pill">{t("nav.vip")}</span>
                 </div>
-                <button className="logout-icon-btn" title={t("nav.logout")} onClick={() => setShowLogout(true)}>
-                  <LogOut size={15} />
+                <button className="logout-btn-pill" title={t("nav.logout")} onClick={() => setShowLogout(true)}>
+                  <LogOut size={14} />
                 </button>
               </div>
             ) : (
-              <div className="auth-btns">
-                <Link className="login-btn-black header-auth-btn" to="/login">
+              <div className="auth-btns-pill">
+                <Link className="auth-btn-pill-login" to="/login">
                   {t("nav.login")}
                 </Link>
-                <Link className="register-btn-cyan header-auth-btn" to="/register">
-                  {t("nav.register")}
+                <Link className="auth-btn-pill-register" to="/register">
+                  <span>{t("nav.register")}</span>
+                  <ArrowRight size={14} />
                 </Link>
               </div>
             )}
@@ -293,10 +395,21 @@ export default function Home() {
       </header>
 
       <main>
-        {/* ── 3. Light Hero Section ── */}
+        {/* ── 3. Light Hero Section with Clarified Background & Animations ── */}
         <section className="hero-light-section hero-animated-parking-bg">
-          {/* Animated Parking Layer */}
+          {/* Animated Parking & Video Layer */}
           <div className="parking-motion-bg">
+            <video
+              className="hero-drift-video"
+              autoPlay
+              loop
+              muted
+              playsInline
+              poster="/assets/smart_parking_hero.png"
+            >
+              <source src="/assets/car_drift_parking.mp4" type="video/mp4" />
+              <source src="/assets/car_drift_parking.webm" type="video/webm" />
+            </video>
             <div className="parking-neon-grid" />
             <div className="parking-laser-scanner" />
             <div className="parking-traffic-stream">
@@ -304,8 +417,16 @@ export default function Home() {
               <span className="car-pulse car-pulse-2" />
               <span className="car-pulse car-pulse-3" />
             </div>
+            {/* Live Sensor Beacon Pulses for Rich IoT Aesthetics */}
+            <div className="parking-sensor-beacons">
+              <span className="sensor-beacon beacon-pos-1" title="Sensor Slot A1 - Available" />
+              <span className="sensor-beacon beacon-pos-2" title="Sensor Slot B4 - Available" />
+              <span className="sensor-beacon beacon-pos-3" title="Sensor Slot EV1 - Charging" />
+              <span className="sensor-beacon beacon-pos-4" title="Sensor Slot C2 - Available" />
+            </div>
             <div className="hero-bg-overlay-glass" />
           </div>
+
           <div className="page-width hero-light-content">
             <div className="hero-pill-badge">
               <span className="pill-dot" />
@@ -322,35 +443,182 @@ export default function Home() {
               {t("hero.desc")}
             </p>
 
-            {/* Floating Glass Search Container */}
-            <div className="search-floating-card">
-              <div className="customer-home-search">
-                <div>
-                  <strong>{lang === "en" ? "Find a parking lot" : "Tìm bãi đỗ xe phù hợp"}</strong>
-                  <span>{lang === "en" ? "Compare distance, availability and estimated price." : "So sánh khoảng cách, chỗ trống và giá ước tính theo thời gian gửi."}</span>
-                </div>
-                <Link className="search-submit-btn" to="/booking">
-                  <Search size={18} /> {lang === "en" ? "Search lots" : "Tìm bãi"}
-                </Link>
+            {/* Interactive Multi-Criteria Search Card */}
+            <div className="search-interactive-card">
+              {/* Vehicle Type Tabs */}
+              <div className="search-vehicle-tabs">
+                <button
+                  type="button"
+                  className={`vehicle-tab-btn ${searchVehicle === "car" ? "active" : ""}`}
+                  onClick={() => setSearchVehicle("car")}
+                >
+                  <Car size={16} />
+                  <span>{lang === "en" ? "Car 4 - 7 Seats" : "Ô tô 4 - 7 chỗ"}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`vehicle-tab-btn ${searchVehicle === "bike" ? "active" : ""}`}
+                  onClick={() => setSearchVehicle("bike")}
+                >
+                  <Navigation size={16} />
+                  <span>{lang === "en" ? "Motorbike" : "Xe máy"}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`vehicle-tab-btn ${searchVehicle === "ev" ? "active" : ""}`}
+                  onClick={() => setSearchVehicle("ev")}
+                >
+                  <Zap size={16} />
+                  <span>{lang === "en" ? "EV Charging Station" : "Trạm sạc xe điện EV"}</span>
+                </button>
               </div>
-              <div className="search-filter-row">
-                <span className="filter-title">{lang === "en" ? "Search options" : "Tiêu chí tìm kiếm"}</span>
-                <span className="customer-home-search-hint">
-                  {lang === "en" ? "NEAREST · CHEAPEST · full-duration estimate" : "GẦN NHẤT · GIÁ THẤP NHẤT · ước tính toàn thời lượng"}
+
+              {/* Search Inputs Grid */}
+              <div className="search-inputs-grid">
+                {/* Location / Lot Selector */}
+                <div className="search-field-group">
+                  <label htmlFor="search-location">
+                    <MapPin size={13} className="field-icon-muted" />
+                    <span>{lang === "en" ? "LOCATION / PARKING LOT" : "KHU VỰC / BÃI ĐỖ XE"}</span>
+                  </label>
+                  <div className="search-select-wrapper">
+                    <select
+                      id="search-location"
+                      value={searchLocation}
+                      onChange={(e) => setSearchLocation(e.target.value)}
+                      className="search-field-select"
+                    >
+                      <option value="all">{lang === "en" ? "All Facilities (HCMC)" : "Tất cả bãi đỗ xe (TP. Hồ Chí Minh)"}</option>
+                      <option value="landmark81">{lang === "en" ? "Landmark 81 Central Park" : "Landmark 81 Central Park (Bình Thạnh)"}</option>
+                      <option value="bitexco">{lang === "en" ? "Bitexco Financial Tower" : "Bitexco Financial Tower (Quận 1)"}</option>
+                      <option value="ftown3">{lang === "en" ? "F-Town 3 (Hi-Tech Park)" : "F-Town 3 (Khu Công Nghệ Cao)"}</option>
+                      <option value="tan_son_nhat">{lang === "en" ? "Tan Son Nhat Airport - TCP" : "Sân bay Tân Sơn Nhất - Nhà xe TCP"}</option>
+                    </select>
+                    <ChevronDown size={14} className="select-arrow" />
+                  </div>
+                </div>
+
+                {/* Duration Selector */}
+                <div className="search-field-group">
+                  <label htmlFor="search-duration">
+                    <Clock size={13} className="field-icon-muted" />
+                    <span>{lang === "en" ? "EXPECTED DURATION" : "THỜI LƯỢNG DỰ KIẾN"}</span>
+                  </label>
+                  <div className="search-select-wrapper">
+                    <select
+                      id="search-duration"
+                      value={searchDuration}
+                      onChange={(e) => setSearchDuration(e.target.value)}
+                      className="search-field-select"
+                    >
+                      <option value="60">{lang === "en" ? "1 Hour (Short stay)" : "1 giờ (Tiêu chuẩn)"}</option>
+                      <option value="120">{lang === "en" ? "2 - 4 Hours (Half-day)" : "2 - 4 giờ (Nửa ngày)"}</option>
+                      <option value="480">{lang === "en" ? "4 - 8 Hours (Full-day)" : "4 - 8 giờ (Trong ngày)"}</option>
+                      <option value="1440">{lang === "en" ? "Overnight (24h)" : "Gửi qua đêm (Overnight)"}</option>
+                    </select>
+                    <ChevronDown size={14} className="select-arrow" />
+                  </div>
+                </div>
+
+                {/* Search Radius */}
+                <div className="search-field-group">
+                  <label htmlFor="search-radius">
+                    <SlidersHorizontal size={13} className="field-icon-muted" />
+                    <span>{lang === "en" ? "SEARCH RADIUS" : "PHẠM VI TÌM KIẾM"}</span>
+                  </label>
+                  <div className="search-select-wrapper">
+                    <select
+                      id="search-radius"
+                      value={searchRadius}
+                      onChange={(e) => setSearchRadius(e.target.value)}
+                      className="search-field-select"
+                    >
+                      <option value="2">{lang === "en" ? "< 2 km (Walking)" : "Bán kính < 2 km (Đi bộ)"}</option>
+                      <option value="5">{lang === "en" ? "< 5 km (Recommended)" : "Bán kính < 5 km (Tối ưu)"}</option>
+                      <option value="10">{lang === "en" ? "< 10 km (Expanded)" : "Bán kính < 10 km (Mở rộng)"}</option>
+                      <option value="all">{lang === "en" ? "Entire city" : "Toàn thành phố"}</option>
+                    </select>
+                    <ChevronDown size={14} className="select-arrow" />
+                  </div>
+                </div>
+
+                {/* Submit Search Button */}
+                <div className="search-btn-col">
+                  <Link
+                    to={`/search?lot=${searchLocation}&vehicle=${searchVehicle}&duration=${searchDuration}&radius=${searchRadius}&criteria=${selectedFilters.join(",")}`}
+                    className="search-action-btn"
+                  >
+                    <Search size={18} />
+                    <span>{lang === "en" ? "Find Parking" : "Tìm Bãi Đỗ"}</span>
+                    <ArrowRight size={15} />
+                  </Link>
+                </div>
+              </div>
+
+              {/* Priority Criteria Filter Row */}
+              <div className="search-criteria-row">
+                <span className="criteria-label">
+                  <Filter size={13} className="field-icon-muted mr-1" />
+                  {lang === "en" ? "Priority Criteria:" : "Tiêu chí ưu tiên:"}
                 </span>
+                <div className="criteria-chips-list">
+                  <button
+                    type="button"
+                    className={`criteria-chip ${selectedFilters.includes("nearest") ? "is-selected" : ""}`}
+                    onClick={() => toggleFilter("nearest")}
+                  >
+                    <Navigation size={12} className="chip-icon" />
+                    <span>{lang === "en" ? "Nearest (GPS)" : "Gần tôi nhất (GPS)"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`criteria-chip ${selectedFilters.includes("cheapest") ? "is-selected" : ""}`}
+                    onClick={() => toggleFilter("cheapest")}
+                  >
+                    <CreditCard size={12} className="chip-icon" />
+                    <span>{lang === "en" ? "Cheapest Price" : "Giá thấp nhất"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`criteria-chip ${selectedFilters.includes("available") ? "is-selected" : ""}`}
+                    onClick={() => toggleFilter("available")}
+                  >
+                    <Check size={12} className="chip-icon" />
+                    <span>{lang === "en" ? "Most Slots Available" : "Nhiều chỗ trống nhất"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`criteria-chip ${selectedFilters.includes("ev_station") ? "is-selected" : ""}`}
+                    onClick={() => toggleFilter("ev_station")}
+                  >
+                    <Zap size={12} className="chip-icon" />
+                    <span>{lang === "en" ? "Fast EV Charger" : "Có trụ sạc EV"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`criteria-chip ${selectedFilters.includes("sheltered") ? "is-selected" : ""}`}
+                    onClick={() => toggleFilter("sheltered")}
+                  >
+                    <ShieldCheck size={12} className="chip-icon" />
+                    <span>{lang === "en" ? "Sheltered & Security" : "Có mái che & Camera AI"}</span>
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Under Search Badges */}
+            {/* High-Contrast Luminous Trust Bar */}
             <div className="hero-trust-bar">
               <div className="trust-item">
-                <BadgeCheck size={16} className="text-cyan-600" /> {t("hero.trust_1")}
+                <BadgeCheck size={16} className="trust-icon" />
+                <span>{t("hero.trust_1")}</span>
               </div>
               <div className="trust-item">
-                <ShieldCheck size={16} className="text-cyan-600" /> {t("hero.trust_2")}
+                <ShieldCheck size={16} className="trust-icon" />
+                <span>{t("hero.trust_2")}</span>
               </div>
               <div className="trust-item">
-                <Zap size={16} className="text-cyan-600" /> {t("hero.trust_3")}
+                <Zap size={16} className="trust-icon" />
+                <span>{t("hero.trust_3")}</span>
               </div>
             </div>
           </div>

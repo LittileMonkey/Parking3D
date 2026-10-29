@@ -70,7 +70,7 @@ export default function ManagerDashboard() {
 
   const [loading, setLoading] = useState<boolean>(true);
   const [data, setData] = useState<ManagerDashboardData | null>(null);
-  const [, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // View switch: "admin" (Dashboard 1 - Screenshot style) vs "deep" (Dashboard 2 - Deep Analytics)
   const [activeDashboardTab, setActiveDashboardTab] = useState<"admin" | "deep">("admin");
@@ -248,6 +248,11 @@ export default function ManagerDashboard() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px", position: "relative" }}>
+      {error && (
+        <div style={{ background: "rgba(239, 68, 68, 0.12)", border: "1px solid #ef4444", borderRadius: 8, padding: "10px 16px", color: "#fca5a5", fontSize: "13px" }}>
+          ⚠️ {error}
+        </div>
+      )}
       {/* ═══════════════════════════════════════════════════════════════════
           TAB 1: DASHBOARD 1 (ADMIN) — THE SIGNATURE SCREENSHOT REDESIGN
           ═══════════════════════════════════════════════════════════════════ */}
