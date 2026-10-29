@@ -574,7 +574,88 @@ export const api = {
       }
     );
   },
+
+  /**
+   * [REAL API PAYMENT] Tra cứu biên lai điện tử (E-Receipt) sau thanh toán (SCRUM-72)
+   */
+  async getPaymentReceipt(paymentId: string): Promise<PaymentReceiptDto> {
+    return request<PaymentReceiptDto>(`/api/v1/payments/${encodeURIComponent(paymentId)}/receipt`);
+  },
+
+  /**
+   * [REAL API PARKING] Tra cứu chi tiết booking theo mã (SCRUM-48 - Facility RBAC Lookup)
+   */
+  async getBookingDetail(bookingId: string): Promise<BookingDetailDto> {
+    return request<BookingDetailDto>(`/api/v1/bookings/${encodeURIComponent(bookingId)}`);
+  },
+
+  /**
+   * [REAL API IDENTITY] Lấy danh sách tất cả tài khoản người dùng hệ thống (Admin/Manager)
+   */
+  async getAllAccounts(): Promise<AccountUserDto[]> {
+    return request<AccountUserDto[]>("/api/v1/account");
+  },
+
+  /**
+   * [REAL API IDENTITY] Tra cứu tài khoản người dùng theo email (Admin/Manager)
+   */
+  async getAccountByEmail(email: string): Promise<AccountUserDto> {
+    return request<AccountUserDto>(`/api/v1/account/by-email?email=${encodeURIComponent(email)}`);
+  },
+
+  /**
+   * [REAL API IDENTITY] Cập nhật vai trò người dùng (Admin/Manager Role Assignment)
+   */
+  async updateUserRole(userId: string, roleCode: string): Promise<AccountUserDto> {
+    return request<AccountUserDto>("/api/v1/author/update-role", {
+      method: "POST",
+      body: JSON.stringify({ userId, roleCode }),
+    });
+  },
 };
+
+export interface PaymentReceiptDto {
+  receiptNumber: string;
+  paymentId: string;
+  bookingId: string;
+  lotName: string;
+  plateNumber: string;
+  paymentMethod: string;
+  totalAmount: number;
+  currency: string;
+  paidAt: string;
+  collectedByStaff?: string | null;
+  bankTransactionNo?: string | null;
+  verificationHash: string;
+}
+
+export interface BookingDetailDto {
+  bookingId: string;
+  bookingCode: string;
+  lotId: string;
+  lotName: string;
+  slotId?: string | null;
+  slotCode?: string | null;
+  plateSnapshot: string;
+  vehicleType: string;
+  startsAt: string;
+  endsAt: string;
+  holdExpiresAt?: string | null;
+  arrivalDeadline: string;
+  status: string;
+  estimatedAmount: number;
+  qrToken?: string | null;
+  createdAt: string;
+}
+
+export interface AccountUserDto {
+  id: string;
+  emailNormalized?: string | null;
+  phoneE164?: string | null;
+  fullName: string;
+  status: string;
+  roles?: string[];
+}
 
 export interface PlateRecognitionResult {
   recognitionId?: string;
