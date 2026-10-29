@@ -55,31 +55,35 @@ namespace Parking.Payment.Api.Controllers
         }
 
 
-        /// Nhân viên xác nhận thu tiền mặt từ khách hàng (API 2 - S2-06)
+        /// <summary>
+        /// Nhân viên xác nhận thu tiền mặt từ khách hàng (API 4 - SCRUM-95 & S3-06)
+        /// </summary>
         [HttpPost("cash/confirm")]
         public async Task<IActionResult> ConfirmCashPayment([FromBody] ConfirmCashPaymentRequestDto requestDto, CancellationToken cancellationToken)
         {
-            // 1. Trích xuất tên nhân viên từ Token (fallback về "staff_01" nếu test qua Postman chưa có Token)
-            var staffName = User.Identity?.Name
-                              ?? User.FindFirst("name")?.Value
-                              ?? User.FindFirst("sub")?.Value
-                              ?? "staff_01";
-
-            // 2. Chuyển đổi DTO thành MediatR Command
+            // 1. Trích xuất User ID (UUID) của nhân viên từ JWT Claims hoặc Header
+            var staffClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                          ?? User.FindFirst("sub")?.Value
+                          ?? User.FindFirst("id")?.Value
+                          ?? Request.Headers["X-User-Id"].FirstOrDefault();
+            // Nếu test nội bộ không có token, fallback về Staff ID mặc định trong Seed DB
+            var staffId = Guid.TryParse(staffClaim, out var parsedGuid)
+                ? parsedGuid.ToString()
+                : "22222222-2222-2222-2222-222222222222";
+            // 2. Chuyển đổi DTO thành MediatR Command mang theo ID thật của nhân viên
             var command = new ConfirmCashPaymentCommand(
-                           requestDto.BookingId, // hoặc requestDto.BookingId tùy theo file DTO của bạn
-                           requestDto.StaffReason,
-                           requestDto.Version,
-                           staffName
-                       );
-
-            // 3. Gửi Command qua MediatR (tự động chạy qua Validator kiểm tra dữ liệu)
+                requestDto.BookingId,
+                requestDto.StaffReason,
+                requestDto.Version,
+                staffId
+            );
+            // 3. Gửi Command qua MediatR (chạy qua Validator và Handler)
             var resultDto = await _mediator.Send(command, cancellationToken);
-
-
-            // 4. Bọc kết quả vào phong bì ApiResponse chuẩn 200 OK theo tài liệu thiết kế S2-06
-            var response = ApiResponse<ConfirmCashPaymentResultDto>.Success(resultDto, "CASH payment confirmed. Receipt is being generated.", 200);
-
+            // 4. Bọc kết quả vào phong bì ApiResponse chuẩn 200 OK
+            var response = ApiResponse<ConfirmCashPaymentResultDto>.Success(
+                resultDto,
+                "CASH payment confirmed. Receipt is being generated.",
+                200);
             return Ok(response);
         }
 
