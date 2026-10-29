@@ -1,0 +1,455 @@
+{
+  "info": {
+    "name": "SCRUM-77 TV2 Sprint 3 — acceptance preparation",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Prepared collection, not executed as a suite. Use only isolated synthetic fixtures. Wait for booking CONFIRMED before QR; request 11 can reissue/revoke QR, request12 consumes it. DB assertions and parallel harness are required. No checkout endpoint is invented. Set expectedStatus for a negative case; reset afterward. Never export populated tokens/password/QR."
+  },
+  "item": [
+    {
+      "name": "01 Gateway readiness",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/health/ready"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP status matches expectedStatus', () => pm.expect(pm.response.code).to.eql(Number(pm.variables.get('expectedStatus') || 200)));",
+              "const payload = pm.response.json();",
+              "pm.test('Standard API envelope', () => { for (const key of ['result','isSuccess','statusCode','message']) pm.expect(payload).to.have.property(key); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Login Customer",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{ownerEmail}}\",\n  \"password\": \"{{password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP status matches expectedStatus', () => pm.expect(pm.response.code).to.eql(Number(pm.variables.get('expectedStatus') || 200)));",
+              "const payload = pm.response.json();",
+              "pm.test('Standard API envelope', () => { for (const key of ['result','isSuccess','statusCode','message']) pm.expect(payload).to.have.property(key); });",
+              "if (pm.response.code === 200) pm.environment.set('ownerToken', payload.result.accessToken);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Login Staff",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{staffEmail}}\",\n  \"password\": \"{{password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP status matches expectedStatus', () => pm.expect(pm.response.code).to.eql(Number(pm.variables.get('expectedStatus') || 200)));",
+              "const payload = pm.response.json();",
+              "pm.test('Standard API envelope', () => { for (const key of ['result','isSuccess','statusCode','message']) pm.expect(payload).to.have.property(key); });",
+              "if (pm.response.code === 200) pm.environment.set('staffToken', payload.result.accessToken);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 List public lots",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP status matches expectedStatus', () => pm.expect(pm.response.code).to.eql(Number(pm.variables.get('expectedStatus') || 200)));",
+              "const payload = pm.response.json();",
+              "pm.test('Standard API envelope', () => { for (const key of ['result','isSuccess','statusCode','message']) pm.expect(payload).to.have.property(key); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Search actual quote",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots/search?vehicleType=CAR&expectedDuration=60&sortBy=CHEAPEST&startTime={{startsAt}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP status matches expectedStatus', () => pm.expect(pm.response.code).to.eql(Number(pm.variables.get('expectedStatus') || 200)));",
+              "const payload = pm.response.json();",
+              "pm.test('Standard API envelope', () => { for (const key of ['result','isSuccess','statusCode','message']) pm.expect(payload).to.have.property(key); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Availability",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{lotId}}/availability?startTime={{startsAt}}&endTime={{endsAt}}&vehicleType=CAR"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP status matches expectedStatus', () => pm.expect(pm.response.code).to.eql(Number(pm.variables.get('expectedStatus') || 200)));",
+              "const payload = pm.response.json();",
+              "pm.test('Standard API envelope', () => { for (const key of ['result','isSuccess','statusCode','message']) pm.expect(payload).to.have.property(key); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Create booking",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{ownerToken}}"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{bookingKey}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/bookings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"lotId\": \"{{lotId}}\",\n  \"slotId\": \"{{slotId}}\",\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"startsAt\": \"{{startsAt}}\",\n  \"endsAt\": \"{{endsAt}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP status matches expectedStatus', () => pm.expect(pm.response.code).to.eql(Number(pm.variables.get('expectedStatus') || 200)));",
+              "const payload = pm.response.json();",
+              "pm.test('Standard API envelope', () => { for (const key of ['result','isSuccess','statusCode','message']) pm.expect(payload).to.have.property(key); });",
+              "if (pm.response.code === 200) pm.environment.set('bookingId', payload.result.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Booking detail",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{ownerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/bookings/{{bookingId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP status matches expectedStatus', () => pm.expect(pm.response.code).to.eql(Number(pm.variables.get('expectedStatus') || 200)));",
+              "const payload = pm.response.json();",
+              "pm.test('Standard API envelope', () => { for (const key of ['result','isSuccess','statusCode','message']) pm.expect(payload).to.have.property(key); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Create CASH",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{ownerToken}}"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{paymentKey}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/payments",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"bookingId\": \"{{bookingId}}\",\n  \"method\": \"CASH\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP status matches expectedStatus', () => pm.expect(pm.response.code).to.eql(Number(pm.variables.get('expectedStatus') || 200)));",
+              "const payload = pm.response.json();",
+              "pm.test('Standard API envelope', () => { for (const key of ['result','isSuccess','statusCode','message']) pm.expect(payload).to.have.property(key); });",
+              "if (pm.response.code === 200) { pm.environment.set('paymentId', payload.result.id); pm.environment.set('paymentVersion', payload.result.version); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 Scoped Staff CASH confirmation",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{staffToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{lotId}}/payments/{{paymentId}}/cash-confirmation",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"version\": {{paymentVersion}},\n  \"reason\": \"Synthetic QA cash collection\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP status matches expectedStatus', () => pm.expect(pm.response.code).to.eql(Number(pm.variables.get('expectedStatus') || 200)));",
+              "const payload = pm.response.json();",
+              "pm.test('Standard API envelope', () => { for (const key of ['result','isSuccess','statusCode','message']) pm.expect(payload).to.have.property(key); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 Issue QR after CONFIRMED",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{ownerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/bookings/{{bookingId}}/qr",
+        "body": {
+          "mode": "raw",
+          "raw": "{}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP status matches expectedStatus', () => pm.expect(pm.response.code).to.eql(Number(pm.variables.get('expectedStatus') || 200)));",
+              "const payload = pm.response.json();",
+              "pm.test('Standard API envelope', () => { for (const key of ['result','isSuccess','statusCode','message']) pm.expect(payload).to.have.property(key); });",
+              "if (pm.response.code === 200) pm.environment.set('qrPayload', payload.result.qrPayload);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 Staff check-in through Gateway",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{staffToken}}"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{checkinKey}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/check-in",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"lotId\": \"{{lotId}}\",\n  \"gateId\": \"{{gateId}}\",\n  \"qrPayload\": \"{{qrPayload}}\",\n  \"detectedPlate\": \"{{detectedPlate}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP status matches expectedStatus', () => pm.expect(pm.response.code).to.eql(Number(pm.variables.get('expectedStatus') || 200)));",
+              "const payload = pm.response.json();",
+              "pm.test('Standard API envelope', () => { for (const key of ['result','isSuccess','statusCode','message']) pm.expect(payload).to.have.property(key); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 Payment status",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{ownerToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/payments/{{bookingId}}/status"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP status matches expectedStatus', () => pm.expect(pm.response.code).to.eql(Number(pm.variables.get('expectedStatus') || 200)));",
+              "const payload = pm.response.json();",
+              "pm.test('Standard API envelope', () => { for (const key of ['result','isSuccess','statusCode','message']) pm.expect(payload).to.have.property(key); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

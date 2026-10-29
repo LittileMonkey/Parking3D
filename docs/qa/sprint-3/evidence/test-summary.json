@@ -1,0 +1,13 @@
+{
+  "productBase": "be3b5f6",
+  "executedAt": "2026-10-29T21:20:52.8687331+07:00",
+  "scope": "Isolated PostgreSQL 18.4; mixed unit/repository/mock and HTTP suite; not full UI acceptance",
+  "total": 96,
+  "passed": 95,
+  "failed": 1,
+  "failedTests": [
+    "Parking.Microservices.Tests.ParkingWorkflowTests.RealHttpJwtGrpcScopePaymentAndSingleUseQrWorkflow"
+  ],
+  "rootCause": "Identity test host missing SeedAdmin configuration",
+  "fullE2eAccepted": false
+}

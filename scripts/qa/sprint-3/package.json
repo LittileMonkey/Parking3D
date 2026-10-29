@@ -1,0 +1,11 @@
+{
+  "name": "parking-sprint3-qa",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "demo:api": "node run-real-api-demo.cjs"
+  },
+  "dependencies": {
+    "pg": "8.23.1"
+  }
+}
