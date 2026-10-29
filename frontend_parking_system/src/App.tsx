@@ -8,6 +8,8 @@ import VerifyEmail from "./pages/VerifyEmail";
 import EmailVerified from "./pages/EmailVerified";
 import BookingStatusPage from "./pages/BookingStatusPage";
 import FaqPage from "./pages/FaqPage";
+import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
+import TermsOfServicePage from "./pages/TermsOfServicePage";
 
 // Staff Operations Portal Components
 import StaffLayout from "./components/staff/StaffLayout";
@@ -40,6 +42,8 @@ export default function App() {
       <Route path="/search" element={<Navigate to="/booking" replace />} />
       <Route path="/bookings/:bookingId" element={<BookingStatusPage />} />
       <Route path="/faq" element={<FaqPage />} />
+      <Route path="/privacy" element={<PrivacyPolicyPage />} />
+      <Route path="/terms" element={<TermsOfServicePage />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/email-verified" element={<EmailVerified />} />
 

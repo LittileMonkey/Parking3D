@@ -342,21 +342,22 @@ export default function Home() {
 
           {/* Right Actions */}
           <div className="header-actions-pill">
-            <div className="lang-switcher-pill" role="group" aria-label="Chọn ngôn ngữ">
+            <div className="lang-switcher-pill" role="group" aria-label={lang === "vi" ? "Chọn ngôn ngữ" : "Select language"}>
               <button
                 type="button"
                 className={`lang-btn-pill ${lang === "vi" ? "active" : ""}`}
                 onClick={() => setLang("vi")}
                 title="Tiếng Việt"
+                aria-pressed={lang === "vi"}
               >
                 VN
               </button>
-              <span className="lang-sep">|</span>
               <button
                 type="button"
                 className={`lang-btn-pill ${lang === "en" ? "active" : ""}`}
                 onClick={() => setLang("en")}
                 title="English"
+                aria-pressed={lang === "en"}
               >
                 EN
               </button>
@@ -397,34 +398,47 @@ export default function Home() {
       <main>
         {/* ── 3. Light Hero Section with Clarified Background & Animations ── */}
         <section className="hero-light-section hero-animated-parking-bg">
-          {/* Animated Parking & Video Layer */}
+          {/* Clean High-Resolution Parking Background */}
           <div className="parking-motion-bg">
-            <video
-              className="hero-drift-video"
-              autoPlay
-              loop
-              muted
-              playsInline
-              poster="/assets/smart_parking_hero.png"
-            >
-              <source src="/assets/car_drift_parking.mp4" type="video/mp4" />
-              <source src="/assets/car_drift_parking.webm" type="video/webm" />
-            </video>
-            <div className="parking-neon-grid" />
-            <div className="parking-laser-scanner" />
-            <div className="parking-traffic-stream">
-              <span className="car-pulse car-pulse-1" />
-              <span className="car-pulse car-pulse-2" />
-              <span className="car-pulse car-pulse-3" />
-            </div>
-            {/* Live Sensor Beacon Pulses for Rich IoT Aesthetics */}
-            <div className="parking-sensor-beacons">
-              <span className="sensor-beacon beacon-pos-1" title="Sensor Slot A1 - Available" />
-              <span className="sensor-beacon beacon-pos-2" title="Sensor Slot B4 - Available" />
-              <span className="sensor-beacon beacon-pos-3" title="Sensor Slot EV1 - Charging" />
-              <span className="sensor-beacon beacon-pos-4" title="Sensor Slot C2 - Available" />
-            </div>
             <div className="hero-bg-overlay-glass" />
+          </div>
+
+          {/* Miniature Cruising Car Searching for Slot */}
+          <div className="mini-car-track" aria-hidden="true">
+            <div className="mini-car-vehicle">
+              {/* Question Mark Thought Bubble */}
+              <div className="mini-car-bubble">
+                <span className="bubble-question">?</span>
+              </div>
+
+              {/* Headlight beam */}
+              <div className="mini-car-beam" />
+
+              {/* Compact Cyber Car SVG */}
+              <svg className="mini-car-svg" viewBox="0 0 110 46" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <ellipse cx="55" cy="42" rx="46" ry="4" fill="rgba(0,0,0,0.35)" />
+                <path d="M12 28C10 28 8 26 8 23L14 17C16 15 20 14 26 14H66C72 14 78 17 84 21L96 23C99 24 101 26 101 29V34C101 35.5 100 36 98 36H12C10 36 9 35 9 33V28H12Z" fill="url(#carBodyGrad)" />
+                <path d="M28 14L37 5C39 3 42 2 46 2H68C72 2 76 4 79 7L88 14H28Z" fill="#0f172a" />
+                <path d="M38 6L32 13H54V4H45C42 4 40 4.8 38 6Z" fill="#38bdf8" fillOpacity="0.85" />
+                <path d="M57 4V13H82L76 6C74 4.8 71.5 4 69 4H57Z" fill="#38bdf8" fillOpacity="0.85" />
+                <line x1="39" y1="7" x2="34" y2="12" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+                <circle cx="98" cy="27" r="3.5" fill="#fef08a" />
+                <rect x="7" y="24" width="3" height="6" rx="1.5" fill="#ef4444" />
+                <circle cx="82" cy="36" r="9" fill="#1e293b" />
+                <circle cx="82" cy="36" r="5.5" fill="#64748b" />
+                <circle cx="82" cy="36" r="2.5" fill="#0284c7" />
+                <circle cx="26" cy="36" r="9" fill="#1e293b" />
+                <circle cx="26" cy="36" r="5.5" fill="#64748b" />
+                <circle cx="26" cy="36" r="2.5" fill="#0284c7" />
+                <defs>
+                  <linearGradient id="carBodyGrad" x1="8" y1="14" x2="101" y2="36" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="#ffffff" />
+                    <stop offset="0.5" stopColor="#e2e8f0" />
+                    <stop offset="1" stopColor="#0284c7" />
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
           </div>
 
           <div className="page-width hero-light-content">
@@ -999,7 +1013,7 @@ export default function Home() {
             <h4 className="footer-col-title">{t("footer.support")}</h4>
             <ul className="footer-links">
               <li><a href="#gis-section">{lang === "en" ? "Booking Guide" : "Hướng dẫn đặt chỗ"}</a></li>
-              <li><a href="#solutions">{lang === "en" ? "Parking Rules" : "Quy định bãi đỗ"}</a></li>
+              <li><Link to="/terms">{lang === "en" ? "Parking Rules" : "Quy định bãi đỗ"}</Link></li>
               <li><a href="#solutions">{lang === "en" ? "EV Charging Station" : "Trạm sạc EV"}</a></li>
               <li><a href="mailto:support@parkmatrix.vn">{lang === "en" ? "Report Incident 24/7" : "Báo sự cố 24/7"}</a></li>
               <li><a href="#gis-section">API Integration Docs</a></li>
@@ -1031,9 +1045,9 @@ export default function Home() {
         <div className="page-width footer-bottom-dark">
           <span>{t("footer.rights")}</span>
           <div className="footer-bottom-links">
-            <a href="#">{t("footer.privacy")}</a>
+            <Link to="/privacy">{t("footer.privacy")}</Link>
             <span>•</span>
-            <a href="#">{t("footer.terms")}</a>
+            <Link to="/terms">{t("footer.terms")}</Link>
             <span>•</span>
             <a href="mailto:support@parkmatrix.vn">Support: support@parkmatrix.vn</a>
           </div>
