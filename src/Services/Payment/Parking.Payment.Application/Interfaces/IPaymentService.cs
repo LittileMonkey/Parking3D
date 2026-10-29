@@ -1,4 +1,5 @@
 using Parking.Payment.Application.DTOs;
+using Parking.Payment.Application.UseCase.ConfirmCashPayment;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -23,6 +24,12 @@ namespace Parking.Payment.Application.Interfaces
         /// Nhân viên xác nhận thu tiền mặt tại bãi xe.
         /// </summary>
         Task<PaymentView> ConfirmCashAsync(Guid actor, Guid lot, Guid payment, CashConfirmationRequest request, CancellationToken ct);
+
+        /// <summary>
+        /// Nghiệp vụ SCRUM-95: Nhân viên xác nhận thu tiền mặt theo BookingId.
+        /// Xác thực quyền qua gRPC Identity (BR-01), chống Double Effect và ghi Outbox an toàn.
+        /// </summary>
+        Task<ConfirmCashPaymentResultDto> ConfirmCashPaymentAsync(ConfirmCashPaymentCommand command, CancellationToken ct);
 
         /// <summary>
         /// Xử lý callback IPN từ VNPay, xác thực bảo mật và cập nhật trạng thái giao dịch.

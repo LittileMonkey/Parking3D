@@ -79,4 +79,44 @@ public class ParkingLotRepository : IParkingLotRepository
 
         return result;
     }
+
+
+
+    /// <summary>
+    /// Thực hiện câu lệnh SQL đọc cấu hình biểu giá hiệu lực (FLAT_BLOCK) từ bảng pricing_plans và pricing_rules.
+    /// </summary>
+    public async Task<(string Timezone, string ParametersJson)?> GetPricingRuleConfigAsync(
+        Guid lotId,
+        string vehicleType,
+        DateTime startTime,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedType = vehicleType.Trim().ToUpperInvariant();
+        const string sql = """
+            SELECT l.timezone, pr.parameters::text
+            FROM parking_lots l
+            JOIN pricing_plans pp ON pp.lot_id = l.id
+            JOIN pricing_rules pr ON pr.plan_id = pp.id AND pr.rule_type = 'FLAT_BLOCK'
+            WHERE l.id = @lotId 
+              AND pp.vehicle_type = @vehicleType 
+              AND pp.status = 'PUBLISHED'
+              AND pp.currency = 'VND'
+              AND pp.effective_from <= @startTime
+              AND (pp.effective_until IS NULL OR pp.effective_until >= @startTime)
+            ORDER BY pp.version_no DESC 
+            LIMIT 1;
+            """;
+        await using var cmd = _db.CreateCommand(sql);
+        cmd.Parameters.AddWithValue("lotId", lotId);
+        cmd.Parameters.AddWithValue("vehicleType", normalizedType);
+        cmd.Parameters.AddWithValue("startTime", startTime.ToUniversalTime());
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+        var timezone = reader.GetString(0);
+        var parametersJson = reader.GetString(1);
+        return (timezone, parametersJson);
+    }
 }
