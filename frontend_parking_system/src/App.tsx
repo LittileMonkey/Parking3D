@@ -1,4 +1,4 @@
-import { Route, Routes, Navigate } from "react-router-dom";
+import { Route, Routes, Navigate, useLocation } from "react-router-dom";
 import Home from "./pages/Home";
 import { lazy, Suspense } from "react";
 import Login from "./pages/Login";
@@ -30,6 +30,11 @@ import ReportsAuditPage from "./pages/manager/ReportsAuditPage";
 
 const Booking = lazy(() => import("./pages/Booking"));
 
+function SearchRedirect() {
+  const location = useLocation();
+  return <Navigate to={`/booking${location.search}`} replace />;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -39,7 +44,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/register" element={<Register />} />
-      <Route path="/search" element={<Navigate to="/booking" replace />} />
+      <Route path="/search" element={<SearchRedirect />} />
       <Route path="/bookings/:bookingId" element={<BookingStatusPage />} />
       <Route path="/faq" element={<FaqPage />} />
       <Route path="/privacy" element={<PrivacyPolicyPage />} />

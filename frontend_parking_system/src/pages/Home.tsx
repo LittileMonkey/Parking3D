@@ -133,12 +133,26 @@ export default function Home() {
   const [searchLocation, setSearchLocation] = useState<string>("all");
   const [searchDuration, setSearchDuration] = useState<string>("120"); // 2 hours
   const [searchRadius, setSearchRadius] = useState<string>("5"); // 5 km
-  const [selectedFilters, setSelectedFilters] = useState<string[]>(["nearest", "cheapest"]);
+  const [selectedFilters, setSelectedFilters] = useState<string[]>(["cheapest"]);
 
   const toggleFilter = (filterKey: string) => {
-    setSelectedFilters((prev) =>
-      prev.includes(filterKey) ? prev.filter((k) => k !== filterKey) : [...prev, filterKey]
-    );
+    setSelectedFilters((prev) => {
+      if (filterKey === "nearest") {
+        const withoutCheapest = prev.filter((k) => k !== "cheapest");
+        return withoutCheapest.includes("nearest")
+          ? withoutCheapest.filter((k) => k !== "nearest")
+          : [...withoutCheapest, "nearest"];
+      }
+      if (filterKey === "cheapest") {
+        const withoutNearest = prev.filter((k) => k !== "nearest");
+        return withoutNearest.includes("cheapest")
+          ? withoutNearest.filter((k) => k !== "cheapest")
+          : [...withoutNearest, "cheapest"];
+      }
+      return prev.includes(filterKey)
+        ? prev.filter((k) => k !== filterKey)
+        : [...prev, filterKey];
+    });
   };
 
   const [envData, setEnvData] = useState<BuildingEnvironment>({
@@ -403,43 +417,6 @@ export default function Home() {
             <div className="hero-bg-overlay-glass" />
           </div>
 
-          {/* Miniature Cruising Car Searching for Slot */}
-          <div className="mini-car-track" aria-hidden="true">
-            <div className="mini-car-vehicle">
-              {/* Question Mark Thought Bubble */}
-              <div className="mini-car-bubble">
-                <span className="bubble-question">?</span>
-              </div>
-
-              {/* Headlight beam */}
-              <div className="mini-car-beam" />
-
-              {/* Compact Cyber Car SVG */}
-              <svg className="mini-car-svg" viewBox="0 0 110 46" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <ellipse cx="55" cy="42" rx="46" ry="4" fill="rgba(0,0,0,0.35)" />
-                <path d="M12 28C10 28 8 26 8 23L14 17C16 15 20 14 26 14H66C72 14 78 17 84 21L96 23C99 24 101 26 101 29V34C101 35.5 100 36 98 36H12C10 36 9 35 9 33V28H12Z" fill="url(#carBodyGrad)" />
-                <path d="M28 14L37 5C39 3 42 2 46 2H68C72 2 76 4 79 7L88 14H28Z" fill="#0f172a" />
-                <path d="M38 6L32 13H54V4H45C42 4 40 4.8 38 6Z" fill="#38bdf8" fillOpacity="0.85" />
-                <path d="M57 4V13H82L76 6C74 4.8 71.5 4 69 4H57Z" fill="#38bdf8" fillOpacity="0.85" />
-                <line x1="39" y1="7" x2="34" y2="12" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
-                <circle cx="98" cy="27" r="3.5" fill="#fef08a" />
-                <rect x="7" y="24" width="3" height="6" rx="1.5" fill="#ef4444" />
-                <circle cx="82" cy="36" r="9" fill="#1e293b" />
-                <circle cx="82" cy="36" r="5.5" fill="#64748b" />
-                <circle cx="82" cy="36" r="2.5" fill="#0284c7" />
-                <circle cx="26" cy="36" r="9" fill="#1e293b" />
-                <circle cx="26" cy="36" r="5.5" fill="#64748b" />
-                <circle cx="26" cy="36" r="2.5" fill="#0284c7" />
-                <defs>
-                  <linearGradient id="carBodyGrad" x1="8" y1="14" x2="101" y2="36" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#ffffff" />
-                    <stop offset="0.5" stopColor="#e2e8f0" />
-                    <stop offset="1" stopColor="#0284c7" />
-                  </linearGradient>
-                </defs>
-              </svg>
-            </div>
-          </div>
 
           <div className="page-width hero-light-content">
             <div className="hero-pill-badge">
@@ -453,12 +430,47 @@ export default function Home() {
               {t("hero.title_part2")} <span className="text-gradient-cyan">{t("hero.title_part3")}</span>
             </h1>
 
-            <p className="hero-light-desc">
-              {t("hero.desc")}
-            </p>
-
             {/* Interactive Multi-Criteria Search Card */}
             <div className="search-interactive-card">
+              {/* Miniature Car Circling Around Search Card Perimeter */}
+              <div className="card-perimeter-car-track" aria-hidden="true">
+                <div className="card-patrol-car">
+                  {/* Thought Bubble Question Mark */}
+                  <div className="patrol-bubble">
+                    <span className="patrol-q">?</span>
+                  </div>
+
+                  {/* Dual Headlights Light Cones */}
+                  <div className="patrol-headlights" />
+
+                  {/* Top-Down View Cyber Car SVG */}
+                  <svg className="patrol-car-svg" viewBox="0 0 54 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="2" y="2" width="50" height="24" rx="7" fill="rgba(0,0,0,0.3)" />
+                    <rect x="7" y="0" width="10" height="3" rx="1.5" fill="#1e293b" />
+                    <rect x="37" y="0" width="10" height="3" rx="1.5" fill="#1e293b" />
+                    <rect x="7" y="25" width="10" height="3" rx="1.5" fill="#1e293b" />
+                    <rect x="37" y="25" width="10" height="3" rx="1.5" fill="#1e293b" />
+                    <rect x="3" y="2.5" width="48" height="23" rx="7" fill="url(#patrolBodyGrad)" stroke="#38bdf8" strokeWidth="1" />
+                    <path d="M42 5.5C45 9 45 19 42 22.5" stroke="#bae6fd" strokeWidth="1" strokeLinecap="round" opacity="0.6" />
+                    <path d="M35 5C38 8 38 20 35 23H32C34 18 34 10 32 5H35Z" fill="#0f172a" />
+                    <path d="M34 6.5C36 9 36 19 34 21.5" stroke="#38bdf8" strokeWidth="1" opacity="0.8" />
+                    <rect x="18" y="5" width="14" height="18" rx="3" fill="#0f172a" />
+                    <rect x="19.5" y="6.5" width="11" height="15" rx="2" fill="#0369a1" fillOpacity="0.4" />
+                    <path d="M15 5C13 8 13 20 15 23H17C15 18 15 10 17 5H15Z" fill="#0f172a" />
+                    <rect x="49" y="4" width="2" height="4" rx="1" fill="#fef08a" />
+                    <rect x="49" y="20" width="2" height="4" rx="1" fill="#fef08a" />
+                    <rect x="3" y="4" width="1.5" height="4" rx="0.75" fill="#ef4444" />
+                    <rect x="3" y="20" width="1.5" height="4" rx="0.75" fill="#ef4444" />
+                    <defs>
+                      <linearGradient id="patrolBodyGrad" x1="3" y1="14" x2="51" y2="14" gradientUnits="userSpaceOnUse">
+                        <stop stopColor="#0369a1" />
+                        <stop offset="0.5" stopColor="#0284c7" />
+                        <stop offset="1" stopColor="#38bdf8" />
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                </div>
+              </div>
               {/* Vehicle Type Tabs */}
               <div className="search-vehicle-tabs">
                 <button
@@ -559,7 +571,7 @@ export default function Home() {
                 {/* Submit Search Button */}
                 <div className="search-btn-col">
                   <Link
-                    to={`/search?lot=${searchLocation}&vehicle=${searchVehicle}&duration=${searchDuration}&radius=${searchRadius}&criteria=${selectedFilters.join(",")}`}
+                    to={`/booking?lot=${searchLocation}&vehicle=${searchVehicle}&duration=${searchDuration}&radius=${searchRadius}&criteria=${selectedFilters.join(",")}&sortBy=${selectedFilters.includes("nearest") ? "NEAREST" : "CHEAPEST"}`}
                     className="search-action-btn"
                   >
                     <Search size={18} />

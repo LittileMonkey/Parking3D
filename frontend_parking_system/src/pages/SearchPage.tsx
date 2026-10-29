@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError, api, type LotAvailability, type ParkingSearchItem, type ParkingLevelAvailability, type UserVehicle } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import ParkingViewer, { type ModelSlot } from "../components/parking/ParkingViewer";
@@ -70,12 +70,35 @@ function getBookingIdempotencyKey(signature: string) {
 
 export default function SearchPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, isAuthenticated } = useAuth();
-  const [vehicleType, setVehicleType] = useState<VehicleType>("Car");
+
+  const paramVehicle = searchParams.get("vehicle") || searchParams.get("vehicleType");
+  const initialVehicle: VehicleType = (paramVehicle && (paramVehicle.toLowerCase().includes("bike") || paramVehicle.toLowerCase().includes("motor")))
+    ? "Motorbike"
+    : "Car";
+
+  const paramDuration = Number(searchParams.get("duration") || searchParams.get("expectedDuration"));
+  const initialDuration = Number.isInteger(paramDuration) && paramDuration >= 30 && paramDuration <= 1440
+    ? paramDuration
+    : 120;
+
+  const paramSortBy = searchParams.get("sortBy")?.toUpperCase();
+  const paramCriteria = searchParams.get("criteria")?.toLowerCase() || "";
+  const initialSortBy: "NEAREST" | "CHEAPEST" = paramSortBy === "NEAREST" || (!paramSortBy && paramCriteria.includes("nearest") && !paramCriteria.includes("cheapest"))
+    ? "NEAREST"
+    : "CHEAPEST";
+
+  const paramRadius = searchParams.get("radius") || searchParams.get("radiusKm");
+  const initialRadius = paramRadius === "all"
+    ? 20
+    : (Number(paramRadius) >= 1 && Number(paramRadius) <= 50 ? Number(paramRadius) : 5);
+
+  const [vehicleType, setVehicleType] = useState<VehicleType>(initialVehicle);
   const [startsAt, setStartsAt] = useState(() => toLocalDateTime(new Date(Date.now() + 30 * 60_000)));
-  const [duration, setDuration] = useState(120);
-  const [sortBy, setSortBy] = useState<"NEAREST" | "CHEAPEST">("CHEAPEST");
-  const [radiusKm, setRadiusKm] = useState(5);
+  const [duration, setDuration] = useState(initialDuration);
+  const [sortBy, setSortBy] = useState<"NEAREST" | "CHEAPEST">(initialSortBy);
+  const [radiusKm, setRadiusKm] = useState(initialRadius);
   const [position, setPosition] = useState<{ latitude: number; longitude: number } | null>(null);
   const [manualLatitude, setManualLatitude] = useState("");
   const [manualLongitude, setManualLongitude] = useState("");
@@ -124,6 +147,33 @@ export default function SearchPage() {
   const searchIsCurrent = Boolean(searchSnapshot && searchSnapshot === criteriaSignature);
 
   useEffect(() => {
+    const v = searchParams.get("vehicle") || searchParams.get("vehicleType");
+    if (v) {
+      setVehicleType(v.toLowerCase().includes("bike") || v.toLowerCase().includes("motor") ? "Motorbike" : "Car");
+    }
+    const d = Number(searchParams.get("duration") || searchParams.get("expectedDuration"));
+    if (Number.isInteger(d) && d >= 30 && d <= 1440) {
+      setDuration(d);
+    }
+    const s = searchParams.get("sortBy")?.toUpperCase();
+    const c = searchParams.get("criteria")?.toLowerCase() || "";
+    if (s === "NEAREST" || (s !== "CHEAPEST" && c.includes("nearest") && !c.includes("cheapest"))) {
+      setSortBy("NEAREST");
+    } else if (s === "CHEAPEST" || c.includes("cheapest")) {
+      setSortBy("CHEAPEST");
+    }
+    const r = searchParams.get("radius") || searchParams.get("radiusKm");
+    if (r === "all") {
+      setRadiusKm(20);
+    } else if (r) {
+      const num = Number(r);
+      if (Number.isFinite(num) && num >= 1 && num <= 50) {
+        setRadiusKm(num);
+      }
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     if (!isAuthenticated) {
       setVehicles([]);
       setVehicleId("");
@@ -147,7 +197,7 @@ export default function SearchPage() {
     return () => { active = false; };
   }, [isAuthenticated]);
 
-  const loadAvailability = async (lot: ParkingSearchItem, silent = false) => {
+  const loadAvailability = useCallback(async (lot: ParkingSearchItem, silent = false) => {
     const requestId = ++availabilityRequestId.current;
     setSelectedLot(lot);
     if (!silent) {
@@ -183,10 +233,17 @@ export default function SearchPage() {
         setIsRefreshingAvailability(false);
       }
     }
-  };
+  }, [startsAt, duration, vehicleType, criteriaSignature]);
 
-  const submitSearch = async (event?: FormEvent<HTMLFormElement>) => {
-    event?.preventDefault();
+  const executeSearch = useCallback(async (
+    targetVehicleType: VehicleType,
+    targetStartsAt: string,
+    targetDuration: number,
+    targetSortBy: "NEAREST" | "CHEAPEST",
+    targetRadiusKm: number,
+    targetPosition: { latitude: number; longitude: number } | null,
+    targetLotIdOrCode?: string | null
+  ) => {
     setSearchError("");
     setSelectedLot(null);
     setAvailability(null);
@@ -195,34 +252,56 @@ export default function SearchPage() {
     setAvailabilitySnapshot("");
     availabilityRequestId.current += 1;
 
-    const durationMinutes = Number(duration);
+    const durationMinutes = Number(targetDuration);
     if (!Number.isInteger(durationMinutes) || durationMinutes < 30 || durationMinutes > 1440) {
       setSearchError("Thời lượng phải từ 30 phút đến 24 giờ.");
       return;
     }
-    if (new Date(startsAt).getTime() <= Date.now()) {
+    if (new Date(targetStartsAt).getTime() <= Date.now()) {
       setSearchError("Thời gian bắt đầu phải ở trong tương lai.");
       return;
     }
-    if (sortBy === "NEAREST" && !searchPosition) {
+    if (targetSortBy === "NEAREST" && !targetPosition) {
       setSearchError("Để tìm bãi gần nhất, hãy nhập tọa độ hợp lệ hoặc cho phép truy cập GPS.");
       return;
     }
+
+    const sig = JSON.stringify({
+      vehicleType: targetVehicleType,
+      startsAt: targetStartsAt,
+      duration: targetDuration,
+      sortBy: targetSortBy,
+      radiusKm: targetRadiusKm,
+      position: targetSortBy === "NEAREST" ? targetPosition : null,
+    });
 
     setHasSearched(true);
     setIsSearching(true);
     try {
       const result = await api.searchParkingLots({
-        vehicleType,
-        startTime: new Date(startsAt).toISOString(),
+        vehicleType: targetVehicleType,
+        startTime: new Date(targetStartsAt).toISOString(),
         expectedDuration: durationMinutes,
-        sortBy,
-        radiusKm,
-        ...(sortBy === "NEAREST" && searchPosition ? searchPosition : {}),
+        sortBy: targetSortBy,
+        radiusKm: targetRadiusKm,
+        ...(targetSortBy === "NEAREST" && targetPosition ? targetPosition : {}),
       });
-      setResults(result.items ?? []);
-      setTotalCount(result.totalCount ?? result.items?.length ?? 0);
-      setSearchSnapshot(criteriaSignature);
+      const items = result.items ?? [];
+      setResults(items);
+      setTotalCount(result.totalCount ?? items.length);
+      setSearchSnapshot(sig);
+
+      const lotTarget = targetLotIdOrCode || searchParams.get("lot");
+      if (lotTarget && lotTarget !== "all" && items.length > 0) {
+        const matched = items.find(i =>
+          i.parkingLotId === lotTarget ||
+          i.code?.toLowerCase().includes(lotTarget.toLowerCase()) ||
+          i.name?.toLowerCase().includes(lotTarget.toLowerCase())
+        );
+        if (matched) {
+          void loadAvailability(matched);
+        }
+      }
     } catch (cause) {
       setResults([]);
       setSearchSnapshot("");
@@ -230,7 +309,31 @@ export default function SearchPage() {
     } finally {
       setIsSearching(false);
     }
+  }, [searchParams, loadAvailability]);
+
+  const submitSearch = async (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
+    await executeSearch(vehicleType, startsAt, duration, sortBy, radiusKm, searchPosition);
   };
+
+  const initialSearchTriggered = useRef(false);
+  useEffect(() => {
+    if (initialSearchTriggered.current) return;
+    const hasParams = searchParams.has("vehicle") || searchParams.has("duration") || searchParams.has("lot") || searchParams.has("radius") || searchParams.has("sortBy") || searchParams.has("criteria");
+    if (hasParams) {
+      initialSearchTriggered.current = true;
+      const initialStart = toLocalDateTime(new Date(Date.now() + 30 * 60_000));
+      void executeSearch(
+        initialVehicle,
+        initialStart,
+        initialDuration,
+        initialSortBy,
+        initialRadius,
+        null,
+        searchParams.get("lot")
+      );
+    }
+  }, [searchParams, executeSearch, initialVehicle, initialDuration, initialSortBy, initialRadius]);
 
   const useCurrentLocation = () => {
     setLocationMessage("");
