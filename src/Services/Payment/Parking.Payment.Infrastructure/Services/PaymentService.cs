@@ -1,4 +1,4 @@
-using Google.Protobuf;
+﻿using Google.Protobuf;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using Parking.Contracts.Identity.V1;
@@ -20,7 +20,8 @@ public sealed class PaymentService(
     BookingPaymentQuery.BookingPaymentQueryClient parking,
     FacilityAuthorization.FacilityAuthorizationClient identity, 
     IConfiguration config,
-    IVnPayService vnPayService) : IPaymentService
+    IVnPayService vnPayService,
+    IPaymentRepository paymentRepository) : IPaymentService
 {
     /// <summary>
     /// Khởi tạo lượt thanh toán (CASH hoặc VNPAY), sinh mã giao dịch duy nhất và URL thanh toán bảo mật.
@@ -89,8 +90,20 @@ public sealed class PaymentService(
         }
 
         // 4. Lấy báo giá đơn đặt chỗ từ Parking gRPC
-        var quote = await parking.GetQuoteAsync(new BookingQuoteRequest { BookingId = request.BookingId.ToString(), UserId = user.ToString() },
-            headers: GrpcHeaders.For(config), deadline: DateTime.UtcNow.AddSeconds(5), cancellationToken: ct);
+        BookingQuoteReply quote;
+        try
+        {
+            quote = await parking.GetQuoteAsync(new BookingQuoteRequest { BookingId = request.BookingId.ToString(), UserId = user.ToString() },
+                headers: GrpcHeaders.For(config), deadline: DateTime.UtcNow.AddSeconds(5), cancellationToken: ct);
+        }
+        catch (Grpc.Core.RpcException ex) when (ex.StatusCode == Grpc.Core.StatusCode.NotFound)
+        {
+            throw new ServiceException(404, "Don dat cho khong ton tai.");
+        }
+        catch (Grpc.Core.RpcException ex) when (ex.StatusCode == Grpc.Core.StatusCode.FailedPrecondition)
+        {
+            throw new ServiceException(409, "Don dat cho da qua han giu cho (Expired) hoac khong o trang thai cho thanh toan.");
+        }
 
         var lot = Guid.Parse(quote.LotId); 
         var id = Guid.NewGuid(); 
@@ -291,18 +304,116 @@ public sealed class PaymentService(
         {
             queryCmd.Parameters.AddWithValue("bookingId", command.BookingId);
             await using var reader = await queryCmd.ExecuteReaderAsync(ct);
+            // 1. Kiểm tra trong DB xem đã có bản ghi thanh toán cho Booking này chưa
             if (!await reader.ReadAsync(ct))
             {
-                throw new ServiceException(404, "Payment record not found for the specified booking.");
+                // 2. Nếu CHƯA CÓ, tự động gọi Parking gRPC để lấy báo giá (số tiền cần thu)
+                await reader.CloseAsync();
+                BookingQuoteReply quote;
+                try
+                {
+                    quote = await parking.GetQuoteAsync(
+                        new BookingQuoteRequest
+                        {
+                            BookingId = command.BookingId.ToString(),
+                            UserId = actorId.ToString()
+                        },
+                        headers: GrpcHeaders.For(config),
+                        deadline: DateTime.UtcNow.AddSeconds(5),
+                        cancellationToken: ct
+                    );
+                }
+                catch (Grpc.Core.RpcException ex) when (ex.StatusCode == Grpc.Core.StatusCode.NotFound)
+                {
+                    throw new ServiceException(404, "Đơn đặt chỗ (Booking) không tồn tại.");
+                }
+                catch (Grpc.Core.RpcException ex) when (ex.StatusCode == Grpc.Core.StatusCode.FailedPrecondition)
+                {
+                    throw new ServiceException(409, "Đơn đặt chỗ đã quá hạn giữ chỗ hoặc không ở trạng thái chờ thanh toán.");
+                }
+                catch (Grpc.Core.RpcException ex) when (ex.StatusCode == Grpc.Core.StatusCode.DeadlineExceeded || ex.StatusCode == Grpc.Core.StatusCode.Unavailable)
+                {
+                    throw new ServiceException(503, "Dịch vụ bãi xe (Parking Service tại cổng 8081) không phản hồi. Vui lòng đảm bảo Parking API đang chạy.");
+                }
+
+                paymentId = Guid.NewGuid();
+                lotId = Guid.Parse(quote.LotId);
+                amount = quote.AmountMinor;
+                currency = quote.Currency;
+                method = "CASH";
+                status = "PENDING";
+                version = 1;
+                existingSucceededAt = null;
+
+                var accountId = Guid.NewGuid();
+                await using (var checkAccount = new NpgsqlCommand("SELECT id FROM billing_accounts WHERE booking_id = @id", conn, tx))
+                {
+                    checkAccount.Parameters.AddWithValue("id", command.BookingId);
+                    var existingAcc = await checkAccount.ExecuteScalarAsync(ct);
+                    if (existingAcc is Guid acc) accountId = acc;
+                }
+                // 3. Khởi tạo tài khoản thanh toán và bản ghi 'CASH' vào bảng payments
+                const string insertSql = """
+                    INSERT INTO billing_accounts(id, lot_id, vehicle_id, booking_id, currency, created_at)
+                    VALUES(@account, @lot, @vehicle, @booking, @currency, now())
+                    ON CONFLICT(booking_id) DO NOTHING;
+
+                    INSERT INTO payments(id, account_id, amount, method, status, idempotency_key, created_at)
+                    VALUES(@id, @account, @amount, 'CASH'::public.payment_method, 'PENDING', @key, now());
+                    """;
+                await using (var insertCmd = new NpgsqlCommand(insertSql, conn, tx))
+                {
+                    insertCmd.Parameters.AddWithValue("account", accountId);
+                    insertCmd.Parameters.AddWithValue("lot", lotId);
+                    insertCmd.Parameters.AddWithValue("vehicle", Guid.Parse(quote.VehicleId));
+                    insertCmd.Parameters.AddWithValue("booking", command.BookingId);
+                    insertCmd.Parameters.AddWithValue("currency", currency);
+                    insertCmd.Parameters.AddWithValue("id", paymentId);
+                    insertCmd.Parameters.AddWithValue("amount", amount);
+                    insertCmd.Parameters.AddWithValue("key", "cash:" + command.BookingId.ToString("N"));
+                    await insertCmd.ExecuteNonQueryAsync(ct);
+                }
             }
-            paymentId = reader.GetGuid(0);
-            lotId = reader.GetGuid(1);
-            amount = reader.GetDecimal(2);
-            currency = reader.GetString(3);
-            method = reader.GetString(4);
-            status = reader.GetString(5);
-            version = reader.GetInt32(6);
-            existingSucceededAt = reader.IsDBNull(7) ? null : reader.GetFieldValue<DateTimeOffset>(7);
+            else
+            {
+                paymentId = reader.GetGuid(0);
+                lotId = reader.GetGuid(1);
+                amount = reader.GetDecimal(2);
+                currency = reader.GetString(3);
+                method = reader.GetString(4);
+                status = reader.GetString(5);
+                version = reader.GetInt32(6);
+                existingSucceededAt = reader.IsDBNull(7) ? null : reader.GetFieldValue<DateTimeOffset>(7);
+
+                if (status != "SUCCESS")
+                {
+                    try
+                    {
+                        await parking.GetQuoteAsync(
+                            new BookingQuoteRequest
+                            {
+                                BookingId = command.BookingId.ToString(),
+                                UserId = actorId.ToString()
+                            },
+                            headers: GrpcHeaders.For(config),
+                            deadline: DateTime.UtcNow.AddSeconds(5),
+                            cancellationToken: ct
+                        );
+                    }
+                    catch (Grpc.Core.RpcException ex) when (ex.StatusCode == Grpc.Core.StatusCode.FailedPrecondition)
+                    {
+                        throw new ServiceException(409, "Đơn đặt chỗ đã quá hạn giữ chỗ (Expired) hoặc không ở trạng thái chờ thanh toán.");
+                    }
+                    catch (Grpc.Core.RpcException ex) when (ex.StatusCode == Grpc.Core.StatusCode.NotFound)
+                    {
+                        throw new ServiceException(404, "Đơn đặt chỗ (Booking) không tồn tại.");
+                    }
+                    catch (Grpc.Core.RpcException ex) when (ex.StatusCode == Grpc.Core.StatusCode.DeadlineExceeded || ex.StatusCode == Grpc.Core.StatusCode.Unavailable)
+                    {
+                        throw new ServiceException(503, "Dịch vụ bãi xe (Parking Service tại cổng 8081) không phản hồi. Vui lòng đảm bảo Parking API đang chạy.");
+                    }
+                }
+            }
         }
         // 2. Kiểm tra phương thức: Chỉ có đơn CASH mới được xác nhận tại bốt trực
         if (method != "CASH")
@@ -356,9 +467,9 @@ public sealed class PaymentService(
             EventId = eventId.ToString(),
             PaymentId = paymentId.ToString(),
             BookingId = command.BookingId.ToString(),
-            LotId = lotId.ToString(),
+                LotId = lotId.ToString(),
             AmountMinor = (long)amount,
-            Currency = currency,
+                Currency = currency,
             PaidAtUnixSeconds = now.ToUnixTimeSeconds()
         };
         const string updateSql = """
@@ -388,7 +499,7 @@ public sealed class PaymentService(
         {
             PaymentId = paymentId,
             BookingId = command.BookingId,
-            Status = "SUCCESS",
+                Status = "SUCCESS",
             ConfirmedBy = actorId.ToString(),
             ConfirmedAt = now
         };
@@ -604,6 +715,52 @@ public sealed class PaymentService(
             TransactionNo: transactionNo,
             ResponseCode:  responseCode));
     }
+
+
+    /// <summary>
+    /// Điều phối tra cứu trạng thái thanh toán từ Repository.
+    /// </summary>
+    public async Task<PaymentStatusDto?> GetPaymentStatusByBookingIdAsync(Guid bookingId, CancellationToken ct = default)
+    {
+        var result = await paymentRepository.GetPaymentStatusByBookingIdAsync(bookingId, ct);
+        if (result == null) return null;
+
+        // Neu ban ghi thanh toan van la PENDING, kiem tra xem don dat cho ben Parking da EXPIRED chua
+        if (result.PaymentStatus == "PENDING")
+        {
+            try
+            {
+                await parking.GetQuoteAsync(
+                    new BookingQuoteRequest
+                    {
+                        BookingId = bookingId.ToString(),
+                        UserId = "22222222-2222-2222-2222-222222222222"
+                    },
+                    headers: GrpcHeaders.For(config),
+                    deadline: DateTime.UtcNow.AddSeconds(2),
+                    cancellationToken: ct
+                );
+            }
+            catch (Grpc.Core.RpcException ex) when (ex.StatusCode == Grpc.Core.StatusCode.FailedPrecondition)
+            {
+                return result with { BookingStatus = "EXPIRED" };
+            }
+            catch
+            {
+                // Fallback neu gRPC timeout hoac ban
+            }
+        }
+
+        return result;
+    }
+    /// <summary>
+    /// Điều phối tra cứu biên lai điện tử E-Receipt từ Repository.
+    /// </summary>
+    public async Task<EReceiptDto?> GetReceiptAsync(Guid paymentId, CancellationToken ct = default)
+    {
+        return await paymentRepository.GetReceiptAsync(paymentId, ct);
+    }
+
 
     /// <summary>
     /// Chuyển đổi dữ liệu đọc từ NpgsqlDataReader sang đối tượng PaymentView.

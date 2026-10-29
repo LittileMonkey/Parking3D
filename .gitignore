@@ -104,3 +104,6 @@ docs/*SCRUM-*.md
 docs/*Giai_Thich*.md
 *Giai_Thich*.md
 
+
+# Local demo scripts (not for repo)
+DEMO_SCRIPT.md
