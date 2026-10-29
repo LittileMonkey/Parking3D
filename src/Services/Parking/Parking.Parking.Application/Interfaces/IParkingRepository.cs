@@ -50,4 +50,24 @@ public interface IParkingRepository
         ValidatedQrToken token,
         string key,
         CancellationToken ct);
+
+    /// <summary>
+    /// SCRUM-70: Tra cứu phiên đỗ ACTIVE theo biển số/QR, đối soát biển số và tính cước thực tế tại cổng ra.
+    /// </summary>
+    Task<CheckOutQuoteResultDto> GetCheckOutQuoteAsync(
+        Guid lotId,
+        Guid gateId,
+        string detectedPlate,
+        string? qrPayload,
+        CancellationToken ct);
+
+    /// <summary>
+    /// SCRUM-70: Khóa slot_id, xác nhận thanh toán, đóng session COMPLETED, giải phóng slot và ghi audit nguyên tử.
+    /// </summary>
+    Task<ConfirmCheckOutResultDto> CompleteCheckOutAsync(
+        Guid actorId,
+        ConfirmCheckOutRequestDto request,
+        string key,
+        CancellationToken ct);
 }
+
