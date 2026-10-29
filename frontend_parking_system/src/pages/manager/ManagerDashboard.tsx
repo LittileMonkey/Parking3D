@@ -70,7 +70,7 @@ export default function ManagerDashboard() {
 
   const [loading, setLoading] = useState<boolean>(true);
   const [data, setData] = useState<ManagerDashboardData | null>(null);
-  const [, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // View switch: "admin" (Dashboard 1 - Screenshot style) vs "deep" (Dashboard 2 - Deep Analytics)
   const [activeDashboardTab, setActiveDashboardTab] = useState<"admin" | "deep">("admin");
