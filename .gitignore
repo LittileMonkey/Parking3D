@@ -104,6 +104,7 @@ docs/*SCRUM-*.md
 docs/*Giai_Thich*.md
 *Giai_Thich*.md
 
-# Shared SCRUM-100 design document
+# Shared design and validation evidence for SCRUM-100
 !docs/SCRUM-100_Hold_5_Minutes_Design.md
+!docs/SCRUM-100_Validation.md
 

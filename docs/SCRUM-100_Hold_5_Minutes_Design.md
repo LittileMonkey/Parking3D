@@ -3,7 +3,7 @@
 - Người thực hiện: Hàn.
 - Jira: [SCRUM-100](https://tn27062005.atlassian.net/browse/SCRUM-100).
 - Ngày ghi nhận: 29/10/2026.
-- Trạng thái: thiết kế ban đầu; đã cập nhật hai policy Development, chưa hoàn tất kiểm thử nghiệm thu.
+- Trạng thái: đã triển khai và kiểm thử tự động; xem [báo cáo xác minh](SCRUM-100_Validation.md) để biết bằng chứng và giới hạn UAT.
 
 ## 1. Mục tiêu và phạm vi
 
@@ -31,16 +31,16 @@ Ví dụ: backend tính hạn lúc **09:00**, policy là **5 phút**, thì hạn
 
 | Thành phần | Hiện trạng | Công việc tiếp theo |
 |---|---|---|
-| Tạo booking | Đọc `lot_vehicle_policies.hold_minutes` và tính hạn bằng `UtcNow.AddMinutes(hold)` | Giữ khả năng cấu hình theo bãi; bổ sung kiểm chứng |
+| Tạo booking | Đọc `lot_vehicle_policies.hold_minutes`, tính hạn qua `TimeProvider.GetUtcNow().AddMinutes(hold)` | Test hạn mặc định, cấu hình riêng và replay đã đạt |
 | Dữ liệu mẫu `002_demo_fixture.sql` | Hai policy mẫu đã là 5 phút | Rà các fixture và nơi tạo policy khác |
-| Database Development `Parking_3D` | Hai policy CAR/MOTORBIKE trước đó là 15; đã cập nhật thành 5 và đọc lại sau commit | Kiểm tra booking mới qua API |
-| Schema | `hold_minutes` là `NOT NULL`, có ràng buộc dương; chưa khai báo SQL `DEFAULT 5` | Xác định và kiểm thử nơi cấp giá trị mặc định khi tạo policy |
-| API tạo và xem booking | Đã có trường thời điểm hết hạn | Đối chiếu response với giá trị database |
-| Worker | Chạy khoảng mỗi 10 giây, đọc hạn đã lưu và kiểm tra lại dưới khóa | Kiểm thử biên thời gian, chạy lặp và bảo vệ xe đang đỗ |
-| Frontend | Trang booking đã đếm ngược theo `holdExpiresAt`, cập nhật đồng hồ mỗi giây | Kiểm tra thực tế cùng A.Đức, gồm tải lại trang và lệch đồng hồ máy khách |
-| Tài liệu/chatbot | Vẫn có một số mô tả giữ chỗ 15 phút | Rà và đồng bộ đúng phạm vi; trao đổi chủ phần AI trước khi sửa |
+| Database Development `Parking_3D` | Hai policy CAR/MOTORBIKE là 5; migration đã thêm DEFAULT 5 và schema version 2 | Đã đọc lại sau commit |
+| Schema | `hold_minutes` là `NOT NULL DEFAULT 5`, có ràng buộc dương | DBML, generator và SQL đã được đối chiếu tái sinh |
+| API tạo và xem booking | Trả thời điểm hết hạn đã lưu | Test HTTP tạo/GET/replay trên Parking API thật đã đạt |
+| Worker | Quét khoảng mỗi 10 giây, kiểm tra lại dưới khóa và lấy thời gian backend mới sau khóa | Test trước/đúng/sau hạn, chạy lặp và bảo vệ xe đang đỗ đã đạt |
+| Frontend | Đếm ngược từ `holdExpiresAt`, làm tròn lên giây còn lại để không báo hết hạn sớm | 5 test hold đã đạt; vẫn cần UAT trình duyệt với A.Đức/Quang |
+| Tài liệu/chatbot | Đã đồng bộ mô tả hold mặc định 5 phút và tách biệt thời hạn đến bãi | Test câu trả lời fallback đã đạt; không gọi nhà cung cấp AI thật |
 
-Việc cập nhật hai dòng dữ liệu Development chưa làm SCRUM-100 hoàn thành. Chưa chạy build, bộ test hoặc kiểm thử API/UI cho lượt cập nhật này.
+Việc cập nhật hai dòng dữ liệu chỉ là một phần của SCRUM-100. Lượt triển khai này đã có build/backend/frontend và kiểm thử tự động; không thay thế xác nhận UAT thủ công của nhóm. Kết quả chi tiết nằm trong báo cáo xác minh.
 
 ### 3.1. Thay đổi Development đã thực hiện
 
@@ -49,7 +49,7 @@ Việc cập nhật hai dòng dữ liệu Development chưa làm SCRUM-100 hoàn
 | `11111111-1111-4111-8111-111111111111` | CAR | 15 | 5 |
 | `22222222-2222-4222-8222-222222222222` | MOTORBIKE | 15 | 5 |
 
-Chỉ thay đổi policy. Booking đã tạo vẫn giữ thời điểm `hold_expires_at` cũ. Thay đổi dữ liệu trực tiếp này chưa phải script migration được lưu trong repository cho các môi trường khác.
+Migration dùng lại ở môi trường khác: `database/services/parking/migrations/002_hold_default_5_minutes.sql`. Script không sửa thời điểm hết hạn booking cũ; bảo toàn policy tùy chỉnh và có thể chạy lại. Tại thời điểm áp dụng trên Development chưa có booking; khả năng giữ deadline cũ đã được kiểm chứng riêng bằng test tích hợp có booking đang tồn tại.
 
 ## 4. Quy tắc thiết kế
 
@@ -184,7 +184,7 @@ Các đường dẫn dưới đây tính từ thư mục gốc repository.
 
 ## 8. Kế hoạch kiểm thử và điều kiện hoàn thành
 
-Các trường hợp dưới đây là kế hoạch cần thực thi, chưa được đánh dấu đạt trong tài liệu này.
+Các trường hợp nghiệp vụ backend và countdown dưới đây đã có kiểm thử tự động, trừ kiểm tra lệch đồng hồ thiết bị/UAT trình duyệt cần phối hợp nhóm. Xem báo cáo xác minh để đối chiếu từng test.
 
 | Trường hợp | Kết quả mong đợi |
 |---|---|
@@ -201,7 +201,7 @@ Các trường hợp dưới đây là kế hoạch cần thực thi, chưa đư
 | Đọc lại booking hoặc tải lại UI | Giữ cùng hạn; đếm ngược không khởi động lại từ 5 phút |
 | Đồng hồ máy khách lệch | Ghi nhận ảnh hưởng đến hiển thị; quyền quyết định hết hạn vẫn thuộc backend |
 
-Kiểm thử biên đúng hạn cần kiểm soát nguồn thời gian; tránh dùng chờ thực tế 5 phút hoặc khoảng sleep may rủi. Hiện luồng tạo booking/thanh toán dùng thời gian ứng dụng, còn worker dùng thời gian database; cách kiểm soát thời gian trong test cần được thiết kế trước khi sửa code.
+Tạo booking, worker, quote và sự kiện thanh toán đã dùng `TimeProvider` của backend. Worker lấy lại thời gian sau advisory lock; xử lý payment dùng cùng một kết quả xác định hết hạn cho outcome và nhánh cập nhật. Test kiểm soát thời gian tại trước/đúng/sau hạn 1 micro giây, không sleep chờ 5 phút. Timestamp ghi audit vẫn có thể dùng đồng hồ database; nó không quyết định thời hạn hold.
 
 Test tích hợp hiện có yêu cầu `PARKING_TEST_ADMIN_CONNECTION` để chạy trên PostgreSQL localhost và tạo database tạm. Test bị skip do thiếu cấu hình không được báo là đã đạt. Không thử các tình huống lỗi bằng cách sửa booking thật trong database Development.
 
@@ -211,7 +211,7 @@ Test tích hợp hiện có yêu cầu `PARKING_TEST_ADMIN_CONNECTION` để ch�
 2. Hoàn thiện phần Design theo quy trình nhóm; dùng nhánh Implementation riêng khi bắt đầu sửa code.
 3. Chạy kiểm thử nền phù hợp, ghi nhận lỗi có sẵn trước khi thay đổi.
 4. Bổ sung test cho thời hạn theo policy và các trường hợp còn thiếu; phần đã chạy đúng được giữ nguyên.
-5. Từ kết quả test, xác định thay đổi tối thiểu cho mặc định policy, cấu hình và cách kiểm soát thời gian nếu cần. Mọi thay đổi C#/SQL trong repository sẽ được hướng dẫn để Hàn thực hiện.
+5. Thay đổi tối thiểu cho mặc định policy và nguồn thời gian đã được triển khai theo yêu cầu Hàn giao hoàn thiện SCRUM-100. Hai test ban đầu Hàn viết được giữ lại.
 6. Bổ sung cách áp dụng thay đổi policy có phạm vi rõ ràng cho môi trường khác; kiểm tra lại sau khi áp dụng, không tự sửa hạn booking cũ.
 7. Phối hợp A.Đức kiểm tra countdown, Nhật kiểm tra cấu hình và Quang kiểm thử lại.
 8. Đồng bộ tài liệu có mô tả hold cũ, chạy build/test liên quan và ghi bằng chứng nghiệm thu.

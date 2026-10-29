@@ -7,10 +7,8 @@ import {
   ArrowLeftRight,
   AlertTriangle,
   ChevronRight,
-  Calendar,
   Box,
   Building2,
-  ShieldCheck,
   Activity,
   Coins,
   RefreshCw,
@@ -20,8 +18,6 @@ import {
   CheckCircle2,
   Clock,
   Zap,
-  Sliders,
-  DollarSign,
   Sun,
   Moon,
   ChevronLeft,
@@ -74,7 +70,7 @@ export default function ManagerDashboard() {
 
   const [loading, setLoading] = useState<boolean>(true);
   const [data, setData] = useState<ManagerDashboardData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
 
   // View switch: "admin" (Dashboard 1 - Screenshot style) vs "deep" (Dashboard 2 - Deep Analytics)
   const [activeDashboardTab, setActiveDashboardTab] = useState<"admin" | "deep">("admin");
@@ -145,7 +141,7 @@ export default function ManagerDashboard() {
       badge: "L1 - Ô Đỗ Thường (Available: 142/160)",
       badgeType: "green",
       title: "Metropolis Central - Tầng L1 Khu A & B (Cảm biến 100% Online)",
-      subtitle: "Biểu phí: 15.000 đ/giờ • Giữ chỗ tự động 15 phút • Cảm biến siêu âm độ trễ 200ms",
+      subtitle: "Biểu phí: 15.000 đ/giờ • Hold chờ thanh toán mặc định 5 phút • Cảm biến siêu âm độ trễ 200ms",
       statusText: "Completed ✓",
       statusType: "completed",
       details: {

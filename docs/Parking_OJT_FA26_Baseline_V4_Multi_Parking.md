@@ -765,7 +765,7 @@ Frontend “slot đang xanh” không phải bằng chứng slot vẫn còn tr�
 Baseline theo SRS mentor:
 
 ```text
-Hold pending payment: 15 phút
+Hold pending payment: mặc định 5 phút, configurable theo bãi/loại xe (cập nhật mentor SCRUM-100).
 Minimum reservation: 30 phút
 Maximum reservation: 24 giờ
 ```
@@ -1973,7 +1973,7 @@ Dijkstra/A* trên navigation graph của từng ParkingLot.
 | BR-05 | Không cho booking time-window overlap trên cùng exact slot |
 | BR-06 | Không cho một vehicle có các active booking chồng thời gian |
 | BR-07 | Booking confirmation phải re-check availability trong transaction |
-| BR-08 | Pending-payment hold mặc định 15 phút, configurable |
+| BR-08 | Pending-payment hold mặc định 5 phút, configurable (SCRUM-100) |
 | BR-09 | Reservation duration mặc định 30 phút–24 giờ theo mentor, configurable |
 | BR-10 | Confirmed booking không bị user khác ghi đè |
 | BR-11 | Check-in chỉ khi booking/lot/vehicle hợp lệ hoặc Staff override có audit |
@@ -2042,7 +2042,7 @@ Giải phóng khi vehicle exit được xác nhận.
 
 **CHUYỂN OPTIONAL.**
 
-Baseline theo SRS mentor là hold 15 phút pending payment.
+Hold pending payment mặc định 5 phút theo cập nhật mentor SCRUM-100; không đồng nghĩa thời hạn đến bãi của booking đã xác nhận.
 
 ## 39.9 “Violation = 100.000 mọi trường hợp”
 

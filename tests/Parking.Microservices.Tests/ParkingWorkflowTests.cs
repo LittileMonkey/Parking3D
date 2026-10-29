@@ -154,6 +154,77 @@ public sealed partial class ParkingWorkflowTests : IAsyncLifetime
         Assert.True(qr.TryValidateAndExtract(token.QrPayload, out var validated));
         return repository.CheckInAsync(Staff, request ?? Request(token), validated!, key ?? Guid.NewGuid().ToString(), Ct);
     }
+[PostgresFact]
+public async Task NewBookingUsesFiveMinuteHoldAndPersistsItsDeadline()
+{
+    // Ghi nhận thời gian trước khi tạo booking.
+    var beforeCreation = DateTimeOffset.UtcNow;
+
+    // Gọi luồng tạo booking thật trên database test.
+    var booking = await Book();
+
+    var afterCreation = DateTimeOffset.UtcNow;
+
+    // Hạn phải tương ứng thời điểm tạo cộng 5 phút.
+    Assert.InRange(
+        booking.HoldExpiresAt,
+        beforeCreation.AddMinutes(5),
+        afterCreation.AddMinutes(5));
+
+    // Đọc lại booking từ database.
+    var record = await repository.GetBookingDetailAsync(booking.Id, Ct)
+        ?? throw new InvalidOperationException(
+            "Không tìm thấy booking vừa tạo.");
+
+    var savedDeadline = record.Detail.HoldExpiresAt
+        ?? throw new InvalidOperationException(
+            "Booking vừa tạo chưa có thời điểm hết hạn.");
+
+    // Database và kết quả tạo booking phải cùng thời điểm hết hạn.
+    // Cho phép sai số dưới 1 ms do độ chính xác lưu timestamp.
+    Assert.InRange(
+        Math.Abs((savedDeadline - booking.HoldExpiresAt).TotalMilliseconds),
+        0d,
+        1d);
+}
+
+
+[PostgresFact]
+public async Task HoldExpiryDoesNotExpireBookingBeforeDeadline()
+{
+    // 1. Tạo booking mới với hold 5 phút.
+    var booking = await Book();
+
+    // Xác nhận booking đang còn thời gian giữ chỗ.
+    Assert.True(booking.HoldExpiresAt > DateTimeOffset.UtcNow);
+
+    // 2. Gọi trực tiếp phần xử lý hết hạn của worker.
+    var expiredCount = await repository.ExpireHoldsAsync(Ct);
+
+    // Chưa đến hạn nên không có booking nào bị expire.
+    Assert.Equal(0, expiredCount);
+
+    // 3. Đọc lại booking, kiểm tra vẫn đang chờ thanh toán.
+    var record = await repository.GetBookingDetailAsync(booking.Id, Ct)
+        ?? throw new InvalidOperationException(
+            "Không tìm thấy booking vừa tạo.");
+
+    Assert.Equal("PENDING_PAYMENT", record.Detail.Status);
+
+    // 4. Kiểm tra reservation vẫn giữ chỗ cho booking.
+    await using var command = data.CreateCommand("""
+        SELECT status::text
+        FROM slot_reservations
+        WHERE booking_id = @booking
+        """);
+
+    command.Parameters.AddWithValue("booking", booking.Id);
+
+    var reservationStatus = await command.ExecuteScalarAsync(Ct);
+
+    Assert.Equal("HELD", reservationStatus);
+}
+
 
     [PostgresFact]
     public async Task ConfirmedQrCreatesOneSessionAndOccupancyThenRetryIsSafe()

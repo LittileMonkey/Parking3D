@@ -8,7 +8,6 @@ import {
   Users,
   AlertTriangle,
   Bell,
-  Search,
   RotateCw,
   ParkingCircle,
   DollarSign,

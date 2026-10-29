@@ -32,7 +32,7 @@ public sealed partial class ParkingRepository(NpgsqlDataSource db, TimeProvider 
     public async Task<BookingView> CreateBookingAsync(Guid customerId, BookingRequest request, string key, CancellationToken ct)
     {
         if (request.LotId == Guid.Empty || request.SlotId == Guid.Empty || request.VehicleId == Guid.Empty || request.EndsAt <= request.StartsAt
-            || request.StartsAt < DateTimeOffset.UtcNow.AddMinutes(-5) || string.IsNullOrWhiteSpace(key) || key.Length > 128)
+            || request.StartsAt < clock.GetUtcNow().AddMinutes(-5) || string.IsNullOrWhiteSpace(key) || key.Length > 128)
             throw new ServiceException(400, "Valid IDs, future time range and Idempotency-Key required");
         await ExpireHoldsAsync(ct, request.VehicleId, request.SlotId);
         await using var conn = await db.OpenConnectionAsync(ct);
@@ -109,7 +109,7 @@ public sealed partial class ParkingRepository(NpgsqlDataSource db, TimeProvider 
             var local = TimeZoneInfo.ConvertTime(at, tz); var minute = (((int)local.DayOfWeek + 6) % 7) * 1440 + local.Hour * 60 + local.Minute;
             if (!intervals.Any(i => minute >= i.From && minute < i.To)) throw new ServiceException(409, "Outside lot operating hours");
         }
-        var id = Guid.NewGuid(); var snapshot = Guid.NewGuid(); var amount = price.Estimate(request.StartsAt, request.EndsAt, tz); var expires = DateTimeOffset.UtcNow.AddMinutes(hold);
+        var id = Guid.NewGuid(); var snapshot = Guid.NewGuid(); var amount = price.Estimate(request.StartsAt, request.EndsAt, tz); var expires = clock.GetUtcNow().AddMinutes(hold);
         if (amount <= 0) throw new ServiceException(409, "Zero-price booking workflow not configured");
         var code = "B" + id.ToString("N")[..20].ToUpperInvariant();
         await using (var write = new NpgsqlCommand("""

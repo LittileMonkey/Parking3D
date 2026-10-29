@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { ApiError, api, type BookingDetail, type Payment } from "../services/api";
+import { remainingHoldSeconds } from "../services/bookingHold";
 import { useAuth } from "../context/AuthContext";
 
 function statusText(status: string) {
@@ -35,8 +36,8 @@ function errorMessage(error: unknown) {
 }
 
 function holdTimeText(expiresAt: string | null | undefined, now: number) {
-  if (!expiresAt) return "Không có thời gian giữ chỗ.";
-  const remainingSeconds = Math.max(0, Math.floor((new Date(expiresAt).getTime() - now) / 1000));
+  const remainingSeconds = remainingHoldSeconds(expiresAt, now);
+  if (remainingSeconds === null) return "Không có thời gian giữ chỗ.";
   if (remainingSeconds === 0) return "Đã qua thời hạn giữ chỗ; đang chờ trạng thái mới nhất từ máy chủ.";
   const minutes = Math.floor(remainingSeconds / 60);
   const seconds = remainingSeconds % 60;
@@ -72,8 +73,7 @@ export default function BookingStatusPage() {
   }, [bookingId, isAuthenticated]);
 
   const pending = booking?.status.toUpperCase() === "PENDING_PAYMENT";
-  const holdExpired = Boolean(pending && booking?.holdExpiresAt
-    && new Date(booking.holdExpiresAt).getTime() <= now);
+  const holdExpired = pending && remainingHoldSeconds(booking?.holdExpiresAt, now) === 0;
 
   useEffect(() => {
     if (!isAuthenticated) {

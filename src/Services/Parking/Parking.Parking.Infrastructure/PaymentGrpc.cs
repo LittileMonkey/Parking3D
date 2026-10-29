@@ -8,8 +8,10 @@ using Parking.Parking.Domain;
 
 namespace Parking.Parking.Infrastructure;
 
-public sealed class BookingPaymentQueryGrpc(NpgsqlDataSource db,IFacilityAccess access) : BookingPaymentQuery.BookingPaymentQueryBase
+public sealed class BookingPaymentQueryGrpc(NpgsqlDataSource db,IFacilityAccess access,TimeProvider? timeProvider = null) : BookingPaymentQuery.BookingPaymentQueryBase
 {
+    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
+
     public override async Task<BookingQuoteReply> GetQuote(BookingQuoteRequest request,ServerCallContext context)
     {
         if(!Guid.TryParse(request.BookingId,out var booking)||!Guid.TryParse(request.UserId,out var user))
@@ -27,13 +29,15 @@ public sealed class BookingPaymentQueryGrpc(NpgsqlDataSource db,IFacilityAccess 
             try{await access.RequireAsync(user,lot,"CASH",context.CancellationToken);}
             catch(global::Parking.ServiceDefaults.ServiceException){throw new RpcException(new Status(StatusCode.PermissionDenied,"Booking owner or assigned Staff required"));}
         }
-        if(state!="PENDING_PAYMENT" || expiry<=DateTime.UtcNow)throw new RpcException(new Status(StatusCode.FailedPrecondition,"Booking no longer payable"));
+        if(state!="PENDING_PAYMENT" || expiry is null || expiry<=clock.GetUtcNow().UtcDateTime)throw new RpcException(new Status(StatusCode.FailedPrecondition,"Booking no longer payable"));
         return new BookingQuoteReply{BookingId=booking.ToString(),LotId=lot.ToString(),VehicleId=vehicle.ToString(),AmountMinor=amount,Currency=currency,Status=state};
     }
 }
 
-public sealed class PaymentEventsGrpc(NpgsqlDataSource db) : ParkingPaymentEvents.ParkingPaymentEventsBase
+public sealed class PaymentEventsGrpc(NpgsqlDataSource db,TimeProvider? timeProvider = null) : ParkingPaymentEvents.ParkingPaymentEventsBase
 {
+    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
+
     public override async Task<DeliveryReply> DeliverPaymentSucceeded(PaymentSucceeded request,ServerCallContext context)
     {
         if(!Guid.TryParse(request.EventId,out var eventId)||!Guid.TryParse(request.PaymentId,out var paymentId)
@@ -43,7 +47,7 @@ public sealed class PaymentEventsGrpc(NpgsqlDataSource db) : ParkingPaymentEvent
         DateTime paid;
         try{paid=DateTimeOffset.FromUnixTimeSeconds(request.PaidAtUnixSeconds).UtcDateTime;}
         catch(ArgumentOutOfRangeException){throw new RpcException(new Status(StatusCode.InvalidArgument,"Invalid payment timestamp"));}
-        if(paid>DateTime.UtcNow.AddSeconds(15))throw new RpcException(new Status(StatusCode.InvalidArgument,"Future payment"));
+        if(paid>clock.GetUtcNow().UtcDateTime.AddSeconds(15))throw new RpcException(new Status(StatusCode.InvalidArgument,"Future payment"));
         var hash=Convert.ToHexStringLower(SHA256.HashData(request.ToByteArray()));var ct=context.CancellationToken;
         await using var conn=await db.OpenConnectionAsync(ct);await using var tx=await conn.BeginTransactionAsync(ct);
         await using(var lockEvent=new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended(@key,0))",conn,tx))
@@ -88,13 +92,15 @@ public sealed class PaymentEventsGrpc(NpgsqlDataSource db) : ParkingPaymentEvent
                 AND NOT EXISTS(SELECT 1 FROM session_slot_assignments a WHERE a.slot_id=s.slot_id AND a.vacated_at IS NULL))
             """,conn,tx))
         {sums.Parameters.AddWithValue("id",booking);await using var r=await sums.ExecuteReaderAsync(ct);await r.ReadAsync(ct);total=checked((long)r.GetDecimal(0));reservation=r.GetBoolean(1);}
-        var outcome=PaymentDecision.ForBooking(state,expiry is null||expiry<=DateTime.UtcNow,total,quote,reservation);
+        // Một mốc thời gian quyết định cho cả outcome và cập nhật, sau khi đã khóa tài nguyên.
+        var holdExpired = expiry is null || expiry <= clock.GetUtcNow().UtcDateTime;
+        var outcome=PaymentDecision.ForBooking(state,holdExpired,total,quote,reservation);
         if(outcome=="CONFIRMED")
         {
             await using var confirm=new NpgsqlCommand("UPDATE bookings SET status='CONFIRMED',version=version+1 WHERE id=@id; UPDATE slot_reservations SET status='CONFIRMED' WHERE booking_id=@id AND status='HELD'",conn,tx);
             confirm.Parameters.AddWithValue("id",booking);await confirm.ExecuteNonQueryAsync(ct);
         }
-        else if(state=="PENDING_PAYMENT" && expiry<=DateTime.UtcNow)
+        else if(state=="PENDING_PAYMENT" && holdExpired)
         {
             await using var expire=new NpgsqlCommand("UPDATE bookings SET status='EXPIRED',version=version+1 WHERE id=@id; UPDATE slot_reservations SET status='RELEASED',released_at=now(),release_reason='LATE_PAYMENT' WHERE booking_id=@id AND status='HELD'",conn,tx);
             expire.Parameters.AddWithValue("id",booking);await expire.ExecuteNonQueryAsync(ct);

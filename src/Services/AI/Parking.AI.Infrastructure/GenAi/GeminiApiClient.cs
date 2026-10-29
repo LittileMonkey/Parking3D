@@ -123,7 +123,7 @@ public class GeminiApiClient(
     /// Bộ phản hồi mô phỏng nghiệp vụ thông minh cho cả 2 luồng:
     /// <list type="number">
     ///   <item><description><b>Smart Search:</b> Phân tích từ khóa để trả về khối JSON cấu trúc đúng schema cho bãi xe</description></item>
-    ///   <item><description><b>Trợ lý AI:</b> Giải đáp thắc mắc về giá vé, thủ tục mất thẻ, thời gian giữ chỗ (Hold time 15p) kèm gợi ý thao tác nhanh [SUGGESTION]</description></item>
+    ///   <item><description><b>Trợ lý AI:</b> Giải đáp thắc mắc về giá vé, thủ tục mất thẻ, thời gian giữ chỗ chờ thanh toán (mặc định 5p) kèm gợi ý thao tác nhanh [SUGGESTION]</description></item>
     /// </list>
     /// </summary>
     private static string GenerateSimulatedResponse(string prompt)
@@ -173,10 +173,10 @@ public class GeminiApiClient(
             return "Biểu giá gửi xe hiện tại của hệ thống:\n- Xe máy: 5.000đ/4 giờ đầu (ban ngày), qua đêm 10.000đ/lượt. Vé tháng 120.000đ/tháng.\n- Ô tô: 20.000đ/2 giờ đầu (ban ngày), 15.000đ/giờ tiếp theo. Qua đêm 80.000đ. Vé tháng 1.500.000đ/tháng.\n- Xe điện: Miễn phí 1 giờ đỗ đầu tiên nếu sử dụng trụ sạc tại Zone E.\n\n[SUGGESTION: Đặt chỗ trước ô tô như thế nào?]\n[SUGGESTION: Thời gian giữ chỗ là bao lâu?]";
         }
 
-        // 4. Tình huống: Khách hỏi về thời gian giữ chỗ (Hold time Baseline 15 phút)
+        // 4. Hold chờ thanh toán mặc định 5 phút theo SCRUM-100; tách biệt hạn đến bãi.
         if (lower.Contains("giữ chỗ") || lower.Contains("hold") || lower.Contains("đặt chỗ"))
         {
-            return "Thời gian giữ chỗ (Hold time) mặc định của hệ thống là 15 phút kể từ khi bạn xác nhận đặt chỗ. Nếu quá 15 phút xe chưa qua barrier vào bãi, vị trí đỗ sẽ được tự động giải phóng cho các xe khác.\n\n[SUGGESTION: Tìm bãi đỗ xe gần nhất]\n[SUGGESTION: Xem bản đồ 3D bãi xe]";
+            return "Thời gian giữ chỗ chờ thanh toán mặc định là 5 phút, có thể cấu hình theo từng bãi và loại xe. Bạn xem thời điểm hết hạn do hệ thống trả về trên màn hình đặt chỗ. Nếu chưa thanh toán khi hết hạn, backend sẽ xử lý hết hold. Booking đã xác nhận và chỗ đang có xe thực tế được bảo vệ; thời hạn đến bãi là quy định riêng.\n\n[SUGGESTION: Tìm bãi đỗ xe gần nhất]\n[SUGGESTION: Xem bản đồ 3D bãi xe]";
         }
 
         // 5. Câu chào hỏi mặc định
