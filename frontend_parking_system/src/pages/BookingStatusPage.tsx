@@ -4,6 +4,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { ApiError, api, type BookingDetail, type Payment } from "../services/api";
 import { remainingHoldSeconds } from "../services/bookingHold";
 import { useAuth } from "../context/AuthContext";
+import CustomerLayout from "../components/customer/CustomerLayout";
 
 function statusText(status: string) {
   const labels: Record<string, string> = {
@@ -120,22 +121,21 @@ export default function BookingStatusPage() {
 
   if (!isAuthenticated) {
     return (
-      <main className="customer-page">
-        <div className="customer-panel customer-auth-needed">
-          <h1>Đăng nhập để xem booking</h1>
-          <p>Chi tiết booking chỉ hiển thị cho chủ booking hoặc nhân viên có quyền.</p>
-          <Link className="customer-button primary" to="/login">Đăng nhập</Link>
-        </div>
-      </main>
+      <CustomerLayout>
+        <main className="customer-page">
+          <div className="customer-panel customer-auth-needed">
+            <h1>Đăng nhập để xem booking</h1>
+            <p>Chi tiết booking chỉ hiển thị cho chủ booking hoặc nhân viên có quyền.</p>
+            <Link className="customer-button primary" to="/login">Đăng nhập</Link>
+          </div>
+        </main>
+      </CustomerLayout>
     );
   }
 
   return (
-    <main className="customer-page booking-status-page">
-      <div className="customer-page-top">
-        <Link to="/" className="customer-brand">Park<span>Matrix</span></Link>
-        <nav aria-label="Điều hướng khách hàng"><Link to="/booking">Tìm và đặt chỗ</Link><Link to="/faq">FAQ</Link></nav>
-      </div>
+    <CustomerLayout>
+      <main className="customer-page booking-status-page">
       <div className="customer-page-heading">
         <p className="customer-eyebrow">BOOKING CỦA BẠN</p>
         <h1>Trạng thái đặt chỗ</h1>
@@ -221,6 +221,7 @@ export default function BookingStatusPage() {
           </button>
         </section>
       )}
-    </main>
+      </main>
+    </CustomerLayout>
   );
 }

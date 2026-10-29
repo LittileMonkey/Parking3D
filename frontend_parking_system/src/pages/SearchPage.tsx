@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError, api, type LotAvailability, type ParkingSearchItem, type ParkingLevelAvailability, type UserVehicle } from "../services/api";
-import { useAuth } from "../context/AuthContext";
 import ParkingViewer, { type ModelSlot } from "../components/parking/ParkingViewer";
 import { applySlotStatusChanges, type SlotStatusChange } from "../components/parking/parkingRealtime";
 import { useParkingHub } from "../components/parking/useParkingHub";
+import { useAuth } from "../context/AuthContext";
+import CustomerLayout from "../components/customer/CustomerLayout";
 import "./Booking.css";
 
 type VehicleType = "Car" | "Motorbike";
@@ -70,7 +71,7 @@ function getBookingIdempotencyKey(signature: string) {
 
 export default function SearchPage() {
   const navigate = useNavigate();
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [vehicleType, setVehicleType] = useState<VehicleType>("Car");
   const [startsAt, setStartsAt] = useState(() => toLocalDateTime(new Date(Date.now() + 30 * 60_000)));
   const [duration, setDuration] = useState(120);
@@ -366,18 +367,8 @@ export default function SearchPage() {
   }, [selectedLot, availabilityIsCurrent, startsAt, duration, vehicleType, criteriaSignature]);
 
   return (
-    <main className="customer-page">
-      <div className="customer-page-top">
-        <Link to="/" className="customer-brand">Park<span>Matrix</span></Link>
-        <nav aria-label="Điều hướng khách hàng">
-          <Link to="/booking" aria-current="page">Tìm và đặt chỗ</Link>
-          <Link to="/faq">FAQ</Link>
-          {isAuthenticated
-            ? <span className="customer-nav-user">{user?.fullName ?? "Đã đăng nhập"}</span>
-            : <Link to="/login">Đăng nhập</Link>}
-        </nav>
-      </div>
-
+    <CustomerLayout>
+      <main className="customer-page">
       <header className="customer-page-heading">
         <p className="customer-eyebrow">HÀNH TRÌNH ĐẶT CHỖ</p>
         <h1>Tìm và đặt chỗ</h1>
@@ -643,6 +634,7 @@ export default function SearchPage() {
           )}
         </section>
       )}
-    </main>
+      </main>
+    </CustomerLayout>
   );
 }
