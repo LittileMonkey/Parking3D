@@ -399,7 +399,7 @@ Request field types follow JSON: UUID strings, UTC ISO8601 instants, booleans an
     "code": "B...",
     "status": "PENDING_PAYMENT",
     "estimatedAmount": 60000,
-    "holdExpiresAt": "2026-10-07T01:15:00Z",
+    "holdExpiresAt": "2026-10-07T01:05:00Z",
     "version": 1
   },
   "isSuccess": true,
@@ -411,6 +411,8 @@ Request field types follow JSON: UUID strings, UTC ISO8601 instants, booleans an
 ### Validation and failure
 
 Idempotency-Key required. EXACT_SLOT only; time/policy/opening/closure/physical occupancy/vehicle compatibility checks, locks + GiST. Only one FLAT_BLOCK price rule supported; other pricing plans fail 409. No QR before verified payment.
+
+SCRUM-100: the default pending-payment hold is 5 minutes, configurable by lot/vehicle policy. The sample assumes a deadline calculated at 01:00Z. Clients count down to the persisted `holdExpiresAt`; a retry or GET must not extend it. Backend `TimeProvider` decides expiry inclusively (`now >= deadline`) after resource locks. Payment delivery after expiry is reconciled even if the expiry worker has not yet run. Billing blocks and arrival deadlines remain separate policies.
 
 ### Activity
 

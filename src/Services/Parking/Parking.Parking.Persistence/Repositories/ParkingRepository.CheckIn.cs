@@ -12,6 +12,7 @@ namespace Parking.Parking.Persistence.Repositories;
 public sealed partial class ParkingRepository
 {
     // QR, session, occupancy và audit cùng commit hoặc cùng rollback.
+    /// <summary>Consume QR, tạo phiên và chỗ đỗ vật lý, đổi trạng thái booking, ghi audit và outcome trong cùng transaction; replay không tạo phiên mới.</summary>
     public async Task<CheckInResponseDto> CheckInAsync(Guid actorId, CheckInRequestDto request,
         ValidatedQrToken token, string key, CancellationToken ct)
     {
@@ -29,6 +30,7 @@ public sealed partial class ParkingRepository
         var fingerprint = Convert.ToHexStringLower(SHA256.HashData(
             Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request))));
 
+        // Mỗi lệnh dùng chung connection/transaction và bộ IDs đã xác minh; không tự commit riêng.
         NpgsqlCommand Command(string sql)
         {
             var command = new NpgsqlCommand(sql, connection, transaction);

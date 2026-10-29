@@ -252,12 +252,27 @@ export const staffApi = {
    */
   async getParkingLots(): Promise<ParkingLotSummary[]> {
     try {
+      // 1. Thử lấy danh sách bãi được phân công cho Staff/Manager (Facility-Scoped RBAC)
+      let assignedLotIds: string[] = [];
+      try {
+        const assignments = await api.getStaffAssignmentsMe();
+        if (assignments && assignments.length > 0) {
+          assignedLotIds = assignments.map((a) => a.lotId);
+        }
+      } catch {
+        // Nếu chưa đăng nhập hoặc token không có quyền staff-assignment, tiếp tục lấy tất cả bãi
+      }
+
       const lots: ParkingLot[] = await api.getParkingLots();
       if (lots && lots.length > 0) {
-        // Khởi tạo mock data cho lot đầu tiên nếu chưa có
-        initializeDefaultData(lots[0].id);
+        const filteredLots = assignedLotIds.length > 0
+          ? lots.filter((l) => assignedLotIds.includes(l.id))
+          : lots;
 
-        return lots.map((l) => ({
+        const resultLots = filteredLots.length > 0 ? filteredLots : lots;
+        initializeDefaultData(resultLots[0].id);
+
+        return resultLots.map((l) => ({
           lotId: l.id,
           name: l.name,
           address: l.address,
@@ -540,17 +555,46 @@ export const staffApi = {
     const isCar = !plate.includes("V") && !plate.includes("M");
 
     // Chọn slot trống tự động nếu không chỉ định
-    const slotCode = isCar ? `B1-A${Math.floor(1 + Math.random() * 18)}` : `B1-B${Math.floor(1 + Math.random() * 18)}`;
+    let slotCode = isCar ? `B1-A${Math.floor(1 + Math.random() * 18)}` : `B1-B${Math.floor(1 + Math.random() * 18)}`;
+    let sessionId = `SES-${Date.now()}`;
+    let slotId = `slot-${slotCode.toLowerCase()}`;
+    let entryAt = new Date().toISOString();
+
+    // [REAL API CHECK-IN] Gọi API Backend nếu có đủ thông tin
+    const lotId = payload.lotId || "b1e2a3c4-5678-90ab-cdef-111122223333";
+    const gateId = payload.gateId || "00000000-0000-0000-0000-000000000001";
+    const qrPayload = payload.qrToken || payload.bookingCode || "SAMPLE_QR";
+    const idempotencyKey = crypto.randomUUID();
+
+    try {
+      const realCheckIn = await api.checkIn(
+        {
+          lotId,
+          gateId,
+          qrPayload,
+          detectedPlate: plate,
+        },
+        idempotencyKey
+      );
+      if (realCheckIn && realCheckIn.sessionId) {
+        sessionId = realCheckIn.sessionId;
+        slotId = realCheckIn.slotId;
+        slotCode = realCheckIn.slotId.substring(0, 8);
+        entryAt = realCheckIn.entryAt;
+      }
+    } catch (err) {
+      console.warn("Backend real check-in failed, proceeding with operational fallback:", err);
+    }
 
     const newSession: ParkingSession = {
-      sessionId: `SES-${Date.now()}`,
+      sessionId,
       slotCode,
-      slotId: `slot-${slotCode.toLowerCase()}`,
+      slotId,
       levelName: "Tầng Hầm B1",
       zoneName: isCar ? "Khu A - Ô tô" : "Khu B - Xe máy",
       licensePlate: plate,
       vehicleType: isCar ? "Car" : "Motorcycle",
-      checkinAt: new Date().toISOString(),
+      checkinAt: entryAt,
       durationMinutes: 0,
       status: "Active",
       paymentStatus: "Unpaid",
@@ -599,7 +643,7 @@ export const staffApi = {
   /**
    * Tính toán phí gửi xe trước khi Check-Out
    */
-  async calculateCheckOutFee(query: string): Promise<CheckOutFeeInfo | null> {
+  async calculateCheckOutFee(query: string, parkingLotId?: string): Promise<CheckOutFeeInfo | null> {
     const sessions = getStored<ParkingSession[]>(SESSIONS_KEY, []);
     const cleanQ = query.toUpperCase().trim();
 
@@ -617,10 +661,29 @@ export const staffApi = {
     const now = Date.now();
     const durationMinutes = Math.max(15, Math.round((now - checkinTime) / 60000));
 
-    // Biểu giá: Ô tô 15.000đ/block 60p, Xe máy 5.000đ/lượt
+    // Biểu giá mặc định: Ô tô 15.000đ/block 60p, Xe máy 5.000đ/lượt
     const isCar = session.vehicleType === "Car" || session.vehicleType === "EV";
     const hours = Math.ceil(durationMinutes / 60);
-    const fee = isCar ? Math.max(15000, hours * 15000) : 5000;
+    let fee = isCar ? Math.max(15000, hours * 15000) : 5000;
+    let planName = isCar ? "Ô tô tiêu chuẩn (Block 1h)" : "Xe máy lượt ngày";
+
+    // [REAL API CALCULATE-FEE] Gọi Payment Service backend để tính phí chuẩn xác theo Block 15p, Giờ cao điểm và Trần ngày
+    const lotId = parkingLotId || "b1e2a3c4-5678-90ab-cdef-111122223333";
+    try {
+      const realFee = await api.calculateFee({
+        parkingLotId: lotId,
+        entryTime: session.checkinAt,
+        exitTime: new Date().toISOString(),
+        vehicleType: isCar ? "CAR" : "MOTORCYCLE",
+        isGoldStarMember: false,
+      });
+      if (realFee && typeof realFee.finalNetAmountVnd === "number") {
+        fee = realFee.finalNetAmountVnd;
+        planName = `Biểu phí động Baseline V4 (${realFee.totalBillableBlocks} block)`;
+      }
+    } catch (err) {
+      console.warn("Could not calculate fee via backend Payment API, using local fallback:", err);
+    }
 
     return {
       sessionId: session.sessionId,
@@ -630,8 +693,9 @@ export const staffApi = {
       durationMinutes,
       estimatedFee: fee,
       currency: "VND",
-      pricingPlanName: isCar ? "Ô tô tiêu chuẩn (Block 1h)" : "Xe máy lượt ngày",
+      pricingPlanName: planName,
       paymentStatus: session.paymentStatus,
+      bookingId: session.bookingCode,
     };
   },
 
@@ -903,6 +967,18 @@ export const staffApi = {
         isFallback: true,
       };
     }
+  },
+
+  /**
+   * [REAL API AI] Nhân viên soát xét và cập nhật biển số xe OCR thủ công
+   */
+  async reviewPlateRecognition(
+    lotId: string,
+    recognitionId: string,
+    correctedPlate: string,
+    reviewNotes?: string
+  ): Promise<{ id: string; status: string }> {
+    return api.reviewPlateRecognition(lotId, recognitionId, correctedPlate, reviewNotes);
   },
 };
 

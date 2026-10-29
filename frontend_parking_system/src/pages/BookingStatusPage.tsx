@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { ApiError, api, type BookingDetail, type Payment } from "../services/api";
+import { remainingHoldSeconds } from "../services/bookingHold";
 import { useAuth } from "../context/AuthContext";
 
 function statusText(status: string) {
@@ -26,7 +27,7 @@ function errorMessage(error: unknown) {
     if (error.status === 401) return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
     if (error.status === 403) return "Bạn không có quyền xem booking này. Chỉ chủ booking hoặc nhân viên được phân công mới có quyền truy cập.";
     if (error.status === 404) return "Không tìm thấy booking.";
-    if (error.status === 409) return "Booking vừa thay đổi. Đang tải lại trạng thái mới nhất.";
+    if (error.status === 409) return "Booking vừa thay đổi. Hãy tải lại trạng thái mới nhất.";
     if (error.status === 503) return "Dịch vụ booking/thanh toán chưa sẵn sàng. Hãy thử lại sau.";
     if (error.status === 0) return "Không kết nối được Gateway.";
     return error.message;
@@ -35,8 +36,8 @@ function errorMessage(error: unknown) {
 }
 
 function holdTimeText(expiresAt: string | null | undefined, now: number) {
-  if (!expiresAt) return "Không có thời gian giữ chỗ.";
-  const remainingSeconds = Math.max(0, Math.floor((new Date(expiresAt).getTime() - now) / 1000));
+  const remainingSeconds = remainingHoldSeconds(expiresAt, now);
+  if (remainingSeconds === null) return "Không có thời gian giữ chỗ.";
   if (remainingSeconds === 0) return "Đã qua thời hạn giữ chỗ; đang chờ trạng thái mới nhất từ máy chủ.";
   const minutes = Math.floor(remainingSeconds / 60);
   const seconds = remainingSeconds % 60;
@@ -72,6 +73,7 @@ export default function BookingStatusPage() {
   }, [bookingId, isAuthenticated]);
 
   const pending = booking?.status.toUpperCase() === "PENDING_PAYMENT";
+  const holdExpired = pending && remainingHoldSeconds(booking?.holdExpiresAt, now) === 0;
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -108,6 +110,7 @@ export default function BookingStatusPage() {
       void loadBooking(false);
     } catch (cause) {
       setPaymentError(errorMessage(cause));
+      if (cause instanceof ApiError && cause.status === 409) void loadBooking(false);
     } finally {
       setPaymentLoading(false);
     }
@@ -131,7 +134,7 @@ export default function BookingStatusPage() {
     <main className="customer-page booking-status-page">
       <div className="customer-page-top">
         <Link to="/" className="customer-brand">Park<span>Matrix</span></Link>
-        <nav aria-label="Điều hướng khách hàng"><Link to="/search">Tìm bãi</Link><Link to="/faq">FAQ</Link></nav>
+        <nav aria-label="Điều hướng khách hàng"><Link to="/booking">Tìm và đặt chỗ</Link><Link to="/faq">FAQ</Link></nav>
       </div>
       <div className="customer-page-heading">
         <p className="customer-eyebrow">BOOKING CỦA BẠN</p>
@@ -141,7 +144,8 @@ export default function BookingStatusPage() {
       {loading && <div className="customer-panel customer-empty" role="status">Đang tải booking từ máy chủ...</div>}
       {error && (
         <div className="customer-alert error" role="alert">
-          {error} <button type="button" onClick={() => void loadBooking(false)}>Thử lại</button>
+          {error} {error.includes("đăng nhập") && <Link to="/login">Đăng nhập lại</Link>}
+          <button type="button" onClick={() => void loadBooking(false)}>Thử lại</button>
         </div>
       )}
 
@@ -156,7 +160,11 @@ export default function BookingStatusPage() {
             <div><dt>Loại xe</dt><dd>{booking.vehicleType}</dd></div>
             <div><dt>Bắt đầu</dt><dd>{new Date(booking.startsAt).toLocaleString("vi-VN")}</dd></div>
             <div><dt>Kết thúc</dt><dd>{new Date(booking.endsAt).toLocaleString("vi-VN")}</dd></div>
-            <div><dt>Giá ước tính từ máy chủ</dt><dd>{formatMoney(booking.totalAmount, "VND")}</dd></div>
+            <div><dt>Giá ước tính từ máy chủ</dt><dd>
+              {typeof booking.totalAmount === "number" && Number.isFinite(booking.totalAmount)
+                ? formatMoney(booking.totalAmount, "VND")
+                : "Chưa có giá"}
+            </dd></div>
           </dl>
 
           {pending && (
@@ -173,16 +181,24 @@ export default function BookingStatusPage() {
                 <p>Tạo yêu cầu thanh toán và thanh toán với nhân viên tại bãi. Nhân viên mới có quyền xác nhận đã thu tiền.</p>
               </div>
               <button className="customer-button primary" type="button" onClick={() => void beginCashPayment()}
-                disabled={paymentLoading || payment?.status.toUpperCase() === "PENDING"}>
-                {paymentLoading ? "Đang gửi yêu cầu..." : payment ? "Đã gửi yêu cầu CASH" : "Chọn thanh toán CASH"}
+                disabled={paymentLoading || holdExpired || payment?.status.toUpperCase() === "PENDING"}>
+                {paymentLoading ? "Đang gửi yêu cầu..." : holdExpired ? "Thời gian giữ chỗ đã hết" : payment ? "Đã gửi yêu cầu CASH" : "Chọn thanh toán CASH"}
               </button>
               {payment && (
                 <div className="cash-payment-result" role="status">
-                  Yêu cầu thanh toán: {payment.status} · {formatMoney(payment.amount, payment.currency)}. Trạng thái booking vẫn được đọc từ máy chủ.
+                  Yêu cầu thanh toán: {payment.status} · {
+                    typeof payment.amount === "number" && Number.isFinite(payment.amount)
+                      ? formatMoney(payment.amount, payment.currency)
+                      : "Chưa có giá"
+                  }. Trạng thái booking vẫn được đọc từ máy chủ.
                   <small>API tra cứu trạng thái payment riêng chưa có; trạng thái trên là phản hồi khởi tạo và có thể chưa cập nhật.</small>
                 </div>
               )}
-              {paymentError && <div className="customer-alert error" role="alert">{paymentError}</div>}
+              {paymentError && (
+                <div className="customer-alert error" role="alert">
+                  {paymentError} {paymentError.includes("đăng nhập") && <Link to="/login">Đăng nhập lại</Link>}
+                </div>
+              )}
             </section>
           )}
 

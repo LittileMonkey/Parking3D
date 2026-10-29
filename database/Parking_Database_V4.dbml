@@ -160,7 +160,7 @@ Table lot_vehicle_policies {
   vehicle_type text [not null]
   guest_booking_enabled boolean [not null]
   dynamic_multiplier_cap numeric(6,3) [not null]
-  hold_minutes int [not null]
+  hold_minutes int [not null, default: 5]
   min_booking_minutes int [not null]
   max_booking_minutes int [not null]
   early_arrival_minutes int [not null]

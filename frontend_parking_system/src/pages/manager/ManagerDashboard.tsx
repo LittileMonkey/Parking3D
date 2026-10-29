@@ -7,10 +7,8 @@ import {
   ArrowLeftRight,
   AlertTriangle,
   ChevronRight,
-  Calendar,
   Box,
   Building2,
-  ShieldCheck,
   Activity,
   Coins,
   RefreshCw,
@@ -20,8 +18,6 @@ import {
   CheckCircle2,
   Clock,
   Zap,
-  Sliders,
-  DollarSign,
   Sun,
   Moon,
   ChevronLeft,
@@ -145,7 +141,7 @@ export default function ManagerDashboard() {
       badge: "L1 - Ô Đỗ Thường (Available: 142/160)",
       badgeType: "green",
       title: "Metropolis Central - Tầng L1 Khu A & B (Cảm biến 100% Online)",
-      subtitle: "Biểu phí: 15.000 đ/giờ • Giữ chỗ tự động 15 phút • Cảm biến siêu âm độ trễ 200ms",
+      subtitle: "Biểu phí: 15.000 đ/giờ • Hold chờ thanh toán mặc định 5 phút • Cảm biến siêu âm độ trễ 200ms",
       statusText: "Completed ✓",
       statusType: "completed",
       details: {
@@ -252,6 +248,11 @@ export default function ManagerDashboard() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px", position: "relative" }}>
+      {error && (
+        <div style={{ background: "rgba(239, 68, 68, 0.12)", border: "1px solid #ef4444", borderRadius: 8, padding: "10px 16px", color: "#fca5a5", fontSize: "13px" }}>
+          ⚠️ {error}
+        </div>
+      )}
       {/* ═══════════════════════════════════════════════════════════════════
           TAB 1: DASHBOARD 1 (ADMIN) — THE SIGNATURE SCREENSHOT REDESIGN
           ═══════════════════════════════════════════════════════════════════ */}

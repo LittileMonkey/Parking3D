@@ -2,8 +2,10 @@ using FluentValidation;
 
 namespace Parking.Parking.Application.Features.ParkingLots.Queries;
 
+// Chặn ID rỗng và khoảng thời gian sai trước khi truy vấn dữ liệu.
 public sealed class GetLotAvailabilityQueryValidator : AbstractValidator<GetLotAvailabilityQuery>
 {
+    /// <summary>Khai báo ràng buộc ID, loại xe và thời gian; cho phép bỏ trống bộ lọc tầng/thời gian.</summary>
     public GetLotAvailabilityQueryValidator()
     {
         RuleFor(x => x.LotId).NotEmpty();

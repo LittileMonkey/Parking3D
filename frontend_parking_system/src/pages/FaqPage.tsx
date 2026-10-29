@@ -60,7 +60,7 @@ export default function FaqPage() {
     <main className="customer-page faq-page">
       <div className="customer-page-top">
         <Link to="/" className="customer-brand">Park<span>Matrix</span></Link>
-        <nav aria-label="Điều hướng khách hàng"><Link to="/search">Tìm bãi</Link><Link to="/faq" aria-current="page">FAQ</Link><Link to="/login">Đăng nhập</Link></nav>
+        <nav aria-label="Điều hướng khách hàng"><Link to="/booking">Tìm và đặt chỗ</Link><Link to="/faq" aria-current="page">FAQ</Link><Link to="/login">Đăng nhập</Link></nav>
       </div>
       <header className="customer-page-heading">
         <p className="customer-eyebrow">TRỢ GIÚP KHÁCH HÀNG</p>

@@ -75,7 +75,7 @@ CREATE TABLE public.lot_vehicle_policies (
     vehicle_type text NOT NULL,
     guest_booking_enabled boolean NOT NULL,
     dynamic_multiplier_cap numeric(6,3) NOT NULL,
-    hold_minutes int NOT NULL,
+    hold_minutes int NOT NULL DEFAULT 5,
     min_booking_minutes int NOT NULL,
     max_booking_minutes int NOT NULL,
     early_arrival_minutes int NOT NULL,
