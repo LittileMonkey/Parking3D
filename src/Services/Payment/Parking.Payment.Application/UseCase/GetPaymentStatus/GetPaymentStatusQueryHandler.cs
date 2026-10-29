@@ -12,16 +12,15 @@ namespace Parking.Payment.Application.UseCase.GetPaymentStatus
     public class GetPaymentStatusQueryHandler : IRequestHandler<GetPaymentStatusQuery, PaymentStatusDto?>
                                                                 // TRequest              TResponse
     {
-        private readonly IPaymentRepository _paymentRepository;
-        public GetPaymentStatusQueryHandler(IPaymentRepository paymentRepository)
+        private readonly IPaymentService _paymentService;
+        public GetPaymentStatusQueryHandler(IPaymentService paymentService)
         {
-            _paymentRepository = paymentRepository;
+            _paymentService = paymentService;
         }
 
         public async Task<PaymentStatusDto?> Handle(GetPaymentStatusQuery request, CancellationToken cancellationToken)
         {
-            // Gọi xuống Repository lấy dữ liệu
-            return await _paymentRepository.GetPaymentStatusByBookingIdAsync(request.BookingId, cancellationToken);
+            return await _paymentService.GetPaymentStatusByBookingIdAsync(request.BookingId, cancellationToken);
         }
     }
 }
