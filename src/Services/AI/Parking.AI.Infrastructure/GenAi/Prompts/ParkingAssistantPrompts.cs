@@ -32,8 +32,8 @@ public static class ParkingAssistantPrompts
            - Xe điện (EV): Miễn phí 1 giờ đỗ xe đầu tiên nếu kết hợp sử dụng trụ sạc điện.
         
         2. Quy định Giữ chỗ & Đặt chỗ (Booking & Hold):
-           - Khách hàng khi đặt chỗ trước sẽ có thời gian giữ chỗ (Hold time) mặc định là 15 phút.
-           - Nếu sau 15 phút xe chưa qua barrier vào bãi, slot đặt trước sẽ tự động giải phóng (Available) cho người khác.
+           - Thời gian giữ chỗ chờ thanh toán mặc định là 5 phút, cấu hình theo từng bãi và loại xe. Khách xem thời điểm hết hạn backend trả về trên màn hình đặt chỗ.
+           - Khi hết hạn mà chưa thanh toán, backend xử lý hết hold. Booking đã xác nhận và chỗ đang có xe thực tế được bảo vệ; không nhầm hold chờ thanh toán với thời hạn đến bãi.
         
         3. Thủ tục khi Mất thẻ / Mất vé xe:
            - Bước 1: Khách hàng liên hệ ngay nhân viên trực tại chốt trực (hoặc gọi Hotline 1900 8866).

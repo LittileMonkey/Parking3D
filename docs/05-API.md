@@ -123,7 +123,7 @@ public class ApiResponse<T>
       "slotCode": "B1-A01",
       "levelCode": "B1",
       "status": "PendingPayment",
-      "holdExpiresAt": "2026-10-02T09:15:00Z",
+      "holdExpiresAt": "2026-10-02T09:05:00Z",
       "accessToken": "sec_9a8b7c6d5e4f3a2b1c0d",
       "qrTokenPayload": {
         "bookingId": "c9a01234-5678-90ab-cdef-1234567890ab",

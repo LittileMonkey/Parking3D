@@ -16,7 +16,7 @@ public sealed partial class ParkingRepository
         await using var conn = await db.OpenConnectionAsync(ct);
         await using (var cmd = new NpgsqlCommand("""
             SELECT id,vehicle_id FROM bookings b
-            WHERE status='PENDING_PAYMENT' AND hold_expires_at<=clock_timestamp()
+            WHERE status='PENDING_PAYMENT' AND hold_expires_at<=@now
               AND NOT EXISTS(SELECT 1 FROM slot_reservations r WHERE r.booking_id=b.id AND r.status='CONFIRMED')
               AND NOT EXISTS(SELECT 1 FROM slot_reservations r JOIN session_slot_assignments a ON a.slot_id=r.slot_id
                 WHERE r.booking_id=b.id AND r.status='HELD' AND a.vacated_at IS NULL)
@@ -25,6 +25,7 @@ public sealed partial class ParkingRepository
             ORDER BY hold_expires_at,id LIMIT 100
             """, conn))
         {
+            cmd.Parameters.AddWithValue("now", clock.GetUtcNow().UtcDateTime);
             cmd.Parameters.Add("vehicle", NpgsqlDbType.Uuid).Value = (object?)vehicleId ?? DBNull.Value;
             cmd.Parameters.Add("slot", NpgsqlDbType.Uuid).Value = (object?)slotId ?? DBNull.Value;
             await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -55,8 +56,10 @@ public sealed partial class ParkingRepository
                 await cmd.ExecuteNonQueryAsync(ct);
             }
             // Danh sách ban đầu chỉ để chọn ứng viên; phải kiểm tra lại dưới khóa dùng chung với payment/booking.
-            await using (var cmd = new NpgsqlCommand("SELECT id FROM bookings WHERE id=@id AND vehicle_id=@vehicle AND status='PENDING_PAYMENT' AND hold_expires_at<=clock_timestamp() FOR UPDATE", conn, tx))
+            // Đọc lại đồng hồ sau khi lấy khóa; thời gian quét ứng viên có thể đã cũ.
+            await using (var cmd = new NpgsqlCommand("SELECT id FROM bookings WHERE id=@id AND vehicle_id=@vehicle AND status='PENDING_PAYMENT' AND hold_expires_at<=@now FOR UPDATE", conn, tx))
             {
+                cmd.Parameters.AddWithValue("now", clock.GetUtcNow().UtcDateTime);
                 cmd.Parameters.AddWithValue("id", candidate.Booking);
                 cmd.Parameters.AddWithValue("vehicle", candidate.Vehicle);
                 if (await cmd.ExecuteScalarAsync(ct) is null) continue;

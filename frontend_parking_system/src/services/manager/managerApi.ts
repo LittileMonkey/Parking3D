@@ -303,7 +303,7 @@ export const managerApi = {
         id: "EVT-103",
         type: "reservation",
         title: "Khách đặt trước 3D Slot",
-        description: "Lượt đặt trước giữ chỗ ô sạc nhanh EV B2-E04 (Thời gian giữ 15p)",
+        description: "Lượt đặt trước giữ chỗ ô sạc nhanh EV B2-E04 (Hold chờ thanh toán mặc định 5p)",
         licensePlate: "60A-112.33",
         slotCode: "B2-E04",
         lotName: "Quận 1",
@@ -359,7 +359,7 @@ export const managerApi = {
       {
         id: "ALT-02",
         severity: "critical",
-        title: "1 xe quá hạn Hold 15 phút chưa đến cổng",
+        title: "1 đơn hết hold 5 phút chưa thanh toán",
         description: "Lượt giữ chỗ BK-261019-092 cho xe 59-V2 345.89 đã hết hạn nhưng slot vẫn đang ở trạng thái HELD. Cần xác nhận giải phóng.",
         lotId: "lot-01",
         lotName: "Quận 1",

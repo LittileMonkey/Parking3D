@@ -78,8 +78,10 @@ for name,t in tables.items():
         if 'not null' in attrs: sql+=' NOT NULL'
         if 'pk' in attrs: sql+=' PRIMARY KEY'
         if 'unique' in attrs: sql+=' UNIQUE'
-        if n=='id' and typ=='uuid': sql+=' DEFAULT gen_random_uuid()'
-        if n in ('created_at','updated_at') and typ=='timestamptz': sql+=' DEFAULT now()'
+        default_value = re.search(r'\bdefault:\s*(-?\d+|true|false)\b', attrs)
+        if default_value: sql+=' DEFAULT '+default_value.group(1)
+        elif n=='id' and typ=='uuid': sql+=' DEFAULT gen_random_uuid()'
+        elif n in ('created_at','updated_at') and typ=='timestamptz': sql+=' DEFAULT now()'
         cols.append(sql)
     for names,kind in t['keys']:
         if kind == 'index': continue
