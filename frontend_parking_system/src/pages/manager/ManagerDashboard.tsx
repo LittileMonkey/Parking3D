@@ -7,10 +7,8 @@ import {
   ArrowLeftRight,
   AlertTriangle,
   ChevronRight,
-  Calendar,
   Box,
   Building2,
-  ShieldCheck,
   Activity,
   Coins,
   RefreshCw,
@@ -20,8 +18,6 @@ import {
   CheckCircle2,
   Clock,
   Zap,
-  Sliders,
-  DollarSign,
   Sun,
   Moon,
   ChevronLeft,
@@ -252,6 +248,11 @@ export default function ManagerDashboard() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px", position: "relative" }}>
+      {error && (
+        <div style={{ background: "rgba(239, 68, 68, 0.12)", border: "1px solid #ef4444", borderRadius: 8, padding: "10px 16px", color: "#fca5a5", fontSize: "13px" }}>
+          ⚠️ {error}
+        </div>
+      )}
       {/* ═══════════════════════════════════════════════════════════════════
           TAB 1: DASHBOARD 1 (ADMIN) — THE SIGNATURE SCREENSHOT REDESIGN
           ═══════════════════════════════════════════════════════════════════ */}

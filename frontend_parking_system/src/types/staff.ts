@@ -69,6 +69,8 @@ export interface CheckInPayload {
   bookingCode?: string;
   licensePlate?: string;
   qrCode?: string;
+  qrToken?: string;
+  lotId?: string;
   gateId?: string;
 }
 

@@ -488,6 +488,81 @@ export const api = {
       body: formData,
     });
   },
+
+  /**
+   * [REAL API PAYMENT] Tính toán phí đỗ xe chính xác (Block 15p, cao điểm, trần ngày)
+   */
+  async calculateFee(payload: CalculateFeeRequest): Promise<CalculateFeeResponse> {
+    return request<CalculateFeeResponse>("/api/v1/payments/calculate-fee", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * [REAL API PARKING] Thực hiện Check-In vào bãi xe (Staff Barrier / Camera)
+   */
+  async checkIn(payload: BackendCheckInPayload, idempotencyKey: string): Promise<BackendCheckInResponse> {
+    return request<BackendCheckInResponse>("/api/v1/check-in", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * [REAL API PARKING] Phát hành mã QR Check-in bảo mật HMAC sau thanh toán (SCRUM-49)
+   */
+  async issueBookingQr(bookingId: string): Promise<BookingQrResponse> {
+    return request<BookingQrResponse>(`/api/v1/bookings/${encodeURIComponent(bookingId)}/qr`, {
+      method: "POST",
+    });
+  },
+
+  /**
+   * [REAL API IDENTITY] Lấy danh sách bãi xe mà nhân viên/quản lý được phân công (Facility RBAC)
+   */
+  async getStaffAssignmentsMe(): Promise<StaffAssignmentItem[]> {
+    return request<StaffAssignmentItem[]>("/api/v1/staff-assignments/me");
+  },
+
+  /**
+   * [REAL API IDENTITY] Gán nhân viên vào bãi xe (Manager/Admin)
+   */
+  async assignStaffToLot(payload: { staffUserId: string; lotId: string; roleCode: string; validFrom?: string; validUntil?: string }): Promise<StaffAssignmentItem> {
+    return request<StaffAssignmentItem>("/api/v1/staff-assignments", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * [REAL API IDENTITY] Thu hồi quyền nhân viên tại bãi xe (Manager/Admin)
+   */
+  async revokeStaffAssignment(assignmentId: string): Promise<{ success: boolean; message?: string }> {
+    return request<{ success: boolean; message?: string }>(
+      `/api/v1/staff-assignments/${encodeURIComponent(assignmentId)}/revoke`,
+      { method: "POST" }
+    );
+  },
+
+  /**
+   * [REAL API AI] Soát xét và cập nhật biển số xe OCR thủ công (Staff Review)
+   */
+  async reviewPlateRecognition(
+    lotId: string,
+    recognitionId: string,
+    correctedPlate: string,
+    reviewNotes?: string
+  ): Promise<{ id: string; status: string }> {
+    return request<{ id: string; status: string }>(
+      `/api/v1/parking-lots/${encodeURIComponent(lotId)}/plate-recognitions/${encodeURIComponent(recognitionId)}/review`,
+      {
+        method: "POST",
+        body: JSON.stringify({ correctedPlate, reviewNotes }),
+      }
+    );
+  },
 };
 
 export interface PlateRecognitionResult {
@@ -503,4 +578,71 @@ export interface PlateRecognitionResult {
   vehicleTypeSuggestion?: string | number;
   processingTimeMs?: number;
   isFallback?: boolean;
+}
+
+export interface CalculateFeeRequest {
+  parkingLotId: string;
+  entryTime: string;
+  exitTime: string;
+  isGoldStarMember?: boolean;
+  vehicleType: string;
+}
+
+export interface CalculateFeeResponse {
+  parkingLotId: string;
+  entryTime: string;
+  exitTime: string;
+  totalMinutes: number;
+  totalBillableBlocks: number;
+  totalGrossAmountVnd: number;
+  totalDailyCapDiscountVnd: number;
+  subtotalAfterDailyCapVnd: number;
+  isGoldStarMember: boolean;
+  goldStarDiscountAmountVnd: number;
+  finalNetAmountVnd: number;
+  currency: string;
+  dailyBreakdowns?: Array<{
+    date: string;
+    grossAmountVnd: number;
+    dailyCapApplied: boolean;
+    netAmountVnd: number;
+  }>;
+}
+
+export interface BackendCheckInPayload {
+  lotId: string;
+  gateId: string;
+  qrPayload: string;
+  detectedPlate: string;
+}
+
+export interface BackendCheckInResponse {
+  sessionId: string;
+  bookingId: string;
+  lotId: string;
+  slotId: string;
+  status: string;
+  entryAt: string;
+}
+
+export interface BookingQrResponse {
+  bookingId: string;
+  qrToken?: string;
+  token?: string;
+  qrTokenPayload?: {
+    bookingId: string;
+    nonce: string;
+    expiresAt: string;
+    signature: string;
+  };
+  expiresAt?: string;
+}
+
+export interface StaffAssignmentItem {
+  assignmentId: string;
+  lotId: string;
+  roleCode: string;
+  validFrom: string;
+  validUntil?: string | null;
+  canManageStaffAssignments: boolean;
 }
