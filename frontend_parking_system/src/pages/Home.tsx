@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
   BadgeCheck,
-  Bell,
   Calendar,
   Car,
   Check,
@@ -25,7 +24,6 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sun,
-  User,
   Wind,
   X,
   Zap,
@@ -33,6 +31,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import { api, type BuildingEnvironment, type ParkingSlot } from "../services/api";
+import CustomerLayout from "../components/customer/CustomerLayout";
 
 const parkingPhotos = [
   {
@@ -104,29 +103,12 @@ const SOLUTIONS = [
 ];
 
 export default function Home() {
-  const { user, isAuthenticated, logout } = useAuth();
-  const { lang, setLang, t } = useLanguage();
+  const { logout } = useAuth();
+  const { lang, t } = useLanguage();
   const [slots, setSlots] = useState<ParkingSlot[]>([]);
   const [apiState, setApiState] = useState<"loading" | "online" | "offline">("loading");
   const [showLogout, setShowLogout] = useState(false);
-  const [mobileMenu, setMobileMenu] = useState(false);
   const [mapTab, setMapTab] = useState<"map" | "satellite" | "3d">("map");
-
-  // Navbar Dropdown State
-  const [bookingDropdownOpen, setBookingDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setBookingDropdownOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
 
   // Search Filter Criteria States
   const [searchVehicle, setSearchVehicle] = useState<"car" | "bike" | "ev">("car");
@@ -220,179 +202,17 @@ export default function Home() {
   );
 
   return (
-    <div className="site-shell light-theme">
-      {/* ── 1. Top Status Banner (Animated Ticker: Trượt từ phải sang trái liên tục) ── */}
-      <div className="top-status-bar marquee-status-bar" aria-label="Bảng tin môi trường và cảm biến bãi đỗ xe trực tuyến">
-        <div className="marquee-track">
-          <div className="marquee-content">
-            {marqueeTelemetryItems}
-          </div>
-          <div className="marquee-content" aria-hidden="true">
-            {marqueeTelemetryItems}
+    <CustomerLayout
+      onRequestLogout={() => setShowLogout(true)}
+      topSlot={
+        <div className="top-status-bar marquee-status-bar" aria-label="Bảng tin môi trường và cảm biến bãi đỗ xe trực tuyến">
+          <div className="marquee-track">
+            <div className="marquee-content">{marqueeTelemetryItems}</div>
+            <div className="marquee-content" aria-hidden="true">{marqueeTelemetryItems}</div>
           </div>
         </div>
-      </div>
-
-      {/* ── 2. Floating Island Pill Navbar (Ảnh 3 nadi. Style) ── */}
-      <header className="site-header-pill-wrapper">
-        <div className="site-header-pill">
-          {/* Brand Logo */}
-          <Link className="brand-pill" to="/" aria-label="ParkMatrix trang chủ">
-            <span className="brand-pill-logo">
-              <ParkingCircle size={22} className="text-cyan-600" />
-            </span>
-            <div className="brand-pill-text">
-              <span className="brand-pill-title">
-                Park<span className="brand-cyan">Matrix</span>
-                <span className="brand-pill-dot" />
-              </span>
-            </div>
-          </Link>
-
-          {/* Center Navigation */}
-          <nav className={`main-nav-pill ${mobileMenu ? "is-open" : ""}`} aria-label="Điều hướng chính">
-            {/* 1. Combined Dropdown: Gom "Đặt Chỗ 3D", "Tìm Bãi Đỗ", "Sơ Đồ & Đặt Chỗ" */}
-            <div
-              ref={dropdownRef}
-              className="nav-dropdown-wrapper"
-              onMouseEnter={() => setBookingDropdownOpen(true)}
-              onMouseLeave={() => setBookingDropdownOpen(false)}
-            >
-              <button
-                type="button"
-                className={`nav-item-pill nav-dropdown-btn ${bookingDropdownOpen ? "is-active" : ""}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setBookingDropdownOpen((v) => !v);
-                }}
-                aria-expanded={bookingDropdownOpen}
-              >
-                <span>{lang === "en" ? "Parking & Booking" : "Đặt Chỗ & Bãi Đỗ"}</span>
-                <ChevronDown size={14} className={`dropdown-chevron ${bookingDropdownOpen ? "rotate-up" : ""}`} />
-              </button>
-
-              {bookingDropdownOpen && (
-                <div className="nav-dropdown-menu" onClick={(e) => e.stopPropagation()}>
-                  <Link
-                    to="/booking"
-                    onClick={() => {
-                      setBookingDropdownOpen(false);
-                      setMobileMenu(false);
-                    }}
-                    className="dropdown-menu-item"
-                  >
-                    <div className="dropdown-item-icon bg-cyan">
-                      <Car size={18} />
-                    </div>
-                    <div className="dropdown-item-content">
-                      <span className="dropdown-item-title">{lang === "en" ? "3D Interactive Booking" : "Đặt Chỗ 3D Trực Quan"}</span>
-                      <span className="dropdown-item-desc">{lang === "en" ? "Interactive 3D twin, reserve exact slot" : "Mô phỏng 3D bãi đỗ, chọn vị trí chính xác"}</span>
-                    </div>
-                  </Link>
-
-                  <Link
-                    to="/search"
-                    onClick={() => {
-                      setBookingDropdownOpen(false);
-                      setMobileMenu(false);
-                    }}
-                    className="dropdown-menu-item"
-                  >
-                    <div className="dropdown-item-icon bg-blue">
-                      <Search size={18} />
-                    </div>
-                    <div className="dropdown-item-content">
-                      <span className="dropdown-item-title">{lang === "en" ? "Smart Parking Search" : "Tìm Bãi Đỗ Thông Minh"}</span>
-                      <span className="dropdown-item-desc">{lang === "en" ? "Find nearest & cheapest with GPS" : "So sánh khoảng cách & ước tính giá gửi"}</span>
-                    </div>
-                  </Link>
-
-                  <a
-                    href="#gis-section"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setBookingDropdownOpen(false);
-                      setMobileMenu(false);
-                      document.getElementById("gis-section")?.scrollIntoView({ behavior: "smooth" });
-                    }}
-                    className="dropdown-menu-item"
-                  >
-                    <div className="dropdown-item-icon bg-emerald">
-                      <Navigation size={18} />
-                    </div>
-                    <div className="dropdown-item-content">
-                      <span className="dropdown-item-title">{lang === "en" ? "Live GIS Map & Directory" : "Sơ Đồ & Vị Trí Bãi Xe"}</span>
-                      <span className="dropdown-item-desc">{lang === "en" ? "Real-time citywide slot network" : "Bản đồ số GIS thời gian thực toàn thành phố"}</span>
-                    </div>
-                  </a>
-                </div>
-              )}
-            </div>
-
-            <Link to="/faq" onClick={() => setMobileMenu(false)} className="nav-item-pill">
-              FAQ
-            </Link>
-            <a href="#solutions" onClick={() => setMobileMenu(false)} className="nav-item-pill">
-              {t("nav.solutions")}
-            </a>
-            <a href="#about" onClick={() => setMobileMenu(false)} className="nav-item-pill">
-              {t("nav.infrastructure")}
-            </a>
-          </nav>
-
-          {/* Right Actions */}
-          <div className="header-actions-pill">
-            <div className="lang-switcher-pill" role="group" aria-label="Chọn ngôn ngữ">
-              <button
-                type="button"
-                className={`lang-btn-pill ${lang === "vi" ? "active" : ""}`}
-                onClick={() => setLang("vi")}
-                title="Tiếng Việt"
-              >
-                VN
-              </button>
-              <span className="lang-sep">|</span>
-              <button
-                type="button"
-                className={`lang-btn-pill ${lang === "en" ? "active" : ""}`}
-                onClick={() => setLang("en")}
-                title="English"
-              >
-                EN
-              </button>
-            </div>
-
-            <button className="icon-btn-pill" aria-label="Thông báo">
-              <Bell size={16} />
-            </button>
-
-            {isAuthenticated ? (
-              <div className="user-profile-pill">
-                <div className="avatar-circle-pill">
-                  <User size={15} />
-                </div>
-                <div className="user-info-pill">
-                  <span className="user-name-pill">{user?.fullName || user?.userName}</span>
-                  <span className="user-role-pill">{t("nav.vip")}</span>
-                </div>
-                <button className="logout-btn-pill" title={t("nav.logout")} onClick={() => setShowLogout(true)}>
-                  <LogOut size={14} />
-                </button>
-              </div>
-            ) : (
-              <div className="auth-btns-pill">
-                <Link className="auth-btn-pill-login" to="/login">
-                  {t("nav.login")}
-                </Link>
-                <Link className="auth-btn-pill-register" to="/register">
-                  <span>{t("nav.register")}</span>
-                  <ArrowRight size={14} />
-                </Link>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+      }
+    >
 
       <main>
         {/* ── 3. Light Hero Section with Clarified Background & Animations ── */}
@@ -975,71 +795,6 @@ export default function Home() {
         </section>
       </main>
 
-      {/* ── 9. Multi-Column Footer ── */}
-      <footer className="site-footer-dark">
-        <div className="page-width footer-grid-4">
-          <div className="footer-brand-col">
-            <Link className="brand footer-brand" to="/">
-              <span className="brand-logo-icon">
-                <ParkingCircle size={22} className="text-cyan-400" />
-              </span>
-              <div className="brand-text">
-                <span className="brand-title text-white">
-                  Park<span className="brand-cyan">Matrix</span>
-                </span>
-                <span className="brand-sub text-gray-400">SMART PARKING PLATFORM</span>
-              </div>
-            </Link>
-            <p className="footer-desc mt-4">
-              {t("footer.desc")}
-            </p>
-          </div>
-
-          <div className="footer-col">
-            <h4 className="footer-col-title">{t("footer.support")}</h4>
-            <ul className="footer-links">
-              <li><a href="#gis-section">{lang === "en" ? "Booking Guide" : "Hướng dẫn đặt chỗ"}</a></li>
-              <li><a href="#solutions">{lang === "en" ? "Parking Rules" : "Quy định bãi đỗ"}</a></li>
-              <li><a href="#solutions">{lang === "en" ? "EV Charging Station" : "Trạm sạc EV"}</a></li>
-              <li><a href="mailto:support@parkmatrix.vn">{lang === "en" ? "Report Incident 24/7" : "Báo sự cố 24/7"}</a></li>
-              <li><a href="#gis-section">API Integration Docs</a></li>
-            </ul>
-          </div>
-
-          <div className="footer-col">
-            <h4 className="footer-col-title">{lang === "en" ? "Infrastructure Coverage" : "Độ Phủ Hạ Tầng"}</h4>
-            <ul className="footer-links">
-              <li><a href="#gis-section">{lang === "en" ? "Ho Chi Minh City (62 hubs)" : "TP. Hồ Chí Minh (62 bãi)"}</a></li>
-              <li><a href="#gis-section">{lang === "en" ? "Hanoi (48 hubs)" : "Hà Nội (48 bãi)"}</a></li>
-              <li><a href="#gis-section">{lang === "en" ? "Da Nang (24 hubs)" : "Đà Nẵng (24 bãi)"}</a></li>
-              <li><a href="#gis-section">{lang === "en" ? "Binh Duong (18 hubs)" : "Bình Dương (18 bãi)"}</a></li>
-              <li><a href="#gis-section">{lang === "en" ? "Hai Phong (12 hubs)" : "Hải Phòng (12 bãi)"}</a></li>
-            </ul>
-          </div>
-
-          <div className="footer-col">
-            <h4 className="footer-col-title">{lang === "en" ? "For Enterprise" : "Dành Cho Doanh Nghiệp"}</h4>
-            <ul className="footer-links">
-              <li><a href="#solutions">{lang === "en" ? "Parking Lot Owners" : "Chủ bãi đỗ xe"}</a></li>
-              <li><a href="#solutions">{lang === "en" ? "VMS Platform Integration" : "Tích hợp VMS Platform"}</a></li>
-              <li><a href="#solutions">{lang === "en" ? "AI ANPR Camera Partner" : "Hợp tác Camera ANPR AI"}</a></li>
-              <li><a href="/register">{lang === "en" ? "Partner Registration" : "Đăng ký Đối tác"}</a></li>
-            </ul>
-          </div>
-        </div>
-
-        <div className="page-width footer-bottom-dark">
-          <span>{t("footer.rights")}</span>
-          <div className="footer-bottom-links">
-            <a href="#">{t("footer.privacy")}</a>
-            <span>•</span>
-            <a href="#">{t("footer.terms")}</a>
-            <span>•</span>
-            <a href="mailto:support@parkmatrix.vn">Support: support@parkmatrix.vn</a>
-          </div>
-        </div>
-      </footer>
-
       {/* Logout Modal */}
       {showLogout && (
         <div
@@ -1084,6 +839,6 @@ export default function Home() {
           </section>
         </div>
       )}
-    </div>
+    </CustomerLayout>
   );
 }

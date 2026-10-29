@@ -14,11 +14,16 @@ The Vite development server proxies `/api`, `/health` and SignalR WebSocket requ
 
 ## Customer routes
 
+- `/` — customer landing page and parking search preview.
 - `/login`, `/register`, `/forgot-password` — authentication UI.
 - `/booking` — unified NEAREST/CHEAPEST search, facility/floor/slot selection, account vehicle selection, real ExactSlot hold, payment handoff and booking tracking.
 - `/search` — compatibility redirect to `/booking`; there is one customer search-and-book journey.
 - `/bookings/:bookingId` — owner-scoped booking detail, hold countdown, CASH request and server-issued QR.
 - `/faq` — public answers retrieved from approved FAQ documents.
+
+## Shared customer presentation
+
+The customer landing page, booking search, booking status and FAQ use the shared `CustomerLayout` for the public header and footer. It keeps the customer theme light, provides a keyboard-operable mobile navigation menu and displays the learning-only notice: “Đây là sản phẩm phục vụ học tập, không dùng cho hoạt động thực tế.”
 
 ## Integration boundaries
 
