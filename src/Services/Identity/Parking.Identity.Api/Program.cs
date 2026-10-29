@@ -22,28 +22,20 @@ namespace Parking.Identity.Api
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            // Configure Kestrel only outside Development.
-            // Development uses launchSettings.json.
-            if (!builder.Environment.IsDevelopment())
-            {
-                builder.WebHost.ConfigureKestrel(k =>
-                {
-                    var bind = builder.Configuration["Ports:Bind"] == "0.0.0.0"
-                        ? IPAddress.Any
-                        : IPAddress.Loopback;
-
-                    k.Listen(
-                        bind,
-                        builder.Configuration.GetValue<int>("Ports:Http", 8080),
-                        o => o.Protocols = HttpProtocols.Http1);
-
-                    k.Listen(
-                        bind,
-                        builder.Configuration.GetValue<int>("Ports:Grpc", 8081),
-                        o => o.Protocols = HttpProtocols.Http2);
-                });
-            }
-            // Rate Limiting
+            builder.WebHost.ConfigureKestrel(k =>
+                    {
+                        // 1. Cổng REST HTTP (cho bạn của bạn test nhanh không cần chứng chỉ SSL)
+                        k.Listen(IPAddress.Loopback, 5041, o => o.Protocols = HttpProtocols.Http1);
+                        // 2. Cổng REST HTTPS (cho bạn của bạn hoặc Frontend gọi qua HTTPS)
+                        k.Listen(IPAddress.Loopback, 7023, o =>
+                        {
+                            o.Protocols = HttpProtocols.Http1;
+                            o.UseHttps(); // Kích hoạt chứng chỉ bảo mật HTTPS của .NET
+                        });
+                        // 3. Cổng gRPC chuyên dụng (cho Payment gọi sang nội bộ bằng HTTP/2)
+                        k.Listen(IPAddress.Loopback, 5042, o => o.Protocols = HttpProtocols.Http2);
+                    });
+                    // Rate Limiting (Tính năng mới của đồng đội)
             builder.Services.AddRateLimiter(options =>
             {
                 options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -51,15 +43,12 @@ namespace Parking.Identity.Api
                 {
                     context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
                     context.HttpContext.Response.ContentType = "application/json";
-
                     var response = IdentityApiResponse.Failure(
                         "Too many requests. Please try again later.",
                         statusCode: StatusCodes.Status429TooManyRequests,
                         errorCode: ErrorCode.RateLimitExceeded);
-
                     await context.HttpContext.Response.WriteAsJsonAsync(response, cancellationToken: cancellationToken);
                 };
-
                 // Auth endpoints policy: 10 requests / 1 minute per IP
                 options.AddPolicy("auth-rate-limit", httpContext =>
                 {
@@ -73,7 +62,6 @@ namespace Parking.Identity.Api
                             QueueLimit = 0
                         });
                 });
-
                 // General endpoints policy: 100 requests / 1 minute per IP
                 options.AddPolicy("general-rate-limit", httpContext =>
                 {
@@ -88,7 +76,6 @@ namespace Parking.Identity.Api
                         });
                 });
             });
-
             // Add services to the container.
             builder.Services.AddControllers();
             builder.Services.AddOpenApi();
@@ -146,7 +133,8 @@ namespace Parking.Identity.Api
 
             app.UseMiddleware<GlobalExceptionMiddleware>();
 
-            app.UseHttpsRedirection();
+            // Tắt UseHttpsRedirection vì nó tự động chuyển hướng các gói tin gRPC (cổng 5042) và HTTP (cổng 5041) sang HTTPS, gây lỗi DeadlineExceeded
+            // app.UseHttpsRedirection();
 
             app.UseCors("FrondEndAPI");
             app.UseRateLimiter();

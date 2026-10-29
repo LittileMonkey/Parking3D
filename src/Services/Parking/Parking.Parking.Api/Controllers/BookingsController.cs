@@ -14,6 +14,7 @@ namespace Parking.Parking.Api.Controllers;
 public sealed class BookingsController(ISender sender) : ControllerBase
 {
     // SCRUM-48: handler kiểm tra owner hoặc quyền LOOKUP tại đúng bãi.
+    /// <summary>Trả chi tiết booking sau khi Handler kiểm tra owner hoặc quyền tại đúng bãi.</summary>
     [HttpGet("{bookingId:guid}")]
     public async Task<IActionResult> GetBookingDetail([FromRoute] Guid bookingId, CancellationToken cancellationToken)
     {
@@ -27,6 +28,7 @@ public sealed class BookingsController(ISender sender) : ControllerBase
     }
 
     // SCRUM-49: chỉ nhận/trả HTTP; điều kiện cấp QR nằm ở Application/Persistence.
+    /// <summary>Lấy actor từ JWT và yêu cầu cấp QR cho booking; không nhận actor từ client.</summary>
     [HttpPost("{bookingId:guid}/qr")]
     public async Task<IActionResult> IssueBookingQr([FromRoute] Guid bookingId, CancellationToken cancellationToken)
     {

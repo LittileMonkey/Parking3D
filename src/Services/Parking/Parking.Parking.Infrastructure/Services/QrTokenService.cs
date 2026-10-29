@@ -13,6 +13,7 @@ public sealed class QrTokenService : IQrTokenService
     private readonly byte[] _signingKey;
     private readonly TimeProvider _clock;
 
+    /// <summary>Đọc khóa ký từ cấu hình riêng và nhận đồng hồ; từ chối khóa thiếu hoặc dưới 32 byte.</summary>
     public QrTokenService(IConfiguration configuration, TimeProvider clock)
     {
         var secret = configuration["Qr:SigningKey"];
@@ -26,6 +27,7 @@ public sealed class QrTokenService : IQrTokenService
         _clock = clock;
     }
 
+    /// <summary>Tạo QR ký HMAC gắn booking, bãi, xe và nonce ngẫu nhiên; trả hash nonce để lưu database.</summary>
     public GeneratedQrToken GenerateToken(Guid bookingId, Guid lotId, Guid vehicleId, DateTimeOffset expiresAt)
     {
         if (bookingId == Guid.Empty || lotId == Guid.Empty || vehicleId == Guid.Empty)
@@ -43,6 +45,7 @@ public sealed class QrTokenService : IQrTokenService
         return new GeneratedQrToken(qrPayload, HashNonce(nonce), expiresAt);
     }
 
+    /// <summary>Kiểm tra cấu trúc, chữ ký và hạn dùng rồi đọc claims; trạng thái đã dùng hoặc thu hồi do Repository kiểm tra.</summary>
     public bool TryValidateAndExtract(string qrPayload, out ValidatedQrToken? payload)
     {
         payload = null;
@@ -83,6 +86,7 @@ public sealed class QrTokenService : IQrTokenService
         }
     }
 
+    /// <summary>Băm nonce bằng SHA-256 để database không phải lưu nonce gốc trong payload.</summary>
     private static string HashNonce(string nonce) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(nonce)));
 

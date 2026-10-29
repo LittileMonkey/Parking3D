@@ -737,7 +737,7 @@ export default function Home() {
               {lang === "en"
                 ? "The homepage map is illustrative. Use live lot search for current availability and duration-based price estimates."
                 : "Bản đồ trang chủ mang tính minh họa. Dùng tìm kiếm bãi để xem chỗ trống và giá ước tính từ API."}
-              {" "}<Link to="/search">{lang === "en" ? "Search lots" : "Tìm bãi đỗ"}</Link>
+              {" "}<Link to="/booking">{lang === "en" ? "Search lots" : "Tìm và đặt chỗ"}</Link>
             </p>
 
             {/* Interactive Vector GIS Canvas */}

@@ -6,7 +6,7 @@
 - 4 schema PostgreSQL riêng; ownership đủ47 bảng gốc, FK xuyên service có inventory; guards Parking giữ nguyên; audit/outbox/inbox cục bộ.
 - 6 hợp đồng gRPC v1, service-key interceptor, deadline/cancellation, pooled channels qua DI.
 - Register/login hashed password + JWT; bootstrap Development không tự nâng quyền customer cũ; current user/assignment authorization và Admin assignment có kiểm tra lot gRPC.
-- Public lots, EXACT_SLOT booking có verified vehicle access, operating hours/closures, snapshot giá/policy, hold15 theo cấu hình, idempotency, advisory locks/GiST. Runtime mới hỗ trợ một FLAT_BLOCK rule; chưa engine multi-rule đầy đủ.
+- Public lots, EXACT_SLOT booking có verified vehicle access, operating hours/closures, snapshot giá/policy, hold mặc định 5 phút theo cấu hình (SCRUM-100), idempotency, advisory locks/GiST. Runtime mới hỗ trợ một FLAT_BLOCK rule; chưa engine multi-rule đầy đủ.
 - CASH payment server quote qua gRPC, Staff confirmation, atomic audit/outbox; retry worker → Parking inbox/receipt/confirmation hoặc reconciliation, không double effect.
 - OCR HTTP adapter configurable → AI gRPC → private record, idempotency/review/version/audit; chưa cấu hình thì503, không fake.
 - Aggregate snapshot worker, baseline forecast advisory NOT_EVALUATED; approved PUBLIC FAQ retrieval không LLM; Admin document draft/publish có confirmation.

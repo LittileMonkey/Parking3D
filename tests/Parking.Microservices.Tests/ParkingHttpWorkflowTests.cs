@@ -56,12 +56,17 @@ public sealed partial class ParkingWorkflowTests
         var jwtKey = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
         var settings = new Dictionary<string, string>
         {
-            ["DOTNET_ENVIRONMENT"] = "Development", ["ASPNETCORE_ENVIRONMENT"] = "Development",
-            ["Jwt__Key"] = jwtKey, ["Jwt__Issuer"] = "parking-identity", ["Jwt__Audience"] = "parking-api",
-            ["Jwt__AccessTokenExpirationMinutes"] = "30", ["Grpc__ServiceKey"] = serviceKey,
+            ["DOTNET_ENVIRONMENT"] = "Development",
+            ["ASPNETCORE_ENVIRONMENT"] = "Development",
+            ["Jwt__Key"] = jwtKey,
+            ["Jwt__Issuer"] = "parking-identity",
+            ["Jwt__Audience"] = "parking-api",
+            ["Jwt__AccessTokenExpirationMinutes"] = "30",
+            ["Grpc__ServiceKey"] = serviceKey,
             ["ConnectionStrings__DefaultConnectionString"] = identityConnection,
             ["ConnectionStrings__Service"] = parkingConnection,
-            ["SeedAccounts__Enabled"] = "false", ["Qr__SigningKey"] = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"),
+            ["SeedAccounts__Enabled"] = "false",
+            ["Qr__SigningKey"] = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"),
             ["Services__IdentityGrpc"] = $"http://127.0.0.1:{ports[1]}"
         };
         using var identityHost = new LocalHost(Environment.GetEnvironmentVariable("PARKING_TEST_IDENTITY_DLL")!, ports[0], ports[1], settings);
@@ -106,8 +111,13 @@ public sealed partial class ParkingWorkflowTests
         var payments = new ParkingPaymentEvents.ParkingPaymentEventsClient(channel);
         var payment = new PaymentSucceeded
         {
-            EventId = Guid.NewGuid().ToString(), PaymentId = Guid.NewGuid().ToString(), BookingId = bookingId.ToString(),
-            LotId = Lot.ToString(), AmountMinor = amount, Currency = "VND", PaidAtUnixSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+            EventId = Guid.NewGuid().ToString(),
+            PaymentId = Guid.NewGuid().ToString(),
+            BookingId = bookingId.ToString(),
+            LotId = Lot.ToString(),
+            AmountMinor = amount,
+            Currency = "VND",
+            PaidAtUnixSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
         };
         Assert.Equal("CONFIRMED", (await payments.DeliverPaymentSucceededAsync(payment, new Metadata { { "x-service-key", serviceKey } })).Outcome);
         using var issued = await Post(qrRoute, new { }, ownerToken);

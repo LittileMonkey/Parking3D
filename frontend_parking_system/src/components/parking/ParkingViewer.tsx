@@ -5,43 +5,85 @@ import { createParkingArea } from "./parking.js";
 
 export interface ModelSlot {
   slotId: string;
-  floor: number;
-  type: string;
+  slotCode: string;
+  floorCode: string;
+  zoneCode: string;
+  supportedVehicleTypes: string[];
+  features: string[];
   status: string;
-  width: number;
-  length: number;
 }
 
-export default function ParkingViewer({ selectedId, onSelect, onReady }: {
+const slotColors: Record<string, number> = {
+  AVAILABLE: 0x14b8a6,
+  HELD: 0xfbbf24,
+  RESERVED: 0xfbbf24,
+  OCCUPIED: 0xf87171,
+  MAINTENANCE: 0x94a3b8
+};
+
+export default function ParkingViewer({ slots, selectedId, onSelect }: {
+  slots: ModelSlot[];
   selectedId: string | null;
   onSelect: (slot: ModelSlot) => void;
-  onReady: (slots: ModelSlot[]) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const meshes = useRef<THREE.Mesh[]>([]);
+  const colorTransitions = useRef(new Map<THREE.Mesh, {
+    from: THREE.Color;
+    to: THREE.Color;
+    startedAt: number;
+  }>());
+  const resetCameraRef = useRef<(() => void) | null>(null);
   const selectCallback = useRef(onSelect);
-  const readyCallback = useRef(onReady);
+  const slotsRef = useRef(slots);
   const [error, setError] = useState(false);
+  const layoutKey = slots.map(slot => slot.slotId).join("|");
   selectCallback.current = onSelect;
-  readyCallback.current = onReady;
+  slotsRef.current = slots;
 
   useEffect(() => {
-    const container = host.current!;
+    const container = host.current;
+    if (!container) return;
+
     let renderer: THREE.WebGLRenderer;
-    try { renderer = new THREE.WebGLRenderer({ antialias: true }); }
-    catch { setError(true); return; }
-    const { scene, slotMeshes } = createParkingArea();
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+    } catch {
+      setError(true);
+      return;
+    }
+
+    setError(false);
+    const { scene, slotMeshes } = createParkingArea(slotsRef.current);
     meshes.current = slotMeshes;
-    readyCallback.current(slotMeshes.map(mesh => ({ ...mesh.userData } as ModelSlot)));
-    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
-    camera.position.set(26, 28, 34);
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 2000);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(renderer.domElement);
+
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.minDistance = 15;
-    controls.maxDistance = 100;
     controls.maxPolarAngle = Math.PI / 2.05;
+
+    const fitCamera = () => {
+      if (slotMeshes.length === 0) return;
+      const bounds = new THREE.Box3();
+      slotMeshes.forEach(mesh => bounds.expandByObject(mesh));
+      const center = bounds.getCenter(new THREE.Vector3());
+      const size = bounds.getSize(new THREE.Vector3());
+      const distance = Math.max(size.x, size.z, 8) * 1.65;
+      controls.target.copy(center);
+      camera.position.set(center.x + distance * 0.72, center.y + distance, center.z + distance);
+      camera.near = Math.max(distance / 1000, 0.1);
+      camera.far = distance * 20;
+      camera.updateProjectionMatrix();
+      controls.minDistance = Math.max(4, distance / 4);
+      controls.maxDistance = distance * 5;
+      controls.update();
+    };
+    resetCameraRef.current = fitCamera;
+    fitCamera();
+
     const resize = new ResizeObserver(() => {
       const { width, height } = container.getBoundingClientRect();
       if (!width || !height) return;
@@ -50,6 +92,7 @@ export default function ParkingViewer({ selectedId, onSelect, onReady }: {
       renderer.setSize(width, height);
     });
     resize.observe(container);
+
     const raycaster = new THREE.Raycaster();
     let down: { x: number; y: number } | null = null;
     const pointerDown = (event: PointerEvent) => {
@@ -68,38 +111,67 @@ export default function ParkingViewer({ selectedId, onSelect, onReady }: {
     };
     renderer.domElement.addEventListener("pointerdown", pointerDown);
     renderer.domElement.addEventListener("pointerup", pointerUp);
-    renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+    renderer.setAnimationLoop(() => {
+      const now = performance.now();
+      colorTransitions.current.forEach((transition, mesh) => {
+        const progress = Math.min(1, (now - transition.startedAt) / 180);
+        (mesh.material as THREE.MeshStandardMaterial).color
+          .copy(transition.from)
+          .lerp(transition.to, progress);
+        if (progress === 1) colorTransitions.current.delete(mesh);
+      });
+      controls.update();
+      renderer.render(scene, camera);
+    });
+
     return () => {
       resize.disconnect();
       renderer.setAnimationLoop(null);
       renderer.domElement.removeEventListener("pointerdown", pointerDown);
       renderer.domElement.removeEventListener("pointerup", pointerUp);
       controls.dispose();
-      const geometries = new Set<THREE.BufferGeometry>();
-      const materials = new Set<THREE.Material>();
       scene.traverse(object => {
-        if (object instanceof THREE.Mesh) {
-          geometries.add(object.geometry);
-          (Array.isArray(object.material) ? object.material : [object.material]).forEach(material => materials.add(material));
+        if (object instanceof THREE.Mesh || object instanceof THREE.LineSegments) {
+          object.geometry.dispose();
+          (Array.isArray(object.material) ? object.material : [object.material])
+            .forEach(material => material.dispose());
         }
       });
-      geometries.forEach(geometry => geometry.dispose());
-      materials.forEach(material => material.dispose());
       renderer.dispose();
       renderer.domElement.remove();
       meshes.current = [];
+      colorTransitions.current.clear();
+      resetCameraRef.current = null;
     };
-  }, []);
+  }, [layoutKey]);
 
   useEffect(() => {
-    const colors: Record<string, number> = { AVAILABLE: 0x16a34a, OCCUPIED: 0x888e96, MAINTENANCE: 0xeab308 };
+    const currentSlots = new Map(slots.map(slot => [slot.slotId, slot]));
     meshes.current.forEach(mesh => {
+      const slot = currentSlots.get(String(mesh.userData.slotId));
+      if (!slot) return;
+      mesh.userData = { ...slot };
       const material = mesh.material as THREE.MeshStandardMaterial;
-      material.color.setHex(mesh.userData.slotId === selectedId ? 0xef4444 : colors[mesh.userData.status] ?? 0x888e96);
+      const target = new THREE.Color(slot.slotId === selectedId
+        ? 0xef4444
+        : slotColors[slot.status.toUpperCase()] ?? 0x64748b);
+      if (!material.color.equals(target)) {
+        colorTransitions.current.set(mesh, {
+          from: material.color.clone(),
+          to: target,
+          startedAt: performance.now(),
+        });
+      }
     });
-  }, [selectedId]);
+  }, [selectedId, slots]);
 
-  return <div className="booking-viewer" ref={host} aria-label="Mô hình bãi đỗ 3D">
-    {error && <p role="alert">Không thể mở đồ họa 3D. Bạn vẫn có thể chọn ô trong danh sách bên dưới.</p>}
-  </div>;
+  return (
+    <div className="booking-viewer" ref={host} aria-label="Mô hình bãi đỗ 3D">
+      {error && <p role="alert">Không thể mở đồ họa 3D. Danh sách ô bên dưới vẫn dùng được.</p>}
+      <button className="booking-camera-reset" type="button" disabled={error}
+        onClick={() => resetCameraRef.current?.()}>
+        Đặt lại camera
+      </button>
+    </div>
+  );
 }
