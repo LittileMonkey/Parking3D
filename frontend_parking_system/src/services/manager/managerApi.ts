@@ -6,7 +6,7 @@
 // - /api/v1/parking-lots/{id}/occupancy-forecasts (AI Predictive Occupancy)
 // - /api/v1/telemetry/environment (Environmental Sensor Data)
 
-import { api, type ParkingLot, type LotAvailability } from "../api";
+import { api, type ParkingLot, type LotAvailability, type AccountUserDto } from "../api";
 import type {
   ReportingPeriod,
   ManagerFacilitySummary,
@@ -734,62 +734,90 @@ export const managerApi = {
   // 3. STAFF & SHIFT RECONCILIATION (Task S2-06 Cash Shift)
   // ═══════════════════════════════════════════════════════════════════════════
   async getStaffShiftReconciliation(lotId: string): Promise<ApiResponse<{ onDutyStaff: OnDutyStaff[]; records: CashReconciliationRecord[] }>> {
-    await new Promise((r) => setTimeout(r, 140));
+    let onDutyStaff: OnDutyStaff[] = [];
 
-    const onDutyStaff: OnDutyStaff[] = [
-      {
-        id: "stf-01",
-        staffName: "Nguyễn Văn Hậu",
-        staffCode: "NV-048",
-        role: "Thu ngân & Giám sát Cổng B1",
-        assignedGate: "Cổng Ra B1 (Thu Phí Tiền Mặt)",
-        shiftType: "Morning",
-        shiftHours: "06:00 - 14:00",
-        checkInTime: "05:52",
-        status: "Active",
-        avatarInitials: "NH",
-        phone: "0908 123 456",
-      },
-      {
-        id: "stf-02",
-        staffName: "Lê Thị Hồng Mai",
-        staffCode: "NV-052",
-        role: "Điều phối Cổng Vào A1",
-        assignedGate: "Cổng Vào A1 (Barrier Tự Động)",
-        shiftType: "Morning",
-        shiftHours: "06:00 - 14:00",
-        checkInTime: "05:58",
-        status: "Active",
-        avatarInitials: "LM",
-        phone: "0912 345 678",
-      },
-      {
-        id: "stf-03",
-        staffName: "Trần Quốc Bảo",
-        staffCode: "NV-061",
-        role: "Thu ngân & Đối soát Cổng B2",
-        assignedGate: "Cổng Ra B2 (Thu Phí VietQR/Số)",
-        shiftType: "Morning",
-        shiftHours: "06:00 - 14:00",
-        checkInTime: "06:05",
-        status: "HandoverPending",
-        avatarInitials: "TB",
-        phone: "0988 765 432",
-      },
-      {
-        id: "stf-04",
-        staffName: "Phạm Hải Đăng",
-        staffCode: "NV-075",
-        role: "Kỹ thuật & Tuần tra An ninh",
-        assignedGate: "Tuần Tra An Ninh & Kỹ Thuật",
-        shiftType: "Morning",
-        shiftHours: "06:00 - 14:00",
-        checkInTime: "05:45",
-        status: "Active",
-        avatarInitials: "PĐ",
-        phone: "0934 567 890",
-      },
-    ];
+    try {
+      const realAccounts = await api.getAllAccounts();
+      if (realAccounts && realAccounts.length > 0) {
+        const staffAccounts = realAccounts.filter(
+          (a) => a.roles?.includes("PARKING_STAFF") || (a as any).role === "PARKING_STAFF"
+        );
+        if (staffAccounts.length > 0) {
+          onDutyStaff = staffAccounts.map((a, idx) => ({
+            id: a.id,
+            staffName: a.fullName,
+            staffCode: `NV-0${idx + 48}`,
+            role: a.roles?.join(", ") || "Nhân viên trực ca bãi xe",
+            assignedGate: idx % 2 === 0 ? "Cổng Ra B1 (Thu Phí Tiền Mặt)" : "Cổng Vào A1 (Barrier Tự Động)",
+            shiftType: "Morning",
+            shiftHours: "06:00 - 14:00",
+            checkInTime: `05:${50 + (idx % 10)}`,
+            status: "Active",
+            avatarInitials: a.fullName.split(" ").map((w) => w[0]).join("").slice(-2).toUpperCase() || "NV",
+            phone: a.phoneE164 || "0908 123 456",
+          }));
+        }
+      }
+    } catch (err) {
+      console.warn("Could not load staff accounts from Identity backend, falling back to cached seed:", err);
+    }
+
+    if (onDutyStaff.length === 0) {
+      onDutyStaff = [
+        {
+          id: "stf-01",
+          staffName: "Nguyễn Văn Hậu",
+          staffCode: "NV-048",
+          role: "Thu ngân & Giám sát Cổng B1",
+          assignedGate: "Cổng Ra B1 (Thu Phí Tiền Mặt)",
+          shiftType: "Morning",
+          shiftHours: "06:00 - 14:00",
+          checkInTime: "05:52",
+          status: "Active",
+          avatarInitials: "NH",
+          phone: "0908 123 456",
+        },
+        {
+          id: "stf-02",
+          staffName: "Lê Thị Hồng Mai",
+          staffCode: "NV-052",
+          role: "Điều phối Cổng Vào A1",
+          assignedGate: "Cổng Vào A1 (Barrier Tự Động)",
+          shiftType: "Morning",
+          shiftHours: "06:00 - 14:00",
+          checkInTime: "05:58",
+          status: "Active",
+          avatarInitials: "LM",
+          phone: "0912 345 678",
+        },
+        {
+          id: "stf-03",
+          staffName: "Trần Quốc Bảo",
+          staffCode: "NV-061",
+          role: "Thu ngân & Đối soát Cổng B2",
+          assignedGate: "Cổng Ra B2 (Thu Phí VietQR/Số)",
+          shiftType: "Morning",
+          shiftHours: "06:00 - 14:00",
+          checkInTime: "06:05",
+          status: "HandoverPending",
+          avatarInitials: "TB",
+          phone: "0988 765 432",
+        },
+        {
+          id: "stf-04",
+          staffName: "Phạm Hải Đăng",
+          staffCode: "NV-075",
+          role: "Kỹ thuật & Tuần tra An ninh",
+          assignedGate: "Tuần Tra An Ninh & Kỹ Thuật",
+          shiftType: "Morning",
+          shiftHours: "06:00 - 14:00",
+          checkInTime: "05:45",
+          status: "Active",
+          avatarInitials: "PĐ",
+          phone: "0934 567 890",
+        },
+      ];
+    }
 
     const records: CashReconciliationRecord[] = [
       {
@@ -1225,6 +1253,42 @@ export const managerApi = {
         isSuccess: true,
         statusCode: 200,
         message: "Ghi nhận soát xét biển số xe thành công (Offline mode).",
+      };
+    }
+  },
+
+  /**
+   * [REAL API IDENTITY] Lấy danh sách tất cả tài khoản người dùng / nhân viên
+   */
+  async getAllStaffAccounts(): Promise<AccountUserDto[]> {
+    return api.getAllAccounts();
+  },
+
+  /**
+   * [REAL API IDENTITY] Tra cứu tài khoản theo Email
+   */
+  async getAccountByEmail(email: string): Promise<AccountUserDto> {
+    return api.getAccountByEmail(email);
+  },
+
+  /**
+   * [REAL API IDENTITY] Cập nhật vai trò người dùng (PARKING_STAFF, PARKING_MANAGER)
+   */
+  async updateUserRole(userId: string, roleCode: string): Promise<ApiResponse<AccountUserDto>> {
+    try {
+      const updated = await api.updateUserRole(userId, roleCode);
+      return {
+        result: updated,
+        isSuccess: true,
+        statusCode: 200,
+        message: `Đã phân quyền vai trò ${roleCode} cho người dùng thành công.`,
+      };
+    } catch (err: any) {
+      return {
+        result: null as any,
+        isSuccess: false,
+        statusCode: 400,
+        message: err.message || "Cập nhật phân quyền thất bại.",
       };
     }
   },

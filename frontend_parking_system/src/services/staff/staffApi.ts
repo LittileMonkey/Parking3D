@@ -3,7 +3,7 @@
 // [REAL] Tích hợp các endpoints thực tế: /api/v1/parking-lots, /api/v1/parking-lots/{id}/availability
 // [LOCAL / MOCK ADAPTER] Quản lý lưu trữ trạng thái phiên xe, ca trực, sự cố tại chỗ với localStorage
 
-import { api, type ParkingLot, type LotAvailability } from "../api";
+import { api, type ParkingLot, type LotAvailability, type PaymentReceiptDto, type BookingDetailDto } from "../api";
 import type {
   ParkingLotSummary,
   ParkingSlotDetail,
@@ -655,7 +655,50 @@ export const staffApi = {
           s.bookingCode === query),
     );
 
-    if (!session) return null;
+    if (!session) {
+      try {
+        const realBooking = await api.getBookingDetail(query);
+        if (realBooking) {
+          const isCar = realBooking.vehicleType.toUpperCase() === "CAR";
+          const checkinTime = new Date(realBooking.startsAt).getTime();
+          const now = Date.now();
+          const durationMinutes = Math.max(15, Math.round((now - checkinTime) / 60000));
+          let fee = Number(realBooking.estimatedAmount) || (isCar ? 25000 : 10000);
+          let planName = isCar ? "Ô tô tiêu chuẩn" : "Xe máy lượt ngày";
+          try {
+            const realFee = await api.calculateFee({
+              parkingLotId: realBooking.lotId,
+              entryTime: realBooking.startsAt,
+              exitTime: new Date().toISOString(),
+              vehicleType: isCar ? "CAR" : "MOTORCYCLE",
+              isGoldStarMember: false,
+            });
+            if (realFee && typeof realFee.finalNetAmountVnd === "number") {
+              fee = realFee.finalNetAmountVnd;
+              planName = `Biểu phí động Baseline V4 (${realFee.totalBillableBlocks} block)`;
+            }
+          } catch {
+            // keep default
+          }
+          return {
+            sessionId: `SES-${realBooking.bookingCode}`,
+            licensePlate: realBooking.plateSnapshot,
+            slotCode: realBooking.slotCode || "Chờ xếp",
+            checkinAt: realBooking.startsAt,
+            durationMinutes,
+            estimatedFee: fee,
+            currency: "VND",
+            pricingPlanName: planName,
+            paymentStatus: realBooking.status === "CONFIRMED" ? "Paid" : "Unpaid",
+            bookingId: realBooking.bookingId,
+            bookingCode: realBooking.bookingCode,
+          };
+        }
+      } catch (err) {
+        console.warn("Backend getBookingDetail lookup fallback:", err);
+      }
+      return null;
+    }
 
     const checkinTime = new Date(session.checkinAt).getTime();
     const now = Date.now();
@@ -702,7 +745,7 @@ export const staffApi = {
   /**
    * [CHECK-OUT WORKFLOW] Xử lý xe ra & Thu tiền
    */
-  async checkOutVehicle(payload: CheckOutPayload): Promise<{ success: boolean; message: string; receiptNumber: string }> {
+  async checkOutVehicle(payload: CheckOutPayload): Promise<{ success: boolean; message: string; receiptNumber: string; paymentId?: string }> {
     const sessions = getStored<ParkingSession[]>(SESSIONS_KEY, []);
     const index = sessions.findIndex((s) => s.sessionId === payload.sessionId);
     if (index === -1) {
@@ -749,6 +792,7 @@ export const staffApi = {
       success: true,
       message: "Check-out hoàn tất. Barrier đã mở cho xe xuất bến.",
       receiptNumber,
+      paymentId: payload.paymentId,
     };
   },
 
@@ -979,6 +1023,25 @@ export const staffApi = {
     reviewNotes?: string
   ): Promise<{ id: string; status: string }> {
     return api.reviewPlateRecognition(lotId, recognitionId, correctedPlate, reviewNotes);
+  },
+
+  /**
+   * [REAL API PAYMENT] Tra cứu biên lai điện tử (E-Receipt) kèm mã xác thực số (SCRUM-72)
+   */
+  async getPaymentReceipt(paymentId: string): Promise<PaymentReceiptDto> {
+    return api.getPaymentReceipt(paymentId);
+  },
+
+  /**
+   * [REAL API PARKING] Tra cứu chi tiết đơn đặt chỗ từ Backend (Facility RBAC Lookup)
+   */
+  async getBookingDetail(bookingId: string): Promise<BookingDetailDto | null> {
+    try {
+      return await api.getBookingDetail(bookingId);
+    } catch (err) {
+      console.warn("Backend getBookingDetail failed:", err);
+      return null;
+    }
   },
 };
 

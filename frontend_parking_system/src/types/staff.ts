@@ -104,6 +104,7 @@ export interface CheckOutPayload {
   sessionId: string;
   paymentMethod?: "Cash" | "Card" | "Wallet";
   gateId?: string;
+  paymentId?: string;
 }
 
 export interface Incident {
