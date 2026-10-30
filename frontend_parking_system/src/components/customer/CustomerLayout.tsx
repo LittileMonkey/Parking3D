@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import {
   ArrowRight,
   Bell,
-  Car,
   ChevronDown,
   LogOut,
   Menu,
@@ -99,13 +98,6 @@ export default function CustomerLayout({
             </button>
             {bookingMenuOpen && (
               <div id="customer-booking-menu" className="nav-dropdown-menu">
-                <Link to="/booking" onClick={closeMenus} className="dropdown-menu-item">
-                  <span className="dropdown-item-icon bg-cyan"><Car size={18} /></span>
-                  <span className="dropdown-item-content">
-                    <span className="dropdown-item-title">{lang === "en" ? "3D Interactive Booking" : "Đặt Chỗ 3D Trực Quan"}</span>
-                    <span className="dropdown-item-desc">{lang === "en" ? "Interactive 3D twin, reserve exact slot" : "Mô phỏng 3D bãi đỗ, chọn vị trí chính xác"}</span>
-                  </span>
-                </Link>
                 <Link to="/search" onClick={closeMenus} className="dropdown-menu-item">
                   <span className="dropdown-item-icon bg-blue"><Search size={18} /></span>
                   <span className="dropdown-item-content">
@@ -186,7 +178,6 @@ export default function CustomerLayout({
 
   return (
     <div className="site-shell light-theme customer-public-shell">
-      <p className="learning-product-notice">Đây là sản phẩm phục vụ học tập, không dùng cho hoạt động thực tế.</p>
       {topSlot}
       {header}
       {children}
@@ -200,7 +191,8 @@ export default function CustomerLayout({
                 <small>SMART PARKING PLATFORM</small>
               </span>
             </Link>
-            <p className="footer-desc mt-4">{t("footer.desc")}</p>
+            {/* <p className="footer-desc mt-4">{t("footer.desc")}</p> */}
+            <p className="learning-product-notice">Đây là sản phẩm phục vụ học tập, không dùng cho hoạt động thực tế.</p>
           </div>
           <div className="footer-col">
             <h4 className="footer-col-title">{t("footer.support")}</h4>

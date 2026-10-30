@@ -1,13 +1,9 @@
-.learning-product-notice {
-  margin: 0;
-  padding: 9px 16px;
-  color: #173c48;
-  background: #e6f4f3;
-  border-bottom: 1px solid #cfe5e2;
-  font-size: 13px;
-  font-weight: 600;
+.customer-public-shell .learning-product-notice {
+  margin: 8px 0 0;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 500;
   line-height: 1.5;
-  text-align: center;
   overflow-wrap: anywhere;
 }
 
@@ -238,11 +234,6 @@
 }
 
 @media (max-width: 520px) {
-  .learning-product-notice {
-    padding: 8px 14px;
-    font-size: 12px;
-  }
-
   .customer-public-shell .site-header-pill {
     gap: 8px;
     padding: 6px 8px 6px 12px;
