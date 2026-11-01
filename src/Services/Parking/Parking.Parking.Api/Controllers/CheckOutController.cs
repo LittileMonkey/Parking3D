@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 using Parking.Parking.Application.DTOs;
 using Parking.Parking.Application.Features.CheckOut.Commands;
 using Parking.Parking.Application.Features.CheckOut.Queries;
+using Parking.Parking.Application;
+using Parking.Parking.Application.Interfaces;
 using Parking.ServiceDefaults;
 
 namespace Parking.Parking.Api.Controllers;
@@ -16,6 +18,23 @@ namespace Parking.Parking.Api.Controllers;
 /// </summary>
 public sealed class CheckOutController(ISender sender) : ControllerBase
 {
+    [HttpPost("authorize-exit")]
+    public async Task<IActionResult> AuthorizeExit([FromBody] ConfirmCheckOutRequestDto request,CancellationToken ct)
+    {
+        var result=await sender.Send(new AuthorizeCheckOutCommand(User.Subject(),request,
+            Request.Headers["Idempotency-Key"].ToString()),ct);
+        return Ok(new ApiResponse<AuthorizeCheckOutResultDto>(result,true,200,
+            "Payment verified. Staff may operate the exit gate; slot remains occupied until physical exit confirmation."));
+    }
+    [HttpPost("{sessionId:guid}/qr")]
+    public async Task<IActionResult> IssueExitQr(Guid sessionId, [FromServices] IParkingRepository repository,
+        [FromServices] IFacilityAccess access, [FromServices] ICheckOutTokens tokens, CancellationToken ct)
+    {
+        var lot = await repository.GetSessionLotIdAsync(sessionId, ct)
+            ?? throw new ServiceException(404, "Parking session not found.");
+        await access.RequireAsync(User.Subject(), lot, "GATE", ct);
+        return Ok(new ApiResponse<CheckOutQrDto>(tokens.IssueExitQr(sessionId, lot), true, 200, "Exit QR issued."));
+    }
     /// <summary>
     /// Pha 1 (Quote): Tra cứu phiên đỗ ACTIVE theo biển số/QR, đối soát biển số và tính cước thực tế.
     /// </summary>
@@ -34,6 +53,6 @@ public sealed class CheckOutController(ISender sender) : ControllerBase
     {
         var key = Request.Headers["Idempotency-Key"].ToString();
         var result = await sender.Send(new ConfirmCheckOutCommand(User.Subject(), request, key), ct);
-        return Ok(new ApiResponse<ConfirmCheckOutResultDto>(result, true, 200, "Xác nhận check-out thành công. Ô đỗ đã được giải phóng và mở barrier."));
+        return Ok(new ApiResponse<ConfirmCheckOutResultDto>(result, true, 200, "Staff confirmed physical exit. Parking slot released."));
     }
 }

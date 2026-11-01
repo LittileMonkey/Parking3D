@@ -7,7 +7,8 @@ public sealed record CheckOutQuoteRequestDto(
     Guid LotId,
     Guid GateId,
     string DetectedPlate,
-    string? QrPayload = null);
+    string? QrPayload = null,
+    Guid? SessionId = null);
 
 /// <summary>
 /// Kết quả tra cứu cước phí và đối soát biển số trước khi thanh toán xuất bãi.
@@ -29,7 +30,12 @@ public sealed record CheckOutQuoteResultDto(
     decimal OvertimeAmount,
     decimal TotalAmountDue,
     bool PaymentRequired,
-    string? IncidentCode = null);
+    string? IncidentCode = null,
+    string? QuoteToken = null,
+    DateTimeOffset? ValidUntil = null,
+    Guid PricingSnapshotId = default,
+    Guid VehicleId = default,
+    decimal CheckoutCredit = 0);
 
 /// <summary>
 /// Yêu cầu xác nhận hoàn tất check-out sau khi thanh toán và mở barrier cho xe xuất bãi.
@@ -40,7 +46,11 @@ public sealed record ConfirmCheckOutRequestDto(
     string PaymentMethod,
     decimal CashReceived = 0,
     string? PaymentReference = null,
-    string? StaffNotes = null);
+    string? StaffNotes = null,
+    string DetectedPlate = "",
+    string QuoteToken = "",
+    bool StaffObservedExit = false,
+    string ExitPermitToken = "");
 
 /// <summary>
 /// Kết quả phản hồi sau khi check-out thành công và giải phóng ô đỗ.
@@ -55,4 +65,17 @@ public sealed record ConfirmCheckOutResultDto(
     decimal FinalAmountPaid,
     string PaymentMethod,
     string BarrierStatus,
-    string SlotStatus);
+    string SlotStatus,
+    Guid? PaymentId = null);
+
+// Internal claims: signed by Parking, never accepted as a plain object from an API client.
+public sealed record CheckOutProof(Guid QuoteId, Guid ActorId, Guid SessionId, Guid LotId,
+    Guid GateId, Guid SlotId, Guid VehicleId, Guid PricingSnapshotId, string Plate,
+    DateTimeOffset QuoteAt, DateTimeOffset ExpiresAt, decimal GrossAmount);
+public sealed record CheckOutPaymentEvidence(Guid? PaymentId, Guid SessionId, Guid LotId,
+    decimal AmountPaid, string Currency, string Method);
+public sealed record CheckOutVerification(CheckOutProof Proof, CheckOutPaymentEvidence Payment);
+public sealed record CheckOutQrDto(string QrPayload, DateTimeOffset ExpiresAt);
+public sealed record AuthorizeCheckOutResultDto(Guid SessionId, string ExitPermitToken,
+    DateTimeOffset ValidUntil, decimal AmountPaid, Guid? PaymentId,
+    string BarrierStatus = "MANUAL_OPEN_AUTHORIZED", string SlotStatus = "OCCUPIED");

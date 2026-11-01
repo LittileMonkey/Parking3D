@@ -14,6 +14,7 @@
     <ProjectReference Include="../../src/Services/Identity/Parking.Identity.Infrastructure/Parking.Identity.Infrastructure.csproj" />
 	<ProjectReference Include="../../src/Services/Payment/Parking.Payment.Domain/Parking.Payment.Domain.csproj"/>
 	<ProjectReference Include="../../src/Services/Payment/Parking.Payment.Application/Parking.Payment.Application.csproj"/>
+    <ProjectReference Include="../../src/Services/Payment/Parking.Payment.Infrastructure/Parking.Payment.Infrastructure.csproj" />
 
   </ItemGroup>
 </Project>
