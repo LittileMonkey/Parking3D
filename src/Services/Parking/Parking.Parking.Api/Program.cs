@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Parking.Contracts.AI.V1;
 using Parking.Contracts.Identity.V1;
+using Parking.Contracts.Checkout.V1;
+using Parking.Parking.Api.Realtime;
 using Parking.Parking.Application;
 using Parking.Parking.Application.Interfaces;
 using Parking.Parking.Infrastructure;
@@ -18,6 +20,12 @@ builder.Services.AddGrpcClient<FacilityAuthorization.FacilityAuthorizationClient
 builder.Services.AddGrpcClient<PlateRecognition.PlateRecognitionClient>(o => o.Address = new Uri(builder.Configuration["Services:AIGrpc"] ?? "http://ai:8081"));
 builder.Services.AddGrpcClient<OccupancyIngestion.OccupancyIngestionClient>(o => o.Address = new Uri(builder.Configuration["Services:AIGrpc"] ?? "http://ai:8081"));
 builder.Services.AddScoped<IFacilityAccess, FacilityAccess>();
+builder.Services.AddGrpcClient<CheckoutSettlement.CheckoutSettlementClient>(o=>o.Address=new Uri(
+    builder.Configuration["Services:PaymentGrpc"]??(builder.Environment.IsDevelopment()?"http://127.0.0.1:8085":"http://payment:8081")));
+builder.Services.AddScoped<ICheckOutPayments,CheckOutPayments>();
+builder.Services.AddSingleton<ICheckOutTokens,CheckOutTokens>();
+builder.Services.AddSignalR();
+builder.Services.AddHostedService<ParkingEventWorker>();
 builder.Services.AddScoped<IRecognitionClient, RecognitionClient>();
 builder.Services.AddParkingPersistence();
 builder.Services.AddHostedService<OccupancyWorker>();
@@ -40,6 +48,9 @@ app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.MapGrpcService<ParkingCatalogGrpc>();
 app.MapGrpcService<BookingPaymentQueryGrpc>();
 app.MapGrpcService<PaymentEventsGrpc>();
+app.MapGrpcService<ParkingCheckoutQueryGrpc>();
+app.MapGrpcService<ParkingCheckoutEventsGrpc>();
+app.MapHub<ParkingHub>("/hubs/parking");
 
 app.MapGet("/api/v1/parking-lots", async (IParkingRepository repo, CancellationToken ct) =>
     Responses.Ok(await repo.ListLotsAsync(ct)));

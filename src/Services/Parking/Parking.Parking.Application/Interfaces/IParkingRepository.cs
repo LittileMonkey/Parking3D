@@ -59,7 +59,20 @@ public interface IParkingRepository
         Guid gateId,
         string detectedPlate,
         string? qrPayload,
-        CancellationToken ct);
+        CancellationToken ct,
+        Guid? sessionId = null);
+
+    Task<ConfirmCheckOutResultDto?> GetCheckOutReplayAsync(Guid actorId,
+        ConfirmCheckOutRequestDto request, string key, CancellationToken ct);
+
+    Task RecordCheckOutMismatchAsync(Guid sessionId, Guid actorId, string observedPlate, CancellationToken ct);
+    Task<AuthorizeCheckOutResultDto?> ClaimCheckOutAuthorizationAsync(Guid actorId,
+        ConfirmCheckOutRequestDto request,string key,CancellationToken ct);
+    Task<AuthorizeCheckOutResultDto> SaveCheckOutAuthorizationAsync(Guid actorId,
+        ConfirmCheckOutRequestDto request,string key,AuthorizeCheckOutResultDto result,CancellationToken ct);
+
+    /// <summary>Đọc bãi của phiên ở mọi trạng thái để kiểm tra quyền, kể cả khi gửi lại checkout.</summary>
+    Task<Guid?> GetSessionLotIdAsync(Guid sessionId, CancellationToken ct);
 
     /// <summary>
     /// SCRUM-70: Khóa slot_id, xác nhận thanh toán, đóng session COMPLETED, giải phóng slot và ghi audit nguyên tử.
@@ -68,6 +81,7 @@ public interface IParkingRepository
         Guid actorId,
         ConfirmCheckOutRequestDto request,
         string key,
-        CancellationToken ct);
+        CancellationToken ct,
+        CheckOutVerification? verification = null);
 }
 

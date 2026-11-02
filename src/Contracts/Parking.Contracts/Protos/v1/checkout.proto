@@ -1,0 +1,30 @@
+syntax = "proto3";
+package parking.checkout.v1;
+option csharp_namespace = "Parking.Contracts.Checkout.V1";
+
+service ParkingCheckoutQuery { rpc ValidateQuote(CheckoutQuoteRequest) returns (CheckoutBill); }
+service CheckoutSettlement {
+  rpc GetCredit(CheckoutCreditRequest) returns (CheckoutCreditReply);
+  rpc Settle(CheckoutSettleRequest) returns (CheckoutSettleReply);
+}
+service ParkingCheckoutEvents { rpc Deliver(CheckoutPaymentSucceeded) returns (CheckoutDeliveryReply); }
+message CheckoutQuoteRequest { string actor_id=1; string quote_token=2; }
+message CheckoutBill {
+  string quote_id=1; string session_id=2; string lot_id=3; string vehicle_id=4;
+  int64 gross_amount=5; string currency=6; int64 expires_at_unix=7;
+}
+message CheckoutCreditRequest { string actor_id=1; string session_id=2; string lot_id=3; }
+message CheckoutCreditReply { int64 amount=1; }
+message CheckoutSettleRequest {
+  string actor_id=1; string quote_token=2; string method=3; int64 cash_received=4;
+  string payment_reference=5; string staff_notes=6;
+}
+message CheckoutSettleReply {
+  string payment_id=1; string session_id=2; string lot_id=3; int64 amount_paid=4;
+  string currency=5; string method=6;
+}
+message CheckoutPaymentSucceeded {
+  string event_id=1; string payment_id=2; string session_id=3; string lot_id=4;
+  int64 amount=5; string currency=6;
+}
+message CheckoutDeliveryReply { string outcome=1; }

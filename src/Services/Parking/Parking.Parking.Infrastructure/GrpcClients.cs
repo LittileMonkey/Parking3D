@@ -19,11 +19,9 @@ public sealed class FacilityAccess(FacilityAuthorization.FacilityAuthorizationCl
         }
         catch (Grpc.Core.RpcException ex) when (ex.StatusCode == Grpc.Core.StatusCode.DeadlineExceeded || ex.StatusCode == Grpc.Core.StatusCode.Unavailable)
         {
-            if (userId != Guid.Empty)
-            {
-                return;
-            }
-            throw;
+            throw new ServiceException(
+                503,
+                "Authorization service is unavailable. Please try again.");
         }
     }
 }

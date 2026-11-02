@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Npgsql;
+using NpgsqlTypes;
 using Parking.Parking.Application.DTOs;
 using Parking.Parking.Domain;
 using Parking.ServiceDefaults;
@@ -10,287 +11,245 @@ namespace Parking.Parking.Persistence.Repositories;
 
 public sealed partial class ParkingRepository
 {
-    /// <summary>
-    /// SCRUM-70: Tra cứu phiên đỗ ACTIVE theo biển số/QR, đối soát biển số và tính cước thực tế tại cổng ra.
-    /// </summary>
-    public async Task<CheckOutQuoteResultDto> GetCheckOutQuoteAsync(
-        Guid lotId,
-        Guid gateId,
-        string detectedPlate,
-        string? qrPayload,
-        CancellationToken ct)
+    public async Task<Guid?> GetSessionLotIdAsync(Guid sessionId, CancellationToken ct)
     {
-        if (lotId == Guid.Empty || gateId == Guid.Empty)
-            throw new ServiceException(400, "Valid lotId and gateId are required.");
-
-        var searchPlate = string.Empty;
-        var hasPlate = !string.IsNullOrWhiteSpace(detectedPlate) && PlateNumber.TryNormalize(detectedPlate, out searchPlate);
-        if (!hasPlate && string.IsNullOrWhiteSpace(qrPayload))
-            throw new ServiceException(400, "Valid detected plate or QR payload is required for check-out identification.");
-
-        await using var connection = await db.OpenConnectionAsync(ct);
-
-        // 1. Kiểm tra cổng ra có hợp lệ tại bãi này không
-        await using (var gateCheck = new NpgsqlCommand(
-            "SELECT EXISTS(SELECT 1 FROM lot_gates WHERE id=@gate AND lot_id=@lot AND gate_kind IN ('EXIT','BOTH'))", connection))
-        {
-            gateCheck.Parameters.AddWithValue("gate", gateId);
-            gateCheck.Parameters.AddWithValue("lot", lotId);
-            if (!(bool)(await gateCheck.ExecuteScalarAsync(ct))!)
-                throw new ServiceException(400, "Invalid exit gate for the requested parking lot.");
-        }
-
-        // 2. Tra cứu phiên đỗ ACTIVE và thông tin tính cước
-        await using var cmd = new NpgsqlCommand("""
-            SELECT ps.id, ps.booking_id, s.id, s.code, ps.plate_snapshot,
-                   ps.entry_at, ps.expected_exit_at, clock_timestamp(),
-                   l.timezone, sn.resolved_rules, COALESCE(b.estimated_amount, 0)
-            FROM parking_sessions ps
-            JOIN session_slot_assignments a ON a.session_id = ps.id AND a.vacated_at IS NULL
-            JOIN parking_slots s ON s.id = a.slot_id AND s.lot_id = ps.lot_id
-            JOIN parking_lots l ON l.id = ps.lot_id
-            JOIN pricing_snapshots sn ON sn.id = ps.pricing_snapshot_id
-            LEFT JOIN bookings b ON b.id = ps.booking_id
-            WHERE ps.lot_id = @lot
-              AND ps.status = 'ACTIVE'
-              AND (@hasPlate AND (ps.plate_snapshot = @plate OR ps.plate_snapshot = @rawPlate))
-            LIMIT 1
-            """, connection);
-
-        cmd.Parameters.AddWithValue("lot", lotId);
-        cmd.Parameters.AddWithValue("hasPlate", hasPlate);
-        cmd.Parameters.AddWithValue("plate", searchPlate);
-        cmd.Parameters.AddWithValue("rawPlate", detectedPlate?.Trim().ToUpperInvariant() ?? string.Empty);
-
-        await using var reader = await cmd.ExecuteReaderAsync(ct);
-        if (!await reader.ReadAsync(ct))
-            throw new ServiceException(404, "No active parking session found for the specified vehicle at this lot.");
-
-        var sessionId = reader.GetGuid(0);
-        var bookingId = reader.IsDBNull(1) ? (Guid?)null : reader.GetGuid(1);
-        var slotId = reader.GetGuid(2);
-        var slotCode = reader.GetString(3);
-        var entryPlate = reader.GetString(4);
-        var entryAt = reader.GetFieldValue<DateTimeOffset>(5);
-        var expectedExitAt = reader.GetFieldValue<DateTimeOffset>(6);
-        var quoteAt = reader.GetFieldValue<DateTimeOffset>(7);
-        var timezoneStr = reader.GetString(8);
-        var rulesJson = reader.GetString(9);
-        var prepaidAmount = reader.GetInt64(10);
-
-        // 3. Đối soát biển số vào và ra (Kích hoạt cảnh báo #0482 nếu lệch)
-        var isPlateMatched = string.Equals(entryPlate, searchPlate, StringComparison.OrdinalIgnoreCase) ||
-                             string.Equals(entryPlate, detectedPlate?.Trim(), StringComparison.OrdinalIgnoreCase);
-        string? incidentCode = isPlateMatched ? null : "INCIDENT_0482_PLATE_MISMATCH";
-
-        // 4. Tính toán thời gian thực tế và cước phụ thu nếu đỗ quá giờ
-        var totalMinutes = (int)Math.Max(0, (quoteAt - entryAt).TotalMinutes);
-        var overdueMinutes = (int)Math.Max(0, (quoteAt - expectedExitAt).TotalMinutes);
-
-        decimal overtimeAmount = 0;
-        if (overdueMinutes > 0 && !string.IsNullOrWhiteSpace(rulesJson))
-        {
-            var tz = TimeZoneInfo.FindSystemTimeZoneById(timezoneStr);
-            var blockPrice = JsonSerializer.Deserialize<BlockPrice>(rulesJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            if (blockPrice is not null)
-            {
-                overtimeAmount = blockPrice.Estimate(expectedExitAt, quoteAt, tz);
-            }
-        }
-
-        var totalAmountDue = overtimeAmount;
-        var paymentRequired = totalAmountDue > 0;
-
-        return new CheckOutQuoteResultDto(
-            sessionId,
-            bookingId,
-            slotId,
-            slotCode,
-            entryPlate,
-            detectedPlate ?? searchPlate,
-            isPlateMatched,
-            entryAt,
-            expectedExitAt,
-            quoteAt,
-            totalMinutes,
-            overdueMinutes,
-            prepaidAmount,
-            overtimeAmount,
-            totalAmountDue,
-            paymentRequired,
-            incidentCode);
+        await using var command = db.CreateCommand("SELECT lot_id FROM parking_sessions WHERE id=@session");
+        command.Parameters.AddWithValue("session", sessionId);
+        return await command.ExecuteScalarAsync(ct) is Guid lot ? lot : null;
     }
 
-    /// <summary>
-    /// SCRUM-70: Khóa slot_id, xác nhận thanh toán, đóng session COMPLETED, giải phóng slot và ghi audit nguyên tử.
-    /// </summary>
-    public async Task<ConfirmCheckOutResultDto> CompleteCheckOutAsync(
-        Guid actorId,
-        ConfirmCheckOutRequestDto request,
-        string key,
-        CancellationToken ct)
+    public async Task<CheckOutQuoteResultDto> GetCheckOutQuoteAsync(Guid lotId, Guid gateId,
+        string detectedPlate, string? qrPayload, CancellationToken ct, Guid? sessionId = null)
+    {
+        if (lotId == Guid.Empty || gateId == Guid.Empty) throw new ServiceException(400, "Valid lot and gate required.");
+        if (!string.IsNullOrWhiteSpace(qrPayload)) throw new ServiceException(400, "Exit QR must be verified before lookup.");
+        var hasPlate = PlateNumber.TryNormalize(detectedPlate ?? "", out var plate);
+        if (!hasPlate && sessionId is null) throw new ServiceException(400, "Valid plate or verified exit QR required.");
+        await using var connection = await db.OpenConnectionAsync(ct);
+        await using (var gate = new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM lot_gates WHERE id=@gate AND lot_id=@lot AND gate_kind IN ('EXIT','BOTH'))", connection))
+        {
+            gate.Parameters.AddWithValue("gate", gateId); gate.Parameters.AddWithValue("lot", lotId);
+            if (!(bool)(await gate.ExecuteScalarAsync(ct))!) throw new ServiceException(400, "Invalid exit gate for this lot.");
+        }
+        await using var command = new NpgsqlCommand("""
+            SELECT ps.id,ps.booking_id,s.id,s.code,ps.plate_snapshot,ps.entry_at,ps.expected_exit_at,
+                l.timezone,sn.resolved_rules,
+                (SELECT coalesce(sum(amount),0) FROM payment_receipts WHERE booking_id=ps.booking_id),
+                ps.pricing_snapshot_id,ps.vehicle_id,b.starts_at
+            FROM parking_sessions ps
+            JOIN session_slot_assignments a ON a.session_id=ps.id AND a.vacated_at IS NULL
+            JOIN parking_slots s ON s.id=a.slot_id AND s.lot_id=ps.lot_id
+            JOIN parking_lots l ON l.id=ps.lot_id
+            JOIN pricing_snapshots sn ON sn.id=ps.pricing_snapshot_id
+            LEFT JOIN bookings b ON b.id=ps.booking_id
+            WHERE ps.lot_id=@lot AND ps.status='ACTIVE'
+                AND ((@session IS NOT NULL AND ps.id=@session) OR (@session IS NULL AND ps.plate_snapshot=@plate))
+            """, connection);
+        command.Parameters.AddWithValue("lot", lotId);
+        command.Parameters.Add("session", NpgsqlDbType.Uuid).Value = (object?)sessionId ?? DBNull.Value;
+        command.Parameters.AddWithValue("plate", plate);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) throw new ServiceException(404, "Active parking session not found at this lot.");
+        var now = clock.GetUtcNow();
+        var booking = reader.IsDBNull(1) ? (Guid?)null : reader.GetGuid(1);
+        var entry = reader.GetFieldValue<DateTimeOffset>(5);
+        var expected = reader.GetFieldValue<DateTimeOffset>(6);
+        var entryPlate = reader.GetString(4);
+        var matches = hasPlate && PlateNumber.TryNormalize(entryPlate, out var original) && original == plate;
+        var due = CalculateCheckOutFee(booking.HasValue, entry, expected, now, reader.GetString(8), reader.GetString(7),
+            reader.IsDBNull(12)?null:reader.GetFieldValue<DateTimeOffset>(12));
+        return new(reader.GetGuid(0), booking, reader.GetGuid(2), reader.GetString(3), entryPlate,
+            hasPlate ? plate : "", matches, entry, expected, now,
+            (int)Math.Max(0, Math.Ceiling((now-entry).TotalMinutes)),
+            (int)Math.Max(0, Math.Ceiling((now-expected).TotalMinutes)),
+            reader.GetDecimal(9), due, due, due > 0,
+            matches ? null : hasPlate ? "INCIDENT_0482_PLATE_MISMATCH" : "PLATE_OBSERVATION_REQUIRED",
+            PricingSnapshotId: reader.GetGuid(10), VehicleId: reader.GetGuid(11));
+    }
+
+    private static decimal CalculateCheckOutFee(bool hasBooking, DateTimeOffset entry, DateTimeOffset expected,
+        DateTimeOffset at, string rules, string timezone, DateTimeOffset? bookedStart=null)
+    {
+        try { return CheckOutFee.Calculate(hasBooking,entry,expected,at,rules,timezone,bookedStart); }
+        catch (Exception error) when (error is ArgumentException or JsonException or TimeZoneNotFoundException or InvalidTimeZoneException)
+        { throw new ServiceException(503,"Pricing snapshot unavailable. Checkout is blocked."); }
+    }
+
+    public async Task RecordCheckOutMismatchAsync(Guid sessionId, Guid actorId, string observedPlate, CancellationToken ct)
+    {
+        await using var command = db.CreateCommand("""
+            INSERT INTO audit_logs(lot_id,actor_user_id,actor_type,action,entity_type,entity_id,reason,new_values)
+            SELECT lot_id,@actor,'STAFF','CHECK_OUT_PLATE_MISMATCH','PARKING_SESSION',id::text,
+                'INCIDENT_0482_PLATE_MISMATCH',jsonb_build_object('observedPlate',@plate)
+            FROM parking_sessions WHERE id=@session;
+            """);
+        command.Parameters.AddWithValue("session", sessionId); command.Parameters.AddWithValue("actor", actorId);
+        command.Parameters.AddWithValue("plate", observedPlate);
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
+    private static string CheckOutFingerprint(ConfirmCheckOutRequestDto request)
+        => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request))));
+    private static Guid CheckOutRequestId(Guid actor, string key)
+        => new(SHA256.HashData(Encoding.UTF8.GetBytes($"CheckOut:{actor}:{key}")).AsSpan(0,16));
+
+    private static Guid AuthorizationRequestId(Guid actor,string key)
+        =>new(SHA256.HashData(Encoding.UTF8.GetBytes($"AuthorizeExit:{actor}:{key}")).AsSpan(0,16));
+
+    public async Task<AuthorizeCheckOutResultDto?> ClaimCheckOutAuthorizationAsync(Guid actorId,
+        ConfirmCheckOutRequestDto request,string key,CancellationToken ct)
+    {
+        if(string.IsNullOrWhiteSpace(key)||key.Length>128)throw new ServiceException(400,"Valid Idempotency-Key required.");
+        var id=AuthorizationRequestId(actorId,key);var fingerprint=CheckOutFingerprint(request);
+        await using(var insert=db.CreateCommand("INSERT INTO integration_inbox(event_id,event_type,payload_hash,outcome) VALUES(@id,'CheckOutAuthorization',@hash,'PENDING') ON CONFLICT(event_id) DO NOTHING"))
+        {
+            insert.Parameters.AddWithValue("id",id);insert.Parameters.AddWithValue("hash",fingerprint);
+            await insert.ExecuteNonQueryAsync(ct);
+        }
+        await using var read=db.CreateCommand("SELECT payload_hash,outcome FROM integration_inbox WHERE event_id=@id AND event_type='CheckOutAuthorization'");
+        read.Parameters.AddWithValue("id",id);await using var reader=await read.ExecuteReaderAsync(ct);
+        if(!await reader.ReadAsync(ct)||reader.GetString(0)!=fingerprint)
+            throw new ServiceException(409,"Authorization key reused for another request.");
+        return reader.GetString(1)=="PENDING"?null:JsonSerializer.Deserialize<AuthorizeCheckOutResultDto>(reader.GetString(1))!;
+    }
+
+    public async Task<AuthorizeCheckOutResultDto> SaveCheckOutAuthorizationAsync(Guid actorId,
+        ConfirmCheckOutRequestDto request,string key,AuthorizeCheckOutResultDto result,CancellationToken ct)
+    {
+        var id=AuthorizationRequestId(actorId,key);
+        await using var connection=await db.OpenConnectionAsync(ct);await using var tx=await connection.BeginTransactionAsync(ct);
+        await using(var prior=new NpgsqlCommand("SELECT payload_hash,outcome FROM integration_inbox WHERE event_id=@id AND event_type='CheckOutAuthorization' FOR UPDATE",connection,tx))
+        {
+            prior.Parameters.AddWithValue("id",id);await using var reader=await prior.ExecuteReaderAsync(ct);
+            if(!await reader.ReadAsync(ct)||reader.GetString(0)!=CheckOutFingerprint(request))throw new ServiceException(409,"Authorization claim changed.");
+            if(reader.GetString(1)!="PENDING")return JsonSerializer.Deserialize<AuthorizeCheckOutResultDto>(reader.GetString(1))!;
+        }
+        await using var write=new NpgsqlCommand("""
+            UPDATE integration_inbox SET outcome=@outcome WHERE event_id=@id;
+            INSERT INTO audit_logs(lot_id,actor_user_id,actor_type,action,entity_type,entity_id,request_id,new_values)
+            SELECT lot_id,@actor,'STAFF','AUTHORIZE_CHECK_OUT','PARKING_SESSION',id::text,@request,
+                jsonb_build_object('gateId',@gate,'amountPaid',@paid,'mode','MANUAL_OPEN_AUTHORIZED')
+            FROM parking_sessions WHERE id=@session;
+            """,connection,tx);
+        write.Parameters.AddWithValue("id",id);write.Parameters.AddWithValue("outcome",JsonSerializer.Serialize(result));
+        write.Parameters.AddWithValue("actor",actorId);write.Parameters.AddWithValue("request",id.ToString());
+        write.Parameters.AddWithValue("gate",request.GateId);write.Parameters.AddWithValue("paid",result.AmountPaid);
+        write.Parameters.AddWithValue("session",request.SessionId);
+        await write.ExecuteNonQueryAsync(ct);await tx.CommitAsync(ct);return result;
+    }
+
+    public async Task<ConfirmCheckOutResultDto?> GetCheckOutReplayAsync(Guid actorId,
+        ConfirmCheckOutRequestDto request, string key, CancellationToken ct)
+    {
+        await using var command = db.CreateCommand("SELECT payload_hash,outcome FROM integration_inbox WHERE event_id=@id AND event_type='CheckOutRequest'");
+        command.Parameters.AddWithValue("id", CheckOutRequestId(actorId,key));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) return null;
+        if (reader.GetString(0) != CheckOutFingerprint(request)) throw new ServiceException(409, "Idempotency key reused for another checkout.");
+        return JsonSerializer.Deserialize<ConfirmCheckOutResultDto>(reader.GetString(1))!;
+    }
+
+    public async Task<ConfirmCheckOutResultDto> CompleteCheckOutAsync(Guid actorId,
+        ConfirmCheckOutRequestDto request, string key, CancellationToken ct, CheckOutVerification? verification = null)
     {
         if (actorId == Guid.Empty || request.SessionId == Guid.Empty || request.GateId == Guid.Empty ||
-            string.IsNullOrWhiteSpace(key) || key.Length > 128)
-            throw new ServiceException(400, "Valid actor, session, gate and Idempotency-Key required.");
-
+            string.IsNullOrWhiteSpace(key) || key.Length > 128 || !request.StaffObservedExit ||
+            !PlateNumber.TryNormalize(request.DetectedPlate, out var observed))
+            throw new ServiceException(400,"Valid checkout identification and physical-exit confirmation required.");
         await using var connection = await db.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
-
-        // 1. Chống gửi lặp request qua Idempotency-Key
-        var dedupeKey = $"CheckOut:{actorId}:{key}";
-        var requestId = new Guid(SHA256.HashData(Encoding.UTF8.GetBytes(dedupeKey)).AsSpan(0, 16));
-        var fingerprint = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request))));
-
-        await using (var claim = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended(@key,0))", connection, transaction))
+        NpgsqlCommand Command(string sql) => new(sql,connection,transaction);
+        await using (var claim = Command("SELECT pg_advisory_xact_lock(hashtextextended(@key,0))"))
+        { claim.Parameters.AddWithValue("key",$"CheckOut:{actorId}:{key}"); await claim.ExecuteNonQueryAsync(ct); }
+        var id = CheckOutRequestId(actorId,key);
+        var fingerprint = CheckOutFingerprint(request);
+        await using (var replay = Command("SELECT payload_hash,outcome FROM integration_inbox WHERE event_id=@id AND event_type='CheckOutRequest'"))
         {
-            claim.Parameters.AddWithValue("key", dedupeKey);
-            await claim.ExecuteNonQueryAsync(ct);
-        }
-
-        await using (var replay = new NpgsqlCommand("SELECT payload_hash,outcome FROM integration_inbox WHERE event_id=@id AND event_type='CheckOutRequest'", connection, transaction))
-        {
-            replay.Parameters.AddWithValue("id", requestId);
-            await using var reader = await replay.ExecuteReaderAsync(ct);
+            replay.Parameters.AddWithValue("id",id); await using var reader = await replay.ExecuteReaderAsync(ct);
             if (await reader.ReadAsync(ct))
             {
-                if (reader.GetString(0) != fingerprint)
-                    throw new ServiceException(409, "Idempotency key reused for a different check-out request.");
+                if (reader.GetString(0) != fingerprint) throw new ServiceException(409,"Idempotency key reused for another checkout.");
                 return JsonSerializer.Deserialize<ConfirmCheckOutResultDto>(reader.GetString(1))!;
             }
         }
-
-        // 2. Tra cứu phiên đỗ ACTIVE và khóa tài nguyên
-        Guid lotId;
-        Guid? bookingId;
-        Guid vehicleId;
-        Guid slotId;
-        string slotCode;
-        DateTimeOffset expectedExitAt;
-        string rulesJson;
-        string timezoneStr;
-
-        await using (var locate = new NpgsqlCommand("""
-            SELECT ps.lot_id, ps.booking_id, ps.vehicle_id, a.slot_id, s.code,
-                   ps.expected_exit_at, sn.resolved_rules, l.timezone
+        if (verification is null) throw new ServiceException(409,"Verified checkout quote and payment required.");
+        var proof = verification.Proof; var payment = verification.Payment;
+        if (proof.ActorId != actorId || proof.SessionId != request.SessionId || proof.GateId != request.GateId || proof.Plate != observed)
+            throw new ServiceException(409,"Checkout identification does not match the verified quote.");
+        // No row locks before the global VEHICLE -> SLOT lock order.
+        Guid vehicle; Guid slot;
+        await using (var locate = Command("SELECT ps.vehicle_id,a.slot_id FROM parking_sessions ps JOIN session_slot_assignments a ON a.session_id=ps.id AND a.vacated_at IS NULL WHERE ps.id=@session AND ps.status='ACTIVE'"))
+        {
+            locate.Parameters.AddWithValue("session",request.SessionId); await using var reader = await locate.ExecuteReaderAsync(ct);
+            if (!await reader.ReadAsync(ct)) throw new ServiceException(409,"Session is not active.");
+            vehicle=reader.GetGuid(0); slot=reader.GetGuid(1);
+        }
+        await using (var vehicleLock=Command("SELECT lock_parking_resource('VEHICLE',@id)"))
+        { vehicleLock.Parameters.AddWithValue("id",vehicle); await vehicleLock.ExecuteNonQueryAsync(ct); }
+        await using (var slotLock=Command("SELECT lock_parking_resource('SLOT',@id)"))
+        { slotLock.Parameters.AddWithValue("id",slot); await slotLock.ExecuteNonQueryAsync(ct); }
+        Guid lot; Guid? booking; string code; decimal fee;
+        await using (var read=Command("""
+            SELECT ps.lot_id,ps.booking_id,s.code,ps.plate_snapshot,ps.entry_at,ps.expected_exit_at,
+                sn.resolved_rules,l.timezone,ps.pricing_snapshot_id,b.starts_at
             FROM parking_sessions ps
-            JOIN session_slot_assignments a ON a.session_id = ps.id AND a.vacated_at IS NULL
-            JOIN parking_slots s ON s.id = a.slot_id
-            JOIN parking_lots l ON l.id = ps.lot_id
-            JOIN pricing_snapshots sn ON sn.id = ps.pricing_snapshot_id
-            WHERE ps.id = @session AND ps.status = 'ACTIVE'
-              AND EXISTS(SELECT 1 FROM lot_gates g WHERE g.id = @gate AND g.lot_id = ps.lot_id AND g.gate_kind IN ('EXIT','BOTH'))
-            FOR UPDATE OF ps, a
-            """, connection, transaction))
+            JOIN session_slot_assignments a ON a.session_id=ps.id AND a.vacated_at IS NULL
+            JOIN parking_slots s ON s.id=a.slot_id AND s.lot_id=ps.lot_id
+            JOIN parking_lots l ON l.id=ps.lot_id JOIN pricing_snapshots sn ON sn.id=ps.pricing_snapshot_id
+            LEFT JOIN bookings b ON b.id=ps.booking_id
+            WHERE ps.id=@session AND ps.status='ACTIVE' AND ps.vehicle_id=@vehicle AND a.slot_id=@slot
+              AND EXISTS(SELECT 1 FROM lot_gates g WHERE g.id=@gate AND g.lot_id=ps.lot_id AND g.gate_kind IN ('EXIT','BOTH'))
+            FOR UPDATE OF ps,a
+            """))
         {
-            locate.Parameters.AddWithValue("session", request.SessionId);
-            locate.Parameters.AddWithValue("gate", request.GateId);
-            await using var reader = await locate.ExecuteReaderAsync(ct);
-            if (!await reader.ReadAsync(ct))
-                throw new ServiceException(409, "Parking session is not active or invalid exit gate.");
-
-            lotId = reader.GetGuid(0);
-            bookingId = reader.IsDBNull(1) ? (Guid?)null : reader.GetGuid(1);
-            vehicleId = reader.GetGuid(2);
-            slotId = reader.GetGuid(3);
-            slotCode = reader.GetString(4);
-            expectedExitAt = reader.GetFieldValue<DateTimeOffset>(5);
-            rulesJson = reader.GetString(6);
-            timezoneStr = reader.GetString(7);
+            read.Parameters.AddWithValue("session",request.SessionId); read.Parameters.AddWithValue("vehicle",vehicle);
+            read.Parameters.AddWithValue("slot",slot); read.Parameters.AddWithValue("gate",request.GateId);
+            await using var reader=await read.ExecuteReaderAsync(ct);
+            if (!await reader.ReadAsync(ct)) throw new ServiceException(409,"Session, slot or exit gate changed. Request a new quote.");
+            lot=reader.GetGuid(0); booking=reader.IsDBNull(1)?null:reader.GetGuid(1); code=reader.GetString(2);
+            if (!PlateNumber.TryNormalize(reader.GetString(3),out var original) || original!=observed ||
+                proof.LotId!=lot || proof.VehicleId!=vehicle || proof.SlotId!=slot || proof.PricingSnapshotId!=reader.GetGuid(8))
+                throw new ServiceException(409,"INCIDENT_0482_PLATE_MISMATCH or checkout context changed.");
+            fee=CalculateCheckOutFee(booking.HasValue,reader.GetFieldValue<DateTimeOffset>(4),
+                reader.GetFieldValue<DateTimeOffset>(5),proof.QuoteAt,reader.GetString(6),reader.GetString(7),
+                reader.IsDBNull(9)?null:reader.GetFieldValue<DateTimeOffset>(9));
+            var currentFee=CalculateCheckOutFee(booking.HasValue,reader.GetFieldValue<DateTimeOffset>(4),
+                reader.GetFieldValue<DateTimeOffset>(5),clock.GetUtcNow(),reader.GetString(6),reader.GetString(7),
+                reader.IsDBNull(9)?null:reader.GetFieldValue<DateTimeOffset>(9));
+            if(currentFee!=fee)
+                throw new ServiceException(409,"Checkout fee changed. Request a new quote; prior payments remain credited.");
         }
-
-        // 3. Khóa chống tranh chấp VEHICLE và SLOT
-        await using (var vehicleLock = new NpgsqlCommand("SELECT lock_parking_resource('VEHICLE', @vehicle)", connection, transaction))
+        var now=clock.GetUtcNow();
+        if (proof.ExpiresAt<=now || proof.QuoteAt>now || proof.GrossAmount!=fee)
+            throw new ServiceException(409,"Quote expired or price changed. Request a new quote.");
+        if (payment.SessionId!=request.SessionId || payment.LotId!=lot || payment.Currency!="VND" ||
+            payment.AmountPaid<fee || (fee>0 && payment.PaymentId is null))
+            throw new ServiceException(409,"Verified payment is insufficient for this session.");
+        var result=new ConfirmCheckOutResultDto(request.SessionId,booking,lot,slot,code,now,
+            payment.AmountPaid,payment.Method,"STAFF_CONFIRMED_EXIT","AVAILABLE",payment.PaymentId);
+        await using (var write=Command("""
+            UPDATE parking_sessions SET status='COMPLETED',exit_at=@now,exit_gate_id=@gate,exited_by=@actor WHERE id=@session;
+            UPDATE session_slot_assignments SET vacated_at=@now WHERE session_id=@session AND vacated_at IS NULL;
+            UPDATE bookings SET status='COMPLETED',version=version+1 WHERE id=@booking;
+            UPDATE slot_reservations SET status='RELEASED',released_at=@now,release_reason='CHECK_OUT'
+                WHERE booking_id=@booking AND status='CONFIRMED';
+            INSERT INTO audit_logs(lot_id,actor_user_id,actor_type,action,entity_type,entity_id,request_id,reason,new_values,created_at)
+            VALUES(@lot,@actor,'STAFF','CHECK_OUT','PARKING_SESSION',@entity,@request,@notes,@outcome::jsonb,@now);
+            INSERT INTO integration_inbox(event_id,event_type,payload_hash,outcome) VALUES(@id,'CheckOutRequest',@hash,@outcome);
+            INSERT INTO integration_outbox(event_id,event_type,aggregate_id,payload)
+            VALUES(@id,'SlotStatusChanged.v1',@slot,@event::jsonb);
+            """))
         {
-            vehicleLock.Parameters.AddWithValue("vehicle", vehicleId);
-            await vehicleLock.ExecuteNonQueryAsync(ct);
+            write.Parameters.AddWithValue("session",request.SessionId); write.Parameters.AddWithValue("now",now);
+            write.Parameters.AddWithValue("gate",request.GateId); write.Parameters.AddWithValue("actor",actorId);
+            write.Parameters.Add("booking",NpgsqlDbType.Uuid).Value=(object?)booking??DBNull.Value;
+            write.Parameters.AddWithValue("lot",lot); write.Parameters.AddWithValue("entity",request.SessionId.ToString());
+            write.Parameters.AddWithValue("request",id.ToString()); write.Parameters.AddWithValue("notes",request.StaffNotes??"");
+            write.Parameters.AddWithValue("outcome",JsonSerializer.Serialize(result)); write.Parameters.AddWithValue("id",id);
+            write.Parameters.AddWithValue("hash",fingerprint); write.Parameters.AddWithValue("slot",slot);
+            write.Parameters.AddWithValue("event",JsonSerializer.Serialize(new { eventId=id,parkingLotId=lot,slotId=slot,status="AVAILABLE",observedAt=now }));
+            await write.ExecuteNonQueryAsync(ct);
         }
-
-        await using (var slotLock = new NpgsqlCommand("SELECT lock_parking_resource('SLOT', @slot)", connection, transaction))
-        {
-            slotLock.Parameters.AddWithValue("slot", slotId);
-            await slotLock.ExecuteNonQueryAsync(ct);
-        }
-
-        // 4. Kiểm tra điều kiện cước phụ thu quá giờ
-        var now = clock.GetUtcNow();
-        decimal overtimeDue = 0;
-        if (now > expectedExitAt && !string.IsNullOrWhiteSpace(rulesJson))
-        {
-            var tz = TimeZoneInfo.FindSystemTimeZoneById(timezoneStr);
-            var blockPrice = JsonSerializer.Deserialize<BlockPrice>(rulesJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            if (blockPrice is not null)
-            {
-                overtimeDue = blockPrice.Estimate(expectedExitAt, now, tz);
-            }
-        }
-
-        if (overtimeDue > 0)
-        {
-            if (request.PaymentMethod == "NONE")
-                throw new ServiceException(409, $"Payment required: {overtimeDue:N0} VND must be paid before check-out.");
-
-            if (request.PaymentMethod == "CASH" && request.CashReceived < overtimeDue)
-                throw new ServiceException(409, $"Insufficient cash received: required {overtimeDue:N0} VND, but received {request.CashReceived:N0} VND.");
-        }
-
-        // 5. Cập nhật Database: parking_sessions COMPLETED, assignment vacated_at, booking COMPLETED
-        await using (var complete = new NpgsqlCommand("""
-            UPDATE parking_sessions
-            SET status = 'COMPLETED',
-                exit_at = @now,
-                exit_gate_id = @gate,
-                exited_by = @actor
-            WHERE id = @session;
-
-            UPDATE session_slot_assignments
-            SET vacated_at = @now
-            WHERE session_id = @session AND vacated_at IS NULL;
-
-            UPDATE bookings
-            SET status = 'COMPLETED',
-                version = version + 1
-            WHERE id = @booking;
-
-            INSERT INTO audit_logs(id, lot_id, actor_user_id, actor_type, action, entity_type, entity_id, request_id, new_values, created_at)
-            VALUES(gen_random_uuid(), @lot, @actor, 'STAFF', 'CHECK_OUT', 'PARKING_SESSION', @session::text, @requestId,
-              jsonb_build_object('status', 'COMPLETED', 'slotId', @slot, 'paymentMethod', @method, 'amountPaid', @paid), @now);
-            """, connection, transaction))
-        {
-            complete.Parameters.AddWithValue("session", request.SessionId);
-            complete.Parameters.AddWithValue("now", now.UtcDateTime);
-            complete.Parameters.AddWithValue("gate", request.GateId);
-            complete.Parameters.AddWithValue("actor", actorId);
-            complete.Parameters.AddWithValue("booking", (object?)bookingId ?? DBNull.Value);
-            complete.Parameters.AddWithValue("lot", lotId);
-            complete.Parameters.AddWithValue("requestId", requestId.ToString());
-            complete.Parameters.AddWithValue("slot", slotId.ToString());
-            complete.Parameters.AddWithValue("method", request.PaymentMethod);
-            complete.Parameters.AddWithValue("paid", overtimeDue);
-            await complete.ExecuteNonQueryAsync(ct);
-        }
-
-        var result = new ConfirmCheckOutResultDto(
-            request.SessionId,
-            bookingId,
-            lotId,
-            slotId,
-            slotCode,
-            now,
-            overtimeDue,
-            request.PaymentMethod,
-            BarrierStatus: "OPEN",
-            SlotStatus: "AVAILABLE");
-
-        // 6. Ghi nhận outcome vào integration_inbox để bảo vệ idempotency
-        await using (var dedupe = new NpgsqlCommand("INSERT INTO integration_inbox(event_id,event_type,payload_hash,outcome) VALUES(@id,'CheckOutRequest',@hash,@outcome)", connection, transaction))
-        {
-            dedupe.Parameters.AddWithValue("id", requestId);
-            dedupe.Parameters.AddWithValue("hash", fingerprint);
-            dedupe.Parameters.AddWithValue("outcome", JsonSerializer.Serialize(result));
-            await dedupe.ExecuteNonQueryAsync(ct);
-        }
-
         await transaction.CommitAsync(ct);
         return result;
     }
