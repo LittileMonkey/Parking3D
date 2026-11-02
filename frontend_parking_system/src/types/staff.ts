@@ -124,6 +124,7 @@ export interface Incident {
   resolvedAt?: string;
   notes?: string;
   updatedAt: string;
+  version?: number;
 }
 
 export interface IncidentLog {

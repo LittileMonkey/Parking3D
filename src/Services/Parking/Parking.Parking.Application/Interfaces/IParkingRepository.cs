@@ -93,5 +93,149 @@ public interface IParkingRepository
         string key,
         CancellationToken ct,
         CheckOutVerification? verification = null);
+
+    // ==========================================
+    // SCRUM-99: Incidents & Exceptions
+    // ==========================================
+
+    /// <summary>
+    /// Ghi nhận báo cáo sự cố hoặc ngoại lệ mới tại bãi đỗ xe (Open).
+    /// Hỗ trợ kiểm tra báo muộn (>10 phút cần lý do), chống gửi trùng qua Idempotency-Key và khóa giao dịch.
+    /// </summary>
+    Task<IncidentDto> CreateIncidentAsync(
+        Guid lotId,
+        Guid actorId,
+        CreateIncidentRequestDto request,
+        string? key,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Liệt kê danh sách sự cố tại bãi đỗ xe theo bộ lọc trạng thái, mức độ nghiêm trọng, tìm kiếm và phân trang.
+    /// </summary>
+    Task<PagedResult<IncidentSummaryDto>> ListIncidentsAsync(
+        Guid lotId,
+        string? status,
+        string? severity,
+        string? query,
+        int page,
+        int pageSize,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Lấy chi tiết thông tin một sự cố tại bãi đỗ xe kèm chứng cứ và quyết định xử lý ngoại lệ (nếu có).
+    /// </summary>
+    Task<IncidentDto?> GetIncidentByIdAsync(
+        Guid lotId,
+        Guid incidentId,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Cập nhật tiến độ xử lý sự cố (InProgress/Escalated/Resolved) có kiểm soát xung đột phiên bản (Optimistic Concurrency).
+    /// </summary>
+    Task<IncidentDto> UpdateIncidentStatusAsync(
+        Guid lotId,
+        Guid incidentId,
+        Guid actorId,
+        UpdateIncidentStatusRequestDto request,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Lấy lịch sử các hành động thay đổi trạng thái của sự cố mà không để lộ nhật ký audit thô.
+    /// </summary>
+    Task<PagedResult<IncidentHistoryItemDto>> GetIncidentHistoryAsync(
+        Guid lotId,
+        Guid incidentId,
+        int page,
+        int pageSize,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Quản lý mở lại sự cố từ trạng thái Resolved về Open kèm lý do ghi vết lịch sử.
+    /// </summary>
+    Task<IncidentDto> ReopenIncidentAsync(
+        Guid lotId,
+        Guid incidentId,
+        Guid actorId,
+        ReopenIncidentRequestDto request,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Hủy bỏ sự cố (trường hợp báo nhầm) kèm lý do, chuyển trạng thái sang Cancelled thay vì xóa cứng.
+    /// </summary>
+    Task<IncidentDto> CancelIncidentAsync(
+        Guid lotId,
+        Guid incidentId,
+        Guid actorId,
+        CancelIncidentRequestDto request,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Quản lý ban hành quyết định phê duyệt (Approved) hoặc từ chối (Rejected) ngoại lệ xuất bãi kèm chứng cứ đối chiếu.
+    /// </summary>
+    Task<IncidentExitDecisionDto> CreateIncidentDecisionAsync(
+        Guid lotId,
+        Guid incidentId,
+        Guid actorId,
+        CreateIncidentDecisionRequestDto request,
+        CancellationToken ct);
+
+    // ==========================================
+    // SCRUM-99: Shift Handovers
+    // ==========================================
+
+    /// <summary>
+    /// Nhân viên giao ca tạo biên bản bàn giao ca trực mới (PendingConfirmation).
+    /// Ràng buộc: Cấm tự giao tự nhận (senderUserId != receiverUserId).
+    /// </summary>
+    Task<ShiftHandoverDto> CreateShiftHandoverAsync(
+        Guid lotId,
+        Guid actorId,
+        CreateShiftHandoverRequestDto request,
+        string? key,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Liệt kê danh sách biên bản bàn giao ca (Staff chỉ xem ca mình gửi/nhận; Manager xem toàn bộ bãi).
+    /// </summary>
+    Task<PagedResult<ShiftHandoverSummaryDto>> ListShiftHandoversAsync(
+        Guid lotId,
+        Guid actorId,
+        bool isManager,
+        string? status,
+        int page,
+        int pageSize,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Xem chi tiết biên bản bàn giao ca trực kèm kiểm tra phân quyền phạm vi truy cập.
+    /// </summary>
+    Task<ShiftHandoverDto?> GetShiftHandoverByIdAsync(
+        Guid lotId,
+        Guid handoverId,
+        Guid actorId,
+        bool isManager,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Nhân viên nhận ca xác nhận hoàn tất nhận ca trực (Handshake 2 bên: PendingConfirmation -> Confirmed).
+    /// </summary>
+    Task<ShiftHandoverDto> ConfirmShiftHandoverAsync(
+        Guid lotId,
+        Guid handoverId,
+        Guid actorId,
+        ConfirmShiftHandoverRequestDto request,
+        string? key,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Quản lý chỉ định lại nhân viên nhận ca khi người cũ vắng mặt hoặc tài khoản bị khóa (chỉ khi đang chờ nhận).
+    /// </summary>
+    Task<ShiftHandoverDto> ReassignReceiverAsync(
+        Guid lotId,
+        Guid handoverId,
+        Guid actorId,
+        ReassignReceiverRequestDto request,
+        CancellationToken ct);
 }
+
 
