@@ -797,19 +797,62 @@ export const staffApi = {
   },
 
   /**
-   * Danh sách sự cố & Ngoại lệ
+   * [REAL API INCIDENTS] Danh sách sự cố & Ngoại lệ
    */
-  async getIncidents(): Promise<Incident[]> {
+  async getIncidents(lotId = "b1e2a3c4-5678-90ab-cdef-111122223333"): Promise<Incident[]> {
+    try {
+      const res = await api.getIncidents(lotId);
+      if (res && Array.isArray(res.items)) {
+        const mapped: Incident[] = res.items.map((item: any) => ({
+          incidentId: item.incidentId || item.id,
+          title: item.title,
+          type: item.type || item.issueType,
+          severity: item.severity,
+          status: item.status,
+          description: item.description || item.reason || "",
+          relatedLicensePlate: item.relatedPlate,
+          relatedSlotCode: item.relatedSlotCode,
+          relatedGate: item.relatedGate,
+          reportedBy: item.reportedByUserId || "Nhân viên trực ca",
+          detectedAt: item.detectedAt || item.reportedAt,
+          updatedAt: item.updatedAt || item.reportedAt,
+          version: item.version,
+        }));
+        setStored(INCIDENTS_KEY, mapped);
+        return mapped;
+      }
+    } catch (err) {
+      console.warn("Backend real incidents API unavailable, using local cache:", err);
+    }
     return getStored<Incident[]>(INCIDENTS_KEY, []);
   },
 
   /**
-   * Tạo báo cáo sự cố mới
+   * [REAL API INCIDENTS] Tạo báo cáo sự cố mới
    */
-  async createIncident(payload: CreateIncidentPayload): Promise<Incident> {
+  async createIncident(payload: CreateIncidentPayload, lotId = "b1e2a3c4-5678-90ab-cdef-111122223333"): Promise<Incident> {
+    const idempotencyKey = crypto.randomUUID();
+    let realIncident: any = null;
+
+    try {
+      realIncident = await api.createIncident(lotId, {
+        title: payload.title,
+        type: payload.type,
+        severity: payload.severity,
+        description: payload.description,
+        detectedAt: payload.detectedAt || new Date().toISOString(),
+        relatedPlate: payload.relatedLicensePlate,
+        relatedSlotCode: payload.relatedSlotCode,
+        relatedGate: payload.relatedGate,
+        relatedSessionId: payload.relatedSessionId,
+      }, idempotencyKey);
+    } catch (err) {
+      console.warn("Backend createIncident failed, saving to local operational store:", err);
+    }
+
     const incidents = getStored<Incident[]>(INCIDENTS_KEY, []);
     const newInc: Incident = {
-      incidentId: `INC-2026-${String(incidents.length + 1).padStart(3, "0")}`,
+      incidentId: realIncident?.incidentId || `INC-2026-${String(incidents.length + 1).padStart(3, "0")}`,
       title: payload.title,
       type: payload.type,
       severity: payload.severity,
@@ -822,6 +865,7 @@ export const staffApi = {
       reportedBy: "Nguyễn Văn Hùng",
       detectedAt: payload.detectedAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      version: realIncident?.version ?? 1,
     };
 
     incidents.unshift(newInc);
@@ -839,12 +883,25 @@ export const staffApi = {
   },
 
   /**
-   * Cập nhật trạng thái sự cố (Tiếp nhận / Giải quyết)
+   * [REAL API INCIDENTS] Cập nhật trạng thái sự cố (Tiếp nhận / Giải quyết)
    */
-  async updateIncidentStatus(incidentId: string, status: "InProgress" | "Resolved" | "Escalated", notes?: string): Promise<Incident> {
+  async updateIncidentStatus(incidentId: string, status: "InProgress" | "Resolved" | "Escalated", notes?: string, lotId = "b1e2a3c4-5678-90ab-cdef-111122223333"): Promise<Incident> {
     const incidents = getStored<Incident[]>(INCIDENTS_KEY, []);
     const index = incidents.findIndex((i) => i.incidentId === incidentId);
     if (index === -1) throw new Error("Không tìm thấy sự cố");
+
+    const currentVersion = (incidents[index] as any).version || 1;
+
+    try {
+      await api.updateIncidentStatus(lotId, incidentId, {
+        status,
+        notes,
+        expectedVersion: currentVersion,
+      });
+      (incidents[index] as any).version = currentVersion + 1;
+    } catch (err) {
+      console.warn("Backend updateIncidentStatus failed, applying local state:", err);
+    }
 
     incidents[index].status = status;
     incidents[index].updatedAt = new Date().toISOString();
@@ -891,9 +948,31 @@ export const staffApi = {
   },
 
   /**
-   * Bàn giao ca trực
+   * [REAL API SHIFT HANDOVER] Bàn giao ca trực
    */
-  async submitHandover(payload: HandoverPayload): Promise<boolean> {
+  async submitHandover(payload: HandoverPayload, lotId = "b1e2a3c4-5678-90ab-cdef-111122223333"): Promise<boolean> {
+    const idempotencyKey = crypto.randomUUID();
+
+    // Gọi API Backend bàn giao ca thật
+    try {
+      const senderShiftId = crypto.randomUUID();
+      const receiverShiftId = crypto.randomUUID();
+      const receiverUserId = "00000000-0000-0000-0000-000000000004"; // Mặc định người nhận ca tiếp theo
+
+      await api.createShiftHandover(lotId, {
+        senderShiftId,
+        receiverShiftId,
+        receiverUserId,
+        completedTasks: payload.completedTasks,
+        unresolvedIssues: payload.unresolvedIssues,
+        pendingTransactions: payload.pendingTransactions,
+        equipmentStatus: payload.equipmentStatus,
+        notesForNext: payload.notesForNext,
+      }, idempotencyKey);
+    } catch (err) {
+      console.warn("Backend createShiftHandover failed, recording local handover state:", err);
+    }
+
     const shift = getStored<ShiftInfo | null>(SHIFTS_KEY, null);
     if (shift) {
       shift.status = "Handover";

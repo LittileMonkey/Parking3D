@@ -378,9 +378,69 @@ CREATE TABLE public.parking_issues (
     resolution text,
     reported_by uuid,
     approved_by uuid,
+    title text NOT NULL DEFAULT '',
+    severity text NOT NULL DEFAULT 'Medium',
+    description text NOT NULL DEFAULT '',
+    detected_at timestamptz NOT NULL DEFAULT now(),
+    late_report_reason text,
+    related_plate text,
+    related_slot_code text,
+    related_gate text,
+    evidence jsonb NOT NULL DEFAULT '[]'::jsonb,
+    exit_decision jsonb,
+    version int NOT NULL DEFAULT 1,
+    updated_at timestamptz NOT NULL DEFAULT now(),
     created_at timestamptz NOT NULL DEFAULT now(),
     resolved_at timestamptz,
     UNIQUE (id, lot_id)
+);
+
+CREATE TABLE public.incident_history (
+    id uuid NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+    incident_id uuid NOT NULL,
+    lot_id uuid NOT NULL,
+    action text NOT NULL,
+    from_status text,
+    to_status text,
+    performed_by_user_id uuid NOT NULL,
+    reason text,
+    performed_at timestamptz NOT NULL DEFAULT now(),
+    FOREIGN KEY (incident_id, lot_id) REFERENCES public.parking_issues(id, lot_id) ON DELETE CASCADE
+);
+
+CREATE TABLE public.shift_handovers (
+    id uuid NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+    lot_id uuid NOT NULL,
+    sender_shift_id uuid NOT NULL,
+    receiver_shift_id uuid NOT NULL,
+    sender_user_id uuid NOT NULL,
+    receiver_user_id uuid NOT NULL,
+    completed_tasks text NOT NULL,
+    unresolved_issues text NOT NULL,
+    pending_transactions text NOT NULL,
+    equipment_status text,
+    notes_for_next text NOT NULL,
+    status text NOT NULL DEFAULT 'PendingConfirmation',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    confirmed_at timestamptz,
+    confirmed_by_user_id uuid,
+    version int NOT NULL DEFAULT 1,
+    FOREIGN KEY (lot_id) REFERENCES public.parking_lots(id) ON DELETE RESTRICT,
+    UNIQUE (id, lot_id),
+    CONSTRAINT chk_shift_handovers_diff_users CHECK (sender_user_id <> receiver_user_id)
+);
+
+CREATE TABLE public.shift_handover_history (
+    id uuid NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+    handover_id uuid NOT NULL,
+    lot_id uuid NOT NULL,
+    action text NOT NULL,
+    old_receiver_user_id uuid,
+    new_receiver_user_id uuid,
+    performed_by_user_id uuid NOT NULL,
+    reason text,
+    performed_at timestamptz NOT NULL DEFAULT now(),
+    FOREIGN KEY (handover_id, lot_id) REFERENCES public.shift_handovers(id, lot_id) ON DELETE CASCADE
 );
 
 CREATE TABLE public.notifications (
