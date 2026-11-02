@@ -52,6 +52,16 @@ public interface IParkingRepository
         CancellationToken ct);
 
     /// <summary>
+    /// SCRUM-69: Check-in tự động cho khách vãng lai (hoặc qua nhận diện ANPR):
+    /// Thuật toán AUTO_SLOT tìm ô đỗ tối ưu (SKIP LOCKED), tạo phiên ParkingSession mới và gán slot vật lý.
+    /// </summary>
+    Task<CheckInResponseDto> CheckInWalkInAsync(
+        Guid actorId,
+        CheckInRequestDto request,
+        string key,
+        CancellationToken ct);
+
+    /// <summary>
     /// SCRUM-70: Tra cứu phiên đỗ ACTIVE theo biển số/QR, đối soát biển số và tính cước thực tế tại cổng ra.
     /// </summary>
     Task<CheckOutQuoteResultDto> GetCheckOutQuoteAsync(
