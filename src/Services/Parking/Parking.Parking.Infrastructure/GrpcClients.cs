@@ -1,4 +1,4 @@
-using Google.Protobuf;
+﻿using Google.Protobuf;
 using Microsoft.Extensions.Configuration;
 using Parking.Contracts.AI.V1;
 using Parking.Contracts.Identity.V1;
@@ -11,9 +11,18 @@ public sealed class FacilityAccess(FacilityAuthorization.FacilityAuthorizationCl
 {
     public async Task RequireAsync(Guid userId, Guid lotId, string capability, CancellationToken ct)
     {
-        var result = await client.CheckAccessAsync(new AccessRequest { UserId=userId.ToString(),LotId=lotId.ToString(),Capability=capability },
-            headers:GrpcHeaders.For(config),deadline:DateTime.UtcNow.AddSeconds(3),cancellationToken:ct);
-        if(!result.Allowed) throw new ServiceException(403,"Current account/lot permission denied");
+        try
+        {
+            var result = await client.CheckAccessAsync(new AccessRequest { UserId=userId.ToString(),LotId=lotId.ToString(),Capability=capability },
+                headers:GrpcHeaders.For(config),deadline:DateTime.UtcNow.AddSeconds(3),cancellationToken:ct);
+            if(!result.Allowed) throw new ServiceException(403,"Current account/lot permission denied");
+        }
+        catch (Grpc.Core.RpcException ex) when (ex.StatusCode == Grpc.Core.StatusCode.DeadlineExceeded || ex.StatusCode == Grpc.Core.StatusCode.Unavailable)
+        {
+            throw new ServiceException(
+                503,
+                "Authorization service is unavailable. Please try again.");
+        }
     }
 }
 

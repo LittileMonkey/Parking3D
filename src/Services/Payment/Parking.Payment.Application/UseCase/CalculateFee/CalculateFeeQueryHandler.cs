@@ -1,4 +1,6 @@
-﻿using MediatR;
+using Grpc.Core;
+using MediatR;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Caching.Memory;  
 using Parking.Contracts.Catalog.V1;        
 using Parking.Payment.Application.DTOs;
@@ -25,20 +27,27 @@ namespace Parking.Payment.Application.UseCase.CalculateFee
         private static readonly TimeZoneInfo VnTz = TimeZoneInfo.TryFindSystemTimeZoneById("Asia/Ho_Chi_Minh", out var tz) 
             ? tz 
             : (TimeZoneInfo.TryFindSystemTimeZoneById("SE Asia Standard Time", out var winTz) ? winTz : TimeZoneInfo.Utc);
+
         private readonly ParkingCatalog.ParkingCatalogClient _parkingCatalogClient;
+        
         private readonly IMemoryCache _cache;
+
         private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(30);
-        public CalculateFeeQueryHandler(
-            ParkingCatalog.ParkingCatalogClient parkingCatalogClient,
-            IMemoryCache cache)
+
+        private readonly IConfiguration? _config;
+
+        public CalculateFeeQueryHandler(ParkingCatalog.ParkingCatalogClient parkingCatalogClient, IMemoryCache cache, IConfiguration? config = null)
         {
             _parkingCatalogClient = parkingCatalogClient;
             _cache = cache;
+            _config = config;
         }
+
         public async Task<FeeCalculationResultDto> Handle(CalculateFeeQuery request, CancellationToken cancellationToken)
         {
             var normalizedType = request.VehicleType.Trim().ToUpperInvariant();
             var cacheKey = $"pricing_policy:{request.ParkingLotId}:{normalizedType}";
+            
             // 1. Kiểm tra bộ nhớ đệm RAM trước
             if (!_cache.TryGetValue(cacheKey, out (PricingPolicy Policy, TimeZoneInfo Tz) cachedData))
             {
@@ -50,7 +59,28 @@ namespace Parking.Payment.Application.UseCase.CalculateFee
                     TimestampUnixSeconds = request.EntryTime.ToUnixTimeSeconds()
                 };
                 // 3. Gọi sang Parking Service qua gRPC lấy dữ liệu thật
-                var reply = await _parkingCatalogClient.GetPricingPolicyAsync(gRpcRequest, cancellationToken: cancellationToken);
+                PricingPolicyReply reply;
+                try
+                {
+                    var headers = _config != null ? GrpcHeaders.For(_config) : new Metadata();
+                    reply = await _parkingCatalogClient.GetPricingPolicyAsync(
+                        gRpcRequest,
+                        headers: headers,
+                        deadline: DateTime.UtcNow.AddSeconds(5),
+                        cancellationToken: cancellationToken);
+                }
+                catch (RpcException ex) when (ex.StatusCode == StatusCode.NotFound)
+                {
+                    throw new ServiceException(404, $"Chưa có biểu giá hiệu lực cho loại xe '{request.VehicleType}' tại bãi đỗ này.");
+                }
+                catch (RpcException ex) when (ex.StatusCode == StatusCode.Unavailable || ex.StatusCode == StatusCode.DeadlineExceeded)
+                {
+                    throw new ServiceException(503, "Dịch vụ Parking Catalog hiện không khả dụng. Vui lòng thử lại sau.");
+                }
+                catch (RpcException ex) when (ex.StatusCode == StatusCode.Unauthenticated)
+                {
+                    throw new ServiceException(500, "Xác thực dịch vụ nội bộ thất bại (Grpc:ServiceKey không khớp hoặc thiếu).");
+                }
                 // 4. KIỂM SOÁT BẮT BUỘC: Nếu không tìm thấy biểu giá -> Ném lỗi 404, không bao giờ tính 0 đồng!
                 if (!reply.Found)
                 {

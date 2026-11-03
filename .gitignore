@@ -104,7 +104,20 @@ docs/*SCRUM-*.md
 docs/*Giai_Thich*.md
 *Giai_Thich*.md
 
-# Shared design and validation evidence for SCRUM-100
-!docs/SCRUM-100_Hold_5_Minutes_Design.md
-!docs/SCRUM-100_Validation.md
 
+# Local demo scripts (not for repo)
+DEMO_SCRIPT.md
+
+# Personal Postman demo and local workspace scratch files
+/postman/Han-Local.postman_environment.json
+/postman/demo-78/
+/postman/collections/Test/
+/postman/collections/Test 78/
+/postman/environments/Local 78.environment.yaml
+/postman/environments/Hàn — Local Demo.environment.yaml
+/postman/flows/
+/postman/Prepare-ExitGate.sql
+/postman/README.md
+
+# Personal explanations and historical review notes
+/docs/Han_*.md

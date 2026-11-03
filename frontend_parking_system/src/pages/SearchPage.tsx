@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError, api, type LotAvailability, type ParkingSearchItem, type ParkingLevelAvailability, type UserVehicle } from "../services/api";
-import { useAuth } from "../context/AuthContext";
-import ParkingViewer, { type ModelSlot } from "../components/parking/ParkingViewer";
+import ParkingViewer, { type ModelLevel } from "../components/parking/ParkingViewer";
 import { applySlotStatusChanges, type SlotStatusChange } from "../components/parking/parkingRealtime";
 import { useParkingHub } from "../components/parking/useParkingHub";
+import { useAuth } from "../context/AuthContext";
+import CustomerLayout from "../components/customer/CustomerLayout";
 import "./Booking.css";
 
 type VehicleType = "Car" | "Motorbike";
@@ -408,15 +409,24 @@ export default function SearchPage() {
       floorCode: selectedLevel.levelCode,
       floorName: selectedLevel.levelName,
     })) ?? [], [selectedLevel, vehicleType]);
-  const viewerSlots = useMemo<ModelSlot[]>(() => levelSlots.map(slot => ({
-    slotId: slot.slotId,
-    slotCode: slot.slotCode,
-    floorCode: slot.floorCode,
-    zoneCode: slot.zoneCode,
-    supportedVehicleTypes: slot.supportedVehicleTypes,
-    features: slot.features,
-    status: slot.status,
-  })), [levelSlots]);
+  const viewerLevels = useMemo<ModelLevel[]>(() => availability?.levels
+    .map(level => ({
+      levelId: level.levelId,
+      levelCode: level.levelCode,
+      levelName: level.levelName,
+      slots: level.slots
+        .filter(slot => slot.supportedVehicleTypes.includes(vehicleType))
+        .map(slot => ({
+          slotId: slot.slotId,
+          slotCode: slot.slotCode,
+          floorCode: level.levelCode,
+          zoneCode: slot.zoneCode,
+          supportedVehicleTypes: slot.supportedVehicleTypes,
+          features: slot.features,
+          status: slot.status,
+        })),
+    }))
+    .filter(level => level.slots.length > 0) ?? [], [availability, vehicleType]);
   const selectedSlot = levelSlots.find(slot => slot.slotId === selectedSlotId) ?? null;
   const currentRange = useMemo(() => {
     const start = new Date(startsAt);
@@ -469,18 +479,8 @@ export default function SearchPage() {
   }, [selectedLot, availabilityIsCurrent, startsAt, duration, vehicleType, criteriaSignature]);
 
   return (
-    <main className="customer-page">
-      <div className="customer-page-top">
-        <Link to="/" className="customer-brand">Park<span>Matrix</span></Link>
-        <nav aria-label="Điều hướng khách hàng">
-          <Link to="/booking" aria-current="page">Tìm và đặt chỗ</Link>
-          <Link to="/faq">FAQ</Link>
-          {isAuthenticated
-            ? <span className="customer-nav-user">{user?.fullName ?? "Đã đăng nhập"}</span>
-            : <Link to="/login">Đăng nhập</Link>}
-        </nav>
-      </div>
-
+    <CustomerLayout>
+      <main className="customer-page">
       <header className="customer-page-heading">
         <p className="customer-eyebrow">HÀNH TRÌNH ĐẶT CHỖ</p>
         <h1>Tìm và đặt chỗ</h1>
@@ -660,7 +660,8 @@ export default function SearchPage() {
           {levelSlots.length > 0 && availabilityIsCurrent && (
             <div className="booking-map-layout">
               <section className="booking-map-card" aria-label="Sơ đồ slot bãi đỗ">
-                <ParkingViewer slots={viewerSlots} selectedId={selectedSlotId || null}
+                <ParkingViewer levels={viewerLevels} mapObjects={availability?.mapObjects}
+                  selectedLevelCode={selectedLevelCode} selectedId={selectedSlotId || null}
                   onSelect={slot => {
                     setSelectedSlotId(slot.slotId);
                     setBookingError("");
@@ -746,6 +747,7 @@ export default function SearchPage() {
           )}
         </section>
       )}
-    </main>
+      </main>
+    </CustomerLayout>
   );
 }

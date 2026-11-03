@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
 import { ApiError, api, type ApprovedFaqResponse, type ParkingLot } from "../services/api";
+import CustomerLayout from "../components/customer/CustomerLayout";
 
 function getErrorMessage(error: unknown) {
   if (error instanceof ApiError) {
@@ -57,11 +57,8 @@ export default function FaqPage() {
   };
 
   return (
-    <main className="customer-page faq-page">
-      <div className="customer-page-top">
-        <Link to="/" className="customer-brand">Park<span>Matrix</span></Link>
-        <nav aria-label="Điều hướng khách hàng"><Link to="/booking">Tìm và đặt chỗ</Link><Link to="/faq" aria-current="page">FAQ</Link><Link to="/login">Đăng nhập</Link></nav>
-      </div>
+    <CustomerLayout>
+      <main className="customer-page faq-page">
       <header className="customer-page-heading">
         <p className="customer-eyebrow">TRỢ GIÚP KHÁCH HÀNG</p>
         <h1>Câu hỏi thường gặp</h1>
@@ -104,6 +101,7 @@ export default function FaqPage() {
           <p className="faq-disclaimer">{answer.message}</p>
         </section>
       )}
-    </main>
+      </main>
+    </CustomerLayout>
   );
 }

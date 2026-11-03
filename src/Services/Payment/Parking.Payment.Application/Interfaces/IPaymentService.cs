@@ -41,5 +41,17 @@ namespace Parking.Payment.Application.Interfaces
         /// Chỉ đọc kết quả, không ghi DB (IPN đã làm việc đó trước rồi).
         /// </summary>
         Task<VnPayReturnResult> HandleVnPayReturnAsync(IDictionary<string, string> queryParams, CancellationToken ct);
+
+
+        /// <summary>
+        /// Tra cứu trạng thái thanh toán
+        /// </summary>
+        Task<PaymentStatusDto?> GetPaymentStatusByBookingIdAsync(Guid bookingId, CancellationToken ct = default);
+        /// <summary>
+        /// Tra cứu và khởi tạo thông tin biên lai điện tử (E-Receipt) kèm mã xác thực số SHA-256.
+        /// </summary>
+        Task<EReceiptDto?> GetReceiptAsync(Guid paymentId, CancellationToken ct = default);
+
+
     }
 }

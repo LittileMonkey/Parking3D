@@ -4,11 +4,13 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Parking.Contracts.Payments.V1;
+using Parking.Contracts.Checkout.V1;
 using Parking.ServiceDefaults;
 
 namespace Parking.Payment.Infrastructure;
 
-public sealed class OutboxWorker(NpgsqlDataSource db,ParkingPaymentEvents.ParkingPaymentEventsClient parking,IConfiguration config,ILogger<OutboxWorker> logger):BackgroundService
+public sealed class OutboxWorker(NpgsqlDataSource db,ParkingPaymentEvents.ParkingPaymentEventsClient parking,IConfiguration config,ILogger<OutboxWorker> logger,
+    ParkingCheckoutEvents.ParkingCheckoutEventsClient checkout):BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -22,10 +24,11 @@ public sealed class OutboxWorker(NpgsqlDataSource db,ParkingPaymentEvents.Parkin
                 Guid id;
                 string payload;
                 int attempts;
+                string eventType;
                 await using(var read=new NpgsqlCommand("SELECT " +
                                                         "event_id," +
                                                         "payload::text," +
-                                                        "attempts " +
+                                                        "attempts,event_type " +
                                                         "FROM integration_outbox " +
                                                         "WHERE delivered_at IS NULL " +
                                                         "AND next_attempt_at<=now() " +
@@ -39,13 +42,23 @@ public sealed class OutboxWorker(NpgsqlDataSource db,ParkingPaymentEvents.Parkin
                     id=r.GetGuid(0);
                     payload=r.GetString(1);
                     attempts=r.GetInt32(2);
+                    eventType=r.GetString(3);
                 }
                 string? outcome=null;
                 try
                 {
-                    var message=JsonParser.Default.Parse<PaymentSucceeded>(payload);
-                    var response=await parking.DeliverPaymentSucceededAsync(message,headers:GrpcHeaders.For(config),deadline:DateTime.UtcNow.AddSeconds(5),cancellationToken:stoppingToken);
-                    outcome=response.Outcome;
+                    if(eventType=="CheckoutPaymentSucceeded.v1")
+                    {
+                        var response=await checkout.DeliverAsync(JsonParser.Default.Parse<CheckoutPaymentSucceeded>(payload),
+                            headers:GrpcHeaders.For(config),deadline:DateTime.UtcNow.AddSeconds(5),cancellationToken:stoppingToken);
+                        outcome=response.Outcome;
+                    }
+                    else if(eventType=="PaymentSucceeded.v1")
+                    {
+                        var message=JsonParser.Default.Parse<PaymentSucceeded>(payload);
+                        var response=await parking.DeliverPaymentSucceededAsync(message,headers:GrpcHeaders.For(config),deadline:DateTime.UtcNow.AddSeconds(5),cancellationToken:stoppingToken);
+                        outcome=response.Outcome;
+                    }
                 }
                 catch(OperationCanceledException)
                 when(stoppingToken.IsCancellationRequested)

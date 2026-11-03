@@ -1,5 +1,4 @@
-﻿using Parking.Payment.Application.DTOs;
-using Parking.Payment.Application.UseCase.ConfirmCashPayment;
+using Parking.Payment.Application.DTOs;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -17,5 +16,4 @@ namespace Parking.Payment.Application.Interfaces
         /// </summary>
         Task<EReceiptDto?> GetReceiptAsync(Guid paymentId, CancellationToken cancellationToken = default);
     }
-
 }

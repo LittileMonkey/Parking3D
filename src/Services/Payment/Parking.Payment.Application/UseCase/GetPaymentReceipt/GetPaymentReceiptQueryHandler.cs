@@ -1,4 +1,4 @@
-﻿using MediatR;
+using MediatR;
 using Parking.Payment.Application.DTOs;
 using Parking.Payment.Application.Interfaces;
 using System;
