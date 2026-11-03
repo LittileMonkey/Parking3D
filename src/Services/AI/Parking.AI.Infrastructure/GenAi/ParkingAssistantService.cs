@@ -11,12 +11,12 @@ namespace Parking.AI.Infrastructure.GenAi;
 /// <summary>
 /// Dịch vụ Trợ lý ảo AI đàm thoại đa lượt (Multi-turn Conversational AI Assistant) cho bãi đỗ xe ParkMatrix.
 /// <para>
-/// <b>Cơ chế kỹ thuật & Thư viện chủ chốt:</b>
+/// <b>Cơ chế kỹ thuật &amp; Thư viện chủ chốt:</b>
 /// <list type="bullet">
 ///   <item><description><see cref="ConcurrentDictionary{TKey, TValue}"/>: Lưu trữ trạng thái phiên hội thoại trên bộ nhớ RAM đảm bảo an toàn đa luồng (Thread-safe) mà không làm nghẽn toàn bộ tiến trình khi hàng nghìn người dùng truy cập cùng lúc.</description></item>
 ///   <item><description><b>Sliding Window (Cửa sổ trượt tin nhắn):</b> Giới hạn tối đa 20 tin nhắn trong lịch sử session và chỉ gửi 6 tin nhắn gần nhất tới LLM. Kỹ thuật này giúp khống chế dung lượng RAM cố định $O(1)$ và ngăn hiện tượng tràn Token / phình chi phí API.</description></item>
 ///   <item><description><b>Double-Checked Locking:</b> Tối ưu hóa chu kỳ dọn dẹp bộ nhớ (Eviction) mỗi 5 phút mà không gây xung đột khóa đa luồng (Lock Contention).</description></item>
-///   <item><description><b>Tầng lọc cục bộ 0 đồng (Zero-Cost Guardrails):</b> Kiểm tra nhanh các chủ đề lạc đề (lập trình, làm thơ, bóng đá, thời tiết...) để từ chối ngay lập tức tại C#, tiết kiệm 100% token gọi ra Google Gemini và giảm độ trễ phản hồi về 0ms.</description></item>
+///   <item><description><b>Context-Aware Guardrails (Bộ lọc ngữ cảnh thông minh):</b> Nhận diện đầy đủ từ vựng bãi đỗ xe, địa chỉ/đường xá, thời gian, giá cả và tôn trọng mạch hội thoại đa lượt (Multi-turn follow-up), chỉ chặn các yêu cầu hoàn toàn lạc đề (viết code, làm thơ, giải toán...).</description></item>
 ///   <item><description><b>Quick Action Chips ([SUGGESTION]):</b> Bóc tách cú pháp thẻ gợi ý để cung cấp các nút bấm tương tác nhanh trên giao diện Frontend.</description></item>
 /// </list>
 /// </para>
@@ -72,9 +72,11 @@ public partial class ParkingAssistantService(
             CreatedAt = DateTimeOffset.UtcNow
         };
 
+        bool hasPriorContext;
         // Đồng bộ hóa đa luồng an toàn cho từng session cụ thể (Granular Lock)
         lock (session)
         {
+            hasPriorContext = session.Messages.Count > 0;
             session.Messages.Add(userMsg);
 
             // Cắt giảm danh sách theo cơ chế Cửa sổ trượt (Sliding Window): Chỉ giữ tối đa 20 tin nhắn mới nhất
@@ -84,14 +86,14 @@ public partial class ParkingAssistantService(
             }
         }
 
-        // 🛡️ TẦNG BẢO VỆ 1: LỌC CỤC BỘ KHÔNG TỐN TOKEN (ZERO-COST GUARDRAIL)
-        // Nếu câu hỏi hoàn toàn lạc đề hoặc cố ý bẻ khóa prompt (Jailbreak / Out-of-Domain), từ chối ngay lập tức
-        if (IsDefinitelyOutOfDomain(request.Message))
+        // 🛡️ TẦNG BẢO VỆ 1: LỌC CỤC BỘ THÔNG MINH THEO NGỮ CẢNH (CONTEXT-AWARE GUARDRAIL)
+        // Chỉ từ chối khi câu hỏi thực sự lạc đề (viết code, làm thơ, giải toán...) và không phải câu hỏi nối tiếp trong phiên hội thoại
+        if (IsDefinitelyOutOfDomain(request.Message, hasPriorContext))
         {
-            logger.LogInformation("Phát hiện câu hỏi ngoài phạm vi bãi xe. Từ chối cục bộ để bảo toàn quota: {Query}", request.Message);
+            logger.LogInformation("Phát hiện câu hỏi ngoài phạm vi bãi xe. Từ chối cục bộ: {Query}", request.Message);
 
-            const string rejectionMsg = "Dạ xin lỗi bạn! Tôi là Trợ lý AI chuyên trách của Hệ thống Quản lý Bãi đỗ xe ParkMatrix. Tôi chỉ có thể hỗ trợ các thông tin liên quan đến bãi xe, giá vé, đặt chỗ, quy định gửi xe và an toàn bãi đỗ. Rất mong bạn thông cảm ạ!";
-            var defaultSuggestions = new List<string> { "Xem biểu giá gửi xe", "Quy định mất thẻ xe", "Hướng dẫn đặt chỗ trước" };
+            const string rejectionMsg = "Dạ xin lỗi bạn! Tôi là Trợ lý AI chuyên trách của Hệ thống Quản lý Bãi đỗ xe ParkMatrix. Tôi chỉ có thể hỗ trợ các thông tin liên quan đến bãi xe, vị trí đường đi, giá vé, đặt chỗ, quy định gửi xe và an toàn bãi đỗ. Rất mong bạn thông cảm ạ!";
+            var defaultSuggestions = new List<string> { "Xem biểu giá gửi xe", "Quy định mất thẻ xe", "Tìm bãi đỗ xe gần Landmark 81" };
 
             var assistantRejection = new ParkingAssistantMessage
             {
@@ -122,6 +124,7 @@ public partial class ParkingAssistantService(
         {
             var recentHistory = session.Messages
                 .OrderByDescending(m => m.CreatedAt)
+                .Skip(1) // Bỏ qua tin nhắn user hiện tại vì đã nằm ở phần "Khách hàng hỏi:" cuối prompt
                 .Take(6)
                 .Reverse()
                 .Select(m => $"{(m.Role == "user" ? "Khách hàng" : "Trợ lý")}: {m.Content}");
@@ -133,7 +136,7 @@ public partial class ParkingAssistantService(
             historyText,
             request.CurrentParkingLotId.HasValue ? $"Mã bãi xe: {request.CurrentParkingLotId.Value}" : null);
 
-        // 3. Gọi Gemini API (theo dõi cờ IsFallback nếu LLM gặp sự cố hoặc offline)
+        // 3. Gọi LLM (Local Ollama qwen2.5:3b -> Gemini Cloud -> Rule-based Fallback)
         var (aiRawResponse, isFallback) = await geminiClient.GenerateTextWithStatusAsync(
             ParkingAssistantPrompts.SystemKnowledgeBase,
             prompt,
@@ -208,55 +211,97 @@ public partial class ParkingAssistantService(
     }
 
     /// <summary>
-    /// Kiểm tra nhanh cục bộ các câu hỏi rõ ràng ngoài phạm vi nghiệp vụ bãi xe để chặn trước (tiết kiệm 100% chi phí gọi Gemini).
+    /// Kiểm tra câu hỏi có thực sự nằm ngoài phạm vi nghiệp vụ bãi đỗ xe hay không.
+    /// Hỗ trợ đầy đủ từ vựng vị trí, đường xá, thời gian, phí, dịch vụ và các câu hỏi nối tiếp ngữ cảnh (Multi-turn Follow-up).
     /// </summary>
-    private static bool IsDefinitelyOutOfDomain(string text)
+    public static bool IsDefinitelyOutOfDomain(string text, bool hasPriorContext = false)
     {
         if (string.IsNullOrWhiteSpace(text)) return false;
 
         var lower = text.ToLowerInvariant().Trim();
 
-        // 1. Cho phép các câu chào hỏi / xã giao thông dụng
-        var greetings = new[] { "chào", "xin chào", "hello", "hi", "alo", "cảm ơn", "thank", "tạm biệt", "bạn là ai", "bạn tên gì", "giúp gì được" };
-        if (greetings.Any(g => lower.Contains(g)) && lower.Length < 30)
+        // 1. Bộ từ khóa cốt lõi về phương tiện & bãi đỗ: Nếu câu hỏi có chứa các từ này (VD: "Đi xem phim ở Landmark thì gửi xe ở đâu?"), LUÔN CHO PHÉP
+        string[] coreParkingTerms =
+        [
+            "bãi xe", "bãi đỗ", "bãi giữ", "đỗ xe", "đậu xe", "gửi xe", "giữ xe",
+            "chỗ đỗ", "chỗ đậu", "ô đỗ", "slot", "vé xe", "thẻ xe", "parkmatrix"
+        ];
+        if (coreParkingTerms.Any(lower.Contains))
         {
             return false;
         }
 
-        // 2. Danh sách từ khóa cấm / lạc đề rõ ràng
-        var forbiddenTopics = new[]
-        {
-            "viết code", "lập trình", "python", "c#", "java", "javascript", "react", "html", "css",
-            "làm thơ", "viết văn", "bài thơ", "tình yêu", "người yêu", "tâm sự",
-            "thời tiết", "dự báo thời tiết", "mưa không", "nhiệt độ hôm nay",
-            "chính trị", "bầu cử", "tổng thống", "chiến tranh", "tin tức",
-            "công thức nấu", "món ăn", "cách nấu", "làm bánh",
-            "toán học", "giải toán", "phương trình", "đạo hàm",
-            "bóng đá", "ca sĩ", "diễn viên", "phim ảnh", "xem phim", "game"
-        };
+        // 2. Danh sách chủ đề hoàn toàn ngoài phạm vi (Viết code, làm thơ, giải toán, nấu ăn, chính trị...)
+        string[] strictlyForbiddenTopics =
+        [
+            "viết code", "lập trình", "code python", "code c#", "code java", "javascript", "react", "html", "css",
+            "làm thơ", "sáng tác thơ", "viết văn", "bài thơ", "tình yêu", "người yêu", "tâm sự",
+            "dự báo thời tiết", "nhiệt độ hôm nay",
+            "chính trị", "bầu cử", "tổng thống", "chiến tranh",
+            "công thức nấu", "cách nấu", "làm bánh",
+            "giải toán", "phương trình", "đạo hàm", "tích phân",
+            "bóng đá", "ca sĩ", "diễn viên"
+        ];
 
-        if (forbiddenTopics.Any(topic => lower.Contains(topic)))
-        {
-            return true;
-        }
-
-        // 3. Nếu câu hỏi dài trên 20 ký tự nhưng hoàn toàn KHÔNG chứa bất kỳ từ khóa nào liên quan đến bãi xe
-        var parkingKeywords = new[]
-        {
-            "xe", "gửi", "đỗ", "bãi", "chỗ", "slot", "tầng", "hầm", "b1", "b2", "b3", "zone",
-            "vé", "thẻ", "giá", "phí", "tiền", "thanh toán", "vnpay", "cash", "cọc",
-            "mất", "quên", "lấy", "vào", "ra", "cổng", "gate", "barrier", "check-in", "check-out",
-            "biển số", "camera", "anpr", "sạc", "ev", "điện", "ô tô", "oto", "xe máy",
-            "pccc", "cháy", "khói", "tốc độ", "bảo vệ", "hotline", "đặt chỗ", "booking", "hold", "giữ",
-            "bản đồ", "3d", "tìm", "gần", "ở đâu", "hướng dẫn", "quy định", "chính sách"
-        };
-
-        if (lower.Length > 20 && !parkingKeywords.Any(k => lower.Contains(k)))
+        if (strictlyForbiddenTopics.Any(lower.Contains))
         {
             return true;
         }
 
-        return false;
+        // 3. Nếu đang trong một phiên hội thoại đa lượt đã có ngữ cảnh trước đó (VD: khách hỏi tiếp "Nó nằm trên đường nào?", "Còn chỗ không?", "Mấy giờ đóng cửa?"),
+        // luôn cho phép đi tiếp vào LLM để nối mạch hội thoại
+        if (hasPriorContext)
+        {
+            return false;
+        }
+
+        // 4. Cho phép các câu chào hỏi, xã giao hoặc câu hỏi ngắn
+        string[] greetingsAndConversational =
+        [
+            "chào", "xin chào", "hello", "hi", "alo", "cảm ơn", "thank", "tạm biệt",
+            "bạn là ai", "bạn tên gì", "giúp gì", "tư vấn", "hỗ trợ", "cho hỏi", "cho mình hỏi", "cho tôi hỏi"
+        ];
+        if (greetingsAndConversational.Any(lower.Contains) || lower.Length <= 25)
+        {
+            return false;
+        }
+
+        // 5. Bộ từ vựng mở rộng bao phủ toàn diện nghiệp vụ Bãi đỗ xe, Vị trí/Đường xá, Thời gian, Giá cả, Đặt chỗ & Sự cố
+        string[] comprehensiveParkingKeywords =
+        [
+            // Phương tiện & Hạ tầng bãi xe
+            "xe", "ô tô", "oto", "xế", "mô tô", "moto", "tay ga", "ev", "điện",
+            "gửi", "đỗ", "đậu", "bãi", "chỗ", "ô trống", "còn trống", "hết chỗ", "đầy", "sức chứa",
+            "tầng", "hầm", "b1", "b2", "b3", "zone", "khu", "mái che", "ngoài trời", "trong nhà",
+            "cổng", "gate", "barrier", "lối vào", "lối ra", "vào", "ra",
+
+            // Vị trí, Địa chỉ, Đường xá & Điều hướng (Giải quyết triệt để câu hỏi "nằm trên đường nào", "địa chỉ ở đâu"...)
+            "vị trí", "địa chỉ", "đường", "phố", "nằm", "ở đâu", "chỗ nào", "đoạn nào", "số mấy", "bên nào", "hướng nào",
+            "quận", "phường", "bình thạnh", "sài gòn", "tp.hcm", "hcm",
+            "landmark", "vinhomes", "bến thành", "tân sơn nhất", "sân bay", "bitexco",
+            "nguyễn hữu cảnh", "điện biên phủ", "ung văn khiêm", "cầu sài gòn", "tòa nhà", "chung cư", "trung tâm",
+            "gần", "xa", "khoảng cách", "bao xa", "km", "mét", "đi bộ", "chỉ đường", "bản đồ", "map", "3d", "tọa độ",
+
+            // Giá vé, Chi phí & Thanh toán
+            "vé", "thẻ", "giá", "phí", "tiền", "cước", "bao nhiêu", "rẻ", "đắt", "mắc", "tiết kiệm",
+            "miễn phí", "free", "ưu đãi", "khuyến mãi", "vé tháng", "vé ngày", "vé lượt", "qua đêm", "ban ngày", "ban đêm",
+            "thanh toán", "trả tiền", "chuyển khoản", "vnpay", "momo", "cash", "tiền mặt", "qr", "hóa đơn", "biên lai", "cọc", "hoàn tiền", "phạt",
+
+            // Đặt chỗ, Thời gian & Giờ vận hành
+            "đặt", "booking", "book", "hold", "giữ", "hủy", "cancel", "đổi", "gia hạn",
+            "trễ", "muộn", "sớm", "quá giờ", "lố giờ", "mở cửa", "đóng cửa", "hoạt động",
+            "mấy giờ", "bao lâu", "thời gian", "thời lượng", "tiếng", "giờ", "phút", "ngày", "tháng", "tuần", "hôm nay", "ngày mai", "cuối tuần",
+            "check-in", "checkin", "check-out", "checkout",
+
+            // Sự cố, An toàn, Biển số, Sạc điện & Hỗ trợ
+            "mất", "quên", "rơi", "hỏng", "lỗi", "sự cố",
+            "biển số", "camera", "anpr", "ocr", "quét", "nhận diện", "cccd", "căn cước", "cà vẹt", "cavet", "giấy tờ", "chính chủ",
+            "sạc", "trụ sạc", "pin", "pccc", "cháy", "khói", "an toàn", "an ninh", "tốc độ",
+            "bảo vệ", "nhân viên", "quản lý", "liên hệ", "hotline", "điện thoại", "tổng đài",
+            "quy định", "nội quy", "chính sách", "thủ tục", "hướng dẫn", "thông tin", "chi tiết"
+        ];
+
+        return !comprehensiveParkingKeywords.Any(lower.Contains);
     }
 
     /// <summary>

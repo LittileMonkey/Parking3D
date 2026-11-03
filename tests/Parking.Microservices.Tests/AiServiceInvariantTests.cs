@@ -1,5 +1,10 @@
+using System.Net;
+using System.Text;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using Parking.AI.Domain;
 using Parking.AI.Infrastructure.AiVision;
+using Parking.AI.Infrastructure.GenAi;
 using Xunit;
 
 namespace Parking.Microservices.Tests;
@@ -82,5 +87,77 @@ public sealed class AiServiceInvariantTests
         Assert.True(response.FormatValid);
         Assert.Equal(78, response.ProcessingTimeMs);
     }
-}
 
+    [Fact]
+    public async Task GeminiApiClient_UsesOllamaQwen25_WhenOllamaEndpointIsConfigured()
+    {
+        Uri? capturedUri = null;
+        string? capturedPayload = null;
+
+        var handler = new StubHttpMessageHandler(async (req, ct) =>
+        {
+            capturedUri = req.RequestUri;
+            capturedPayload = req.Content != null ? await req.Content.ReadAsStringAsync(ct) : null;
+
+            const string ollamaJson = """
+            {
+              "model": "qwen2.5:3b",
+              "message": {
+                "role": "assistant",
+                "content": "Phản hồi trực tiếp từ Local LLM Qwen 2.5 3B [SUGGESTION: Xem giá vé]"
+              },
+              "done": true
+            }
+            """;
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(ollamaJson, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Ollama:Endpoint"] = "http://localhost:11434",
+                ["Ollama:Model"] = "qwen2.5:3b",
+                ["Gemini:ApiKey"] = "" // Không cần API Key
+            })
+            .Build();
+
+        var client = new GeminiApiClient(new HttpClient(handler), config, NullLogger<GeminiApiClient>.Instance);
+        var (text, isFallback) = await client.GenerateTextWithStatusAsync("System prompt", "Giá gửi xe ô tô?");
+
+        Assert.False(isFallback);
+        Assert.Equal(new Uri("http://localhost:11434/api/chat"), capturedUri);
+        Assert.NotNull(capturedPayload);
+        Assert.Contains("qwen2.5:3b", capturedPayload);
+        Assert.Contains("Phản hồi trực tiếp từ Local LLM Qwen 2.5 3B", text);
+    }
+
+    [Theory]
+    [InlineData("Tôi muốn biết vị trí chính xác nằm trên đường nào?", false)]
+    [InlineData("Cho mình hỏi địa chỉ cụ thể ở quận mấy vậy?", false)]
+    [InlineData("Bãi mở cửa từ mấy giờ đến mấy giờ?", false)]
+    [InlineData("Đi xem phim ở Landmark 81 thì gửi xe ở bãi nào gần nhất?", false)]
+    [InlineData("Nếu mình đến trễ hơn dự kiến 30 phút có bị hủy không?", false)]
+    [InlineData("Còn cái thứ hai thì sao bạn?", true)] // Câu hỏi nối tiếp trong phiên hội thoại đã có lịch sử
+    public void IsDefinitelyOutOfDomain_AllowsValidParkingLocationAndFollowUpQuestions(string message, bool hasPriorContext)
+    {
+        Assert.False(ParkingAssistantService.IsDefinitelyOutOfDomain(message, hasPriorContext));
+    }
+
+    [Theory]
+    [InlineData("Hãy viết code Python giải phương trình bậc 2", false)]
+    [InlineData("Sáng tác bài thơ về tình yêu đôi lứa", true)]
+    public void IsDefinitelyOutOfDomain_BlocksStrictlyOffTopicRequests(string message, bool hasPriorContext)
+    {
+        Assert.True(ParkingAssistantService.IsDefinitelyOutOfDomain(message, hasPriorContext));
+    }
+
+    private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            handler(request, cancellationToken);
+    }
+}
