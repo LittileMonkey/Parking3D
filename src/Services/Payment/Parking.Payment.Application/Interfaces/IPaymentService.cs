@@ -1,4 +1,5 @@
 using Parking.Payment.Application.DTOs;
+using Parking.Payment.Application.UseCase.ConfirmCashPayment;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -25,6 +26,12 @@ namespace Parking.Payment.Application.Interfaces
         Task<PaymentView> ConfirmCashAsync(Guid actor, Guid lot, Guid payment, CashConfirmationRequest request, CancellationToken ct);
 
         /// <summary>
+        /// Nghiệp vụ SCRUM-95: Nhân viên xác nhận thu tiền mặt theo BookingId.
+        /// Xác thực quyền qua gRPC Identity (BR-01), chống Double Effect và ghi Outbox an toàn.
+        /// </summary>
+        Task<ConfirmCashPaymentResultDto> ConfirmCashPaymentAsync(ConfirmCashPaymentCommand command, CancellationToken ct);
+
+        /// <summary>
         /// Xử lý callback IPN từ VNPay, xác thực bảo mật và cập nhật trạng thái giao dịch.
         /// </summary>
         Task<VnPayIpnResult> HandleVnPayIpnAsync(IDictionary<string, string> queryParams, CancellationToken ct);
@@ -34,5 +41,17 @@ namespace Parking.Payment.Application.Interfaces
         /// Chỉ đọc kết quả, không ghi DB (IPN đã làm việc đó trước rồi).
         /// </summary>
         Task<VnPayReturnResult> HandleVnPayReturnAsync(IDictionary<string, string> queryParams, CancellationToken ct);
+
+
+        /// <summary>
+        /// Tra cứu trạng thái thanh toán
+        /// </summary>
+        Task<PaymentStatusDto?> GetPaymentStatusByBookingIdAsync(Guid bookingId, CancellationToken ct = default);
+        /// <summary>
+        /// Tra cứu và khởi tạo thông tin biên lai điện tử (E-Receipt) kèm mã xác thực số SHA-256.
+        /// </summary>
+        Task<EReceiptDto?> GetReceiptAsync(Guid paymentId, CancellationToken ct = default);
+
+
     }
 }

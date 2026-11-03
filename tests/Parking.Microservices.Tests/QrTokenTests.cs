@@ -37,7 +37,9 @@ public sealed class QrTokenTests
     }
 
     [Theory]
-    [InlineData("")][InlineData("PARK1.%%%..")][InlineData("anything")]
+    [InlineData("")]
+    [InlineData("PARK1.%%%..")]
+    [InlineData("anything")]
     public void MalformedQrIsRejected(string value)
     {
         var service = new QrTokenService(new ConfigurationBuilder().AddInMemoryCollection(

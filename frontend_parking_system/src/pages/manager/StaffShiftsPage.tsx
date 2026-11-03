@@ -10,6 +10,10 @@ import {
   CheckCircle2,
   FileCheck,
   Flag,
+  UserPlus,
+  Shield,
+  X,
+  Search,
 } from "lucide-react";
 import FacilityRbacStrip from "../../components/manager/FacilityRbacStrip";
 import { managerApi } from "../../services/manager/managerApi";
@@ -31,6 +35,97 @@ export default function StaffShiftsPage() {
   const [selectedRecordToFlag, setSelectedRecordToFlag] = useState<CashReconciliationRecord | null>(null);
   const [flagReason, setFlagReason] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Modal 1: Assign Staff to Facility State
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [assignUserId, setAssignUserId] = useState("");
+  const [assignRole, setAssignRole] = useState("PARKING_STAFF");
+  const [assignValidFrom, setAssignValidFrom] = useState(new Date().toISOString().slice(0, 10));
+  const [assignValidUntil, setAssignValidUntil] = useState("");
+  const [allAccounts, setAllAccounts] = useState<any[]>([]);
+
+  // Modal 2: Role Assignment State
+  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+  const [roleSearchEmail, setRoleSearchEmail] = useState("");
+  const [targetUser, setTargetUser] = useState<any | null>(null);
+  const [newRoleCode, setNewRoleCode] = useState("PARKING_STAFF");
+
+  const handleOpenAssignModal = async () => {
+    setIsAssignModalOpen(true);
+    try {
+      const accounts = await managerApi.getAllStaffAccounts();
+      if (accounts) setAllAccounts(accounts);
+    } catch (err) {
+      console.warn("Could not load all accounts:", err);
+    }
+  };
+
+  const handleAssignSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!assignUserId) {
+      alert("Vui lòng chọn nhân viên cần phân công.");
+      return;
+    }
+    const lotId = selectedLotId === "all" ? "b1e2a3c4-5678-90ab-cdef-111122223333" : selectedLotId;
+    setIsProcessing(true);
+    try {
+      const res = await managerApi.assignStaff({
+        staffUserId: assignUserId,
+        lotId,
+        roleCode: assignRole,
+        validFrom: assignValidFrom,
+        validUntil: assignValidUntil || undefined,
+      });
+      if (res.isSuccess) {
+        setActionSuccessMsg(`Phân công nhân viên vào bãi thành công!`);
+        setIsAssignModalOpen(false);
+        setAssignUserId("");
+        setTimeout(() => setActionSuccessMsg(null), 4000);
+      } else {
+        alert(res.message);
+      }
+    } catch (err: any) {
+      alert("Lỗi phân công: " + err.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleSearchUserByEmail = async () => {
+    if (!roleSearchEmail.trim()) return;
+    setIsProcessing(true);
+    try {
+      const user = await managerApi.getAccountByEmail(roleSearchEmail.trim());
+      setTargetUser(user);
+    } catch (err: any) {
+      alert("Không tìm thấy tài khoản với email này: " + err.message);
+      setTargetUser(null);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleUpdateRoleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetUser) return;
+    setIsProcessing(true);
+    try {
+      const res = await managerApi.updateUserRole(targetUser.id, newRoleCode);
+      if (res.isSuccess) {
+        setActionSuccessMsg(`Cập nhật vai trò thành [${newRoleCode}] thành công!`);
+        setIsRoleModalOpen(false);
+        setTargetUser(null);
+        setRoleSearchEmail("");
+        setTimeout(() => setActionSuccessMsg(null), 4000);
+      } else {
+        alert(res.message);
+      }
+    } catch (err: any) {
+      alert("Lỗi cập nhật vai trò: " + err.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   useEffect(() => {
     async function loadData() {
@@ -119,10 +214,52 @@ export default function StaffShiftsPage() {
               <span className="pm-card-subtitle">Phân bổ cổng kiểm soát, làn thu phí & đội tuần tra an ninh</span>
             </div>
           </div>
-          <span className="pm-badge pm-badge-success">
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981" }} />
-            {staffList.filter((s) => s.status === "Active").length} Đang làm nhiệm vụ
-          </span>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={handleOpenAssignModal}
+              style={{
+                background: "linear-gradient(135deg, #087f8c 0%, #14afbe 100%)",
+                border: "none",
+                borderRadius: 8,
+                padding: "8px 14px",
+                color: "#fff",
+                fontSize: 12,
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                cursor: "pointer",
+              }}
+            >
+              <UserPlus size={14} />
+              <span>+ Phân công trực bãi</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsRoleModalOpen(true)}
+              style={{
+                background: "rgba(34, 211, 238, 0.12)",
+                border: "1px solid rgba(34, 211, 238, 0.3)",
+                borderRadius: 8,
+                padding: "8px 14px",
+                color: "#22d3ee",
+                fontSize: 12,
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                cursor: "pointer",
+              }}
+            >
+              <Shield size={14} />
+              <span>Phân quyền vai trò</span>
+            </button>
+            <span className="pm-badge pm-badge-success">
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981" }} />
+              {staffList.filter((s) => s.status === "Active").length} Đang làm nhiệm vụ
+            </span>
+          </div>
         </div>
 
         {loading ? (
@@ -366,6 +503,258 @@ export default function StaffShiftsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL 1: ASSIGN STAFF TO LOT (POST /api/v1/staff-assignments) ─── */}
+      {isAssignModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.75)",
+            backdropFilter: "blur(6px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: 16,
+          }}
+          onClick={() => setIsAssignModalOpen(false)}
+        >
+          <div
+            style={{
+              background: "#0f172a",
+              border: "1px solid rgba(16, 185, 129, 0.3)",
+              borderRadius: 16,
+              maxWidth: 480,
+              width: "100%",
+              padding: 24,
+              color: "#f8fafc",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.1)", paddingBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ background: "rgba(16, 185, 129, 0.2)", padding: 8, borderRadius: 8 }}>
+                  <UserPlus size={20} color="#10b981" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Phân Công Nhân Viên Trực Bãi</h3>
+                  <span style={{ fontSize: 12, color: "#94a3b8" }}>Facility-Scoped RBAC • Identity Service</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAssignModalOpen(false)}
+                style={{ background: "transparent", border: "none", color: "#94a3b8", cursor: "pointer" }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAssignSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div className="pm-form-group">
+                <label className="pm-form-label" style={{ color: "#e2e8f0" }}>Chọn Nhân Viên (Từ CSDL Identity):</label>
+                <select
+                  className="pm-form-select"
+                  value={assignUserId}
+                  onChange={(e) => setAssignUserId(e.target.value)}
+                  required
+                >
+                  <option value="">-- Chọn tài khoản nhân sự --</option>
+                  {allAccounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.fullName} ({acc.emailNormalized || acc.email || "No Email"}) - {acc.roles?.join(",") || acc.role || "User"}
+                    </option>
+                  ))}
+                  {allAccounts.length === 0 && (
+                    <>
+                      <option value="22222222-2222-2222-2222-222222222222">Nguyễn Văn Hùng (Staff Mặc định)</option>
+                      <option value="33333333-3333-3333-3333-333333333333">Trần Thị Mai (Staff Cổng Ra)</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              <div className="pm-form-group">
+                <label className="pm-form-label" style={{ color: "#e2e8f0" }}>Vai Trò Tại Cơ Sở:</label>
+                <select
+                  className="pm-form-select"
+                  value={assignRole}
+                  onChange={(e) => setAssignRole(e.target.value)}
+                >
+                  <option value="PARKING_STAFF">Nhân viên vận hành (PARKING_STAFF)</option>
+                  <option value="PARKING_MANAGER">Quản lý cơ sở (PARKING_MANAGER)</option>
+                </select>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div className="pm-form-group">
+                  <label className="pm-form-label" style={{ color: "#e2e8f0" }}>Hiệu Lực Từ:</label>
+                  <input
+                    type="date"
+                    className="pm-form-input"
+                    value={assignValidFrom}
+                    onChange={(e) => setAssignValidFrom(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="pm-form-group">
+                  <label className="pm-form-label" style={{ color: "#e2e8f0" }}>Đến Ngày (Tuỳ chọn):</label>
+                  <input
+                    type="date"
+                    className="pm-form-input"
+                    value={assignValidUntil}
+                    onChange={(e) => setAssignValidUntil(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="pm-modal-footer" style={{ marginTop: 10 }}>
+                <button
+                  type="button"
+                  className="pm-btn-outline"
+                  onClick={() => setIsAssignModalOpen(false)}
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="pm-btn-primary"
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? "Đang xử lý..." : "Lưu Phân Công"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL 2: UPDATE ROLE (POST /api/v1/author/update-role) ─────────── */}
+      {isRoleModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.75)",
+            backdropFilter: "blur(6px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: 16,
+          }}
+          onClick={() => setIsRoleModalOpen(false)}
+        >
+          <div
+            style={{
+              background: "#0f172a",
+              border: "1px solid rgba(34, 211, 238, 0.3)",
+              borderRadius: 16,
+              maxWidth: 480,
+              width: "100%",
+              padding: 24,
+              color: "#f8fafc",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.1)", paddingBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ background: "rgba(34, 211, 238, 0.2)", padding: 8, borderRadius: 8 }}>
+                  <Shield size={20} color="#22d3ee" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Phân Quyền Vai Trò Người Dùng</h3>
+                  <span style={{ fontSize: 12, color: "#94a3b8" }}>Quản trị Phân quyền Identity</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsRoleModalOpen(false);
+                  setTargetUser(null);
+                }}
+                style={{ background: "transparent", border: "none", color: "#94a3b8", cursor: "pointer" }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              <input
+                type="email"
+                className="pm-form-input"
+                placeholder="Nhập email tài khoản cần phân quyền..."
+                value={roleSearchEmail}
+                onChange={(e) => setRoleSearchEmail(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={handleSearchUserByEmail}
+                className="pm-btn-primary"
+                disabled={isProcessing}
+                style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}
+              >
+                <Search size={14} />
+                <span>Tìm kiếm</span>
+              </button>
+            </div>
+
+            {targetUser && (
+              <form onSubmit={handleUpdateRoleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: 12, fontSize: 13 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ color: "#94a3b8" }}>Họ và tên:</span>
+                    <strong>{targetUser.fullName}</strong>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ color: "#94a3b8" }}>Email:</span>
+                    <span>{targetUser.emailNormalized || targetUser.email}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: "#94a3b8" }}>Vai trò hiện tại:</span>
+                    <span style={{ color: "#38bdf8" }}>{targetUser.roles?.join(", ") || targetUser.role || "CUSTOMER"}</span>
+                  </div>
+                </div>
+
+                <div className="pm-form-group">
+                  <label className="pm-form-label" style={{ color: "#e2e8f0" }}>Gán Vai Trò Mới:</label>
+                  <select
+                    className="pm-form-select"
+                    value={newRoleCode}
+                    onChange={(e) => setNewRoleCode(e.target.value)}
+                  >
+                    <option value="PARKING_STAFF">Nhân viên vận hành (PARKING_STAFF)</option>
+                    <option value="PARKING_MANAGER">Quản lý cơ sở (PARKING_MANAGER)</option>
+                    <option value="ADMIN">Quản trị viên nền tảng (ADMIN)</option>
+                    <option value="CUSTOMER">Khách hàng tiêu chuẩn (CUSTOMER)</option>
+                  </select>
+                </div>
+
+                <div className="pm-modal-footer" style={{ marginTop: 8 }}>
+                  <button
+                    type="button"
+                    className="pm-btn-outline"
+                    onClick={() => {
+                      setIsRoleModalOpen(false);
+                      setTargetUser(null);
+                    }}
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    className="pm-btn-primary"
+                    disabled={isProcessing}
+                  >
+                    {isProcessing ? "Đang cập nhật..." : "Cập Nhật Vai Trò"}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

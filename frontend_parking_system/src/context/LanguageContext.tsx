@@ -142,7 +142,7 @@ const translations: Record<Language, Record<string, string>> = {
     "cta.btn_gis": "🛠 Tìm Hiểu Công Nghệ GIS",
 
     // Footer
-    "footer.desc": "Nền tảng quản lý bãi đỗ xe thông minh, đa cơ sở hàng đầu Việt Nam. Tích hợp IoT, AI ANPR và bản đồ số GIS thời gian thực.",
+    // "footer.desc": "Nền tảng quản lý bãi đỗ xe thông minh, đa cơ sở hàng đầu Việt Nam. Tích hợp IoT, AI ANPR và bản đồ số GIS thời gian thực.",
     "footer.support": "Trung Tâm Hỗ Trợ",
     "footer.privacy": "Chính sách bảo mật",
     "footer.terms": "Điều khoản dịch vụ",

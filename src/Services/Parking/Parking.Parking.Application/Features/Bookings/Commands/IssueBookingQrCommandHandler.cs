@@ -12,6 +12,7 @@ public sealed class IssueBookingQrCommandHandler(
     TimeProvider clock)
     : IRequestHandler<IssueBookingQrCommand, BookingQrDto>
 {
+    /// <summary>Xác minh account và quyền xem, yêu cầu booking CONFIRMED, sau đó ký và lưu QR trước khi trả payload.</summary>
     public async Task<BookingQrDto> Handle(
         IssueBookingQrCommand request,
         CancellationToken cancellationToken)

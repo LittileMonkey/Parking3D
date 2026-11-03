@@ -1,6 +1,7 @@
 namespace Parking.Parking.Application.DTOs;
 
 // DTO chi tiết đơn đặt chỗ
+// Dữ liệu chi tiết booking sau khi Handler xác minh chủ sở hữu hoặc quyền tại bãi.
 public sealed record BookingDetailDto(
     Guid BookingId,
     string BookingCode,

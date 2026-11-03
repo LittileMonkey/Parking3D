@@ -1,5 +1,7 @@
+using Parking.Contracts.Catalog.V1;
 using Parking.Contracts.Identity.V1;
 using Parking.Contracts.Payments.V1;
+using Parking.Contracts.Checkout.V1;
 using Parking.Payment.Api.Middleware;
 using Parking.Payment.Application;
 using Parking.Payment.Application.DTOs;
@@ -17,8 +19,17 @@ builder.Services.AddGrpcClient<BookingPaymentQuery.BookingPaymentQueryClient>(o=
 
 builder.Services.AddGrpcClient<ParkingPaymentEvents.ParkingPaymentEventsClient>(o=>o.Address=new Uri(builder.Configuration["Services:ParkingGrpc"]??"http://parking:8081"));
 
+// THÊM: Đăng ký ParkingCatalogClient để gọi sang Parking lấy biểu giá
+builder.Services.AddGrpcClient<ParkingCatalog.ParkingCatalogClient>(o=>o.Address=new Uri(builder.Configuration["Services:ParkingGrpc"]??"http://parking:8081"));
+// THÊM: Bật bộ nhớ đệm MemoryCache trong Payment để đệm biểu giá 30 phút
+builder.Services.AddMemoryCache();
+
+
 // 2. Đăng ký các dịch vụ gốc của Payment (Database & Outbox Worker ngầm)
 builder.Services.AddScoped<IPaymentService,PaymentService>();
+builder.Services.AddGrpcClient<ParkingCheckoutQuery.ParkingCheckoutQueryClient>(o=>o.Address=new Uri(builder.Configuration["Services:ParkingGrpc"]??"http://parking:8081"));
+builder.Services.AddGrpcClient<ParkingCheckoutEvents.ParkingCheckoutEventsClient>(o=>o.Address=new Uri(builder.Configuration["Services:ParkingGrpc"]??"http://parking:8081"));
+builder.Services.AddScoped<CheckoutPaymentService>();
 builder.Services.AddHostedService<OutboxWorker>();
 
 // 3. Đăng ký các tầng kiến trúc Clean Architecture theo mẫu Mentor:
@@ -28,11 +39,23 @@ builder.Services.AddTransient<ExceptionHandlingMiddleware>();   // Đăng ký b�
 builder.Services.AddControllers();                              // Nạp Controller
 
 
-var app =builder.Build();
+
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+var app = builder.Build();
+
 app.UseParkingDefaults("payment");
+app.UseSwagger();
+app.UseSwaggerUI();
+
 
 // 4. Kích hoạt Middleware bắt lỗi ở cổng ngoài cùng
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.MapGrpcService<CheckoutSettlementGrpc>();
+app.MapPost("/api/v1/payments/checkout/vnpay",async(CheckoutVnPayRequest request,HttpContext context,CheckoutPaymentService service,CancellationToken ct)=>
+    Responses.Ok(await service.PrepareVnPayAsync(context.User.Subject(),request.QuoteToken,
+        context.Connection.RemoteIpAddress?.ToString()??"127.0.0.1",ct))).RequireAuthorization();
 
 
 // 5. Giữ nguyên các Minimal API cũ để tương thích ngược
@@ -56,11 +79,12 @@ app.MapPost("/api/v1/parking-lots/{lotId:guid}/payments/{paymentId:guid}/cash-co
 
 
 // Endpoint IPN VNPay (Không cần RequireAuthorization — VNPay không mang JWT)
-app.MapGet("/api/v1/payments/vnpay/ipn", async (HttpContext context, IPaymentService service, CancellationToken ct) =>
+app.MapGet("/api/v1/payments/vnpay/ipn", async (HttpContext context, IPaymentService service, CheckoutPaymentService checkout, CancellationToken ct) =>
 {
     var queryParams = context.Request.Query
         .ToDictionary(kv => kv.Key, kv => kv.Value.ToString());
-    var result = await service.HandleVnPayIpnAsync(queryParams, ct);
+    var result = queryParams.TryGetValue("vnp_TxnRef",out var reference)&&reference.StartsWith("CO",StringComparison.Ordinal)
+        ? await checkout.HandleIpnAsync(queryParams,ct) : await service.HandleVnPayIpnAsync(queryParams, ct);
     return Results.Ok(result);
 });
 

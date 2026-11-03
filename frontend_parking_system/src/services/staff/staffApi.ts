@@ -3,7 +3,7 @@
 // [REAL] Tích hợp các endpoints thực tế: /api/v1/parking-lots, /api/v1/parking-lots/{id}/availability
 // [LOCAL / MOCK ADAPTER] Quản lý lưu trữ trạng thái phiên xe, ca trực, sự cố tại chỗ với localStorage
 
-import { api, type ParkingLot, type LotAvailability } from "../api";
+import { api, type ParkingLot, type LotAvailability, type PaymentReceiptDto, type BookingDetailDto } from "../api";
 import type {
   ParkingLotSummary,
   ParkingSlotDetail,
@@ -252,12 +252,27 @@ export const staffApi = {
    */
   async getParkingLots(): Promise<ParkingLotSummary[]> {
     try {
+      // 1. Thử lấy danh sách bãi được phân công cho Staff/Manager (Facility-Scoped RBAC)
+      let assignedLotIds: string[] = [];
+      try {
+        const assignments = await api.getStaffAssignmentsMe();
+        if (assignments && assignments.length > 0) {
+          assignedLotIds = assignments.map((a) => a.lotId);
+        }
+      } catch {
+        // Nếu chưa đăng nhập hoặc token không có quyền staff-assignment, tiếp tục lấy tất cả bãi
+      }
+
       const lots: ParkingLot[] = await api.getParkingLots();
       if (lots && lots.length > 0) {
-        // Khởi tạo mock data cho lot đầu tiên nếu chưa có
-        initializeDefaultData(lots[0].id);
+        const filteredLots = assignedLotIds.length > 0
+          ? lots.filter((l) => assignedLotIds.includes(l.id))
+          : lots;
 
-        return lots.map((l) => ({
+        const resultLots = filteredLots.length > 0 ? filteredLots : lots;
+        initializeDefaultData(resultLots[0].id);
+
+        return resultLots.map((l) => ({
           lotId: l.id,
           name: l.name,
           address: l.address,
@@ -540,17 +555,46 @@ export const staffApi = {
     const isCar = !plate.includes("V") && !plate.includes("M");
 
     // Chọn slot trống tự động nếu không chỉ định
-    const slotCode = isCar ? `B1-A${Math.floor(1 + Math.random() * 18)}` : `B1-B${Math.floor(1 + Math.random() * 18)}`;
+    let slotCode = isCar ? `B1-A${Math.floor(1 + Math.random() * 18)}` : `B1-B${Math.floor(1 + Math.random() * 18)}`;
+    let sessionId = `SES-${Date.now()}`;
+    let slotId = `slot-${slotCode.toLowerCase()}`;
+    let entryAt = new Date().toISOString();
+
+    // [REAL API CHECK-IN] Gọi API Backend nếu có đủ thông tin
+    const lotId = payload.lotId || "b1e2a3c4-5678-90ab-cdef-111122223333";
+    const gateId = payload.gateId || "00000000-0000-0000-0000-000000000001";
+    const qrPayload = payload.qrToken || payload.bookingCode || "SAMPLE_QR";
+    const idempotencyKey = crypto.randomUUID();
+
+    try {
+      const realCheckIn = await api.checkIn(
+        {
+          lotId,
+          gateId,
+          qrPayload,
+          detectedPlate: plate,
+        },
+        idempotencyKey
+      );
+      if (realCheckIn && realCheckIn.sessionId) {
+        sessionId = realCheckIn.sessionId;
+        slotId = realCheckIn.slotId;
+        slotCode = realCheckIn.slotId.substring(0, 8);
+        entryAt = realCheckIn.entryAt;
+      }
+    } catch (err) {
+      console.warn("Backend real check-in failed, proceeding with operational fallback:", err);
+    }
 
     const newSession: ParkingSession = {
-      sessionId: `SES-${Date.now()}`,
+      sessionId,
       slotCode,
-      slotId: `slot-${slotCode.toLowerCase()}`,
+      slotId,
       levelName: "Tầng Hầm B1",
       zoneName: isCar ? "Khu A - Ô tô" : "Khu B - Xe máy",
       licensePlate: plate,
       vehicleType: isCar ? "Car" : "Motorcycle",
-      checkinAt: new Date().toISOString(),
+      checkinAt: entryAt,
       durationMinutes: 0,
       status: "Active",
       paymentStatus: "Unpaid",
@@ -599,7 +643,7 @@ export const staffApi = {
   /**
    * Tính toán phí gửi xe trước khi Check-Out
    */
-  async calculateCheckOutFee(query: string): Promise<CheckOutFeeInfo | null> {
+  async calculateCheckOutFee(query: string, parkingLotId?: string): Promise<CheckOutFeeInfo | null> {
     const sessions = getStored<ParkingSession[]>(SESSIONS_KEY, []);
     const cleanQ = query.toUpperCase().trim();
 
@@ -611,16 +655,78 @@ export const staffApi = {
           s.bookingCode === query),
     );
 
-    if (!session) return null;
+    if (!session) {
+      try {
+        const realBooking = await api.getBookingDetail(query);
+        if (realBooking) {
+          const isCar = realBooking.vehicleType.toUpperCase() === "CAR";
+          const checkinTime = new Date(realBooking.startsAt).getTime();
+          const now = Date.now();
+          const durationMinutes = Math.max(15, Math.round((now - checkinTime) / 60000));
+          let fee = Number(realBooking.estimatedAmount) || (isCar ? 25000 : 10000);
+          let planName = isCar ? "Ô tô tiêu chuẩn" : "Xe máy lượt ngày";
+          try {
+            const realFee = await api.calculateFee({
+              parkingLotId: realBooking.lotId,
+              entryTime: realBooking.startsAt,
+              exitTime: new Date().toISOString(),
+              vehicleType: isCar ? "CAR" : "MOTORCYCLE",
+              isGoldStarMember: false,
+            });
+            if (realFee && typeof realFee.finalNetAmountVnd === "number") {
+              fee = realFee.finalNetAmountVnd;
+              planName = `Biểu phí động Baseline V4 (${realFee.totalBillableBlocks} block)`;
+            }
+          } catch {
+            // keep default
+          }
+          return {
+            sessionId: `SES-${realBooking.bookingCode}`,
+            licensePlate: realBooking.plateSnapshot,
+            slotCode: realBooking.slotCode || "Chờ xếp",
+            checkinAt: realBooking.startsAt,
+            durationMinutes,
+            estimatedFee: fee,
+            currency: "VND",
+            pricingPlanName: planName,
+            paymentStatus: realBooking.status === "CONFIRMED" ? "Paid" : "Unpaid",
+            bookingId: realBooking.bookingId,
+            bookingCode: realBooking.bookingCode,
+          };
+        }
+      } catch (err) {
+        console.warn("Backend getBookingDetail lookup fallback:", err);
+      }
+      return null;
+    }
 
     const checkinTime = new Date(session.checkinAt).getTime();
     const now = Date.now();
     const durationMinutes = Math.max(15, Math.round((now - checkinTime) / 60000));
 
-    // Biểu giá: Ô tô 15.000đ/block 60p, Xe máy 5.000đ/lượt
+    // Biểu giá mặc định: Ô tô 15.000đ/block 60p, Xe máy 5.000đ/lượt
     const isCar = session.vehicleType === "Car" || session.vehicleType === "EV";
     const hours = Math.ceil(durationMinutes / 60);
-    const fee = isCar ? Math.max(15000, hours * 15000) : 5000;
+    let fee = isCar ? Math.max(15000, hours * 15000) : 5000;
+    let planName = isCar ? "Ô tô tiêu chuẩn (Block 1h)" : "Xe máy lượt ngày";
+
+    // [REAL API CALCULATE-FEE] Gọi Payment Service backend để tính phí chuẩn xác theo Block 15p, Giờ cao điểm và Trần ngày
+    const lotId = parkingLotId || "b1e2a3c4-5678-90ab-cdef-111122223333";
+    try {
+      const realFee = await api.calculateFee({
+        parkingLotId: lotId,
+        entryTime: session.checkinAt,
+        exitTime: new Date().toISOString(),
+        vehicleType: isCar ? "CAR" : "MOTORCYCLE",
+        isGoldStarMember: false,
+      });
+      if (realFee && typeof realFee.finalNetAmountVnd === "number") {
+        fee = realFee.finalNetAmountVnd;
+        planName = `Biểu phí động Baseline V4 (${realFee.totalBillableBlocks} block)`;
+      }
+    } catch (err) {
+      console.warn("Could not calculate fee via backend Payment API, using local fallback:", err);
+    }
 
     return {
       sessionId: session.sessionId,
@@ -630,15 +736,16 @@ export const staffApi = {
       durationMinutes,
       estimatedFee: fee,
       currency: "VND",
-      pricingPlanName: isCar ? "Ô tô tiêu chuẩn (Block 1h)" : "Xe máy lượt ngày",
+      pricingPlanName: planName,
       paymentStatus: session.paymentStatus,
+      bookingId: session.bookingCode,
     };
   },
 
   /**
    * [CHECK-OUT WORKFLOW] Xử lý xe ra & Thu tiền
    */
-  async checkOutVehicle(payload: CheckOutPayload): Promise<{ success: boolean; message: string; receiptNumber: string }> {
+  async checkOutVehicle(payload: CheckOutPayload): Promise<{ success: boolean; message: string; receiptNumber: string; paymentId?: string }> {
     const sessions = getStored<ParkingSession[]>(SESSIONS_KEY, []);
     const index = sessions.findIndex((s) => s.sessionId === payload.sessionId);
     if (index === -1) {
@@ -685,23 +792,67 @@ export const staffApi = {
       success: true,
       message: "Check-out hoàn tất. Barrier đã mở cho xe xuất bến.",
       receiptNumber,
+      paymentId: payload.paymentId,
     };
   },
 
   /**
-   * Danh sách sự cố & Ngoại lệ
+   * [REAL API INCIDENTS] Danh sách sự cố & Ngoại lệ
    */
-  async getIncidents(): Promise<Incident[]> {
+  async getIncidents(lotId = "b1e2a3c4-5678-90ab-cdef-111122223333"): Promise<Incident[]> {
+    try {
+      const res = await api.getIncidents(lotId);
+      if (res && Array.isArray(res.items)) {
+        const mapped: Incident[] = res.items.map((item: any) => ({
+          incidentId: item.incidentId || item.id,
+          title: item.title,
+          type: item.type || item.issueType,
+          severity: item.severity,
+          status: item.status,
+          description: item.description || item.reason || "",
+          relatedLicensePlate: item.relatedPlate,
+          relatedSlotCode: item.relatedSlotCode,
+          relatedGate: item.relatedGate,
+          reportedBy: item.reportedByUserId || "Nhân viên trực ca",
+          detectedAt: item.detectedAt || item.reportedAt,
+          updatedAt: item.updatedAt || item.reportedAt,
+          version: item.version,
+        }));
+        setStored(INCIDENTS_KEY, mapped);
+        return mapped;
+      }
+    } catch (err) {
+      console.warn("Backend real incidents API unavailable, using local cache:", err);
+    }
     return getStored<Incident[]>(INCIDENTS_KEY, []);
   },
 
   /**
-   * Tạo báo cáo sự cố mới
+   * [REAL API INCIDENTS] Tạo báo cáo sự cố mới
    */
-  async createIncident(payload: CreateIncidentPayload): Promise<Incident> {
+  async createIncident(payload: CreateIncidentPayload, lotId = "b1e2a3c4-5678-90ab-cdef-111122223333"): Promise<Incident> {
+    const idempotencyKey = crypto.randomUUID();
+    let realIncident: any = null;
+
+    try {
+      realIncident = await api.createIncident(lotId, {
+        title: payload.title,
+        type: payload.type,
+        severity: payload.severity,
+        description: payload.description,
+        detectedAt: payload.detectedAt || new Date().toISOString(),
+        relatedPlate: payload.relatedLicensePlate,
+        relatedSlotCode: payload.relatedSlotCode,
+        relatedGate: payload.relatedGate,
+        relatedSessionId: payload.relatedSessionId,
+      }, idempotencyKey);
+    } catch (err) {
+      console.warn("Backend createIncident failed, saving to local operational store:", err);
+    }
+
     const incidents = getStored<Incident[]>(INCIDENTS_KEY, []);
     const newInc: Incident = {
-      incidentId: `INC-2026-${String(incidents.length + 1).padStart(3, "0")}`,
+      incidentId: realIncident?.incidentId || `INC-2026-${String(incidents.length + 1).padStart(3, "0")}`,
       title: payload.title,
       type: payload.type,
       severity: payload.severity,
@@ -714,6 +865,7 @@ export const staffApi = {
       reportedBy: "Nguyễn Văn Hùng",
       detectedAt: payload.detectedAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      version: realIncident?.version ?? 1,
     };
 
     incidents.unshift(newInc);
@@ -731,12 +883,25 @@ export const staffApi = {
   },
 
   /**
-   * Cập nhật trạng thái sự cố (Tiếp nhận / Giải quyết)
+   * [REAL API INCIDENTS] Cập nhật trạng thái sự cố (Tiếp nhận / Giải quyết)
    */
-  async updateIncidentStatus(incidentId: string, status: "InProgress" | "Resolved" | "Escalated", notes?: string): Promise<Incident> {
+  async updateIncidentStatus(incidentId: string, status: "InProgress" | "Resolved" | "Escalated", notes?: string, lotId = "b1e2a3c4-5678-90ab-cdef-111122223333"): Promise<Incident> {
     const incidents = getStored<Incident[]>(INCIDENTS_KEY, []);
     const index = incidents.findIndex((i) => i.incidentId === incidentId);
     if (index === -1) throw new Error("Không tìm thấy sự cố");
+
+    const currentVersion = (incidents[index] as any).version || 1;
+
+    try {
+      await api.updateIncidentStatus(lotId, incidentId, {
+        status,
+        notes,
+        expectedVersion: currentVersion,
+      });
+      (incidents[index] as any).version = currentVersion + 1;
+    } catch (err) {
+      console.warn("Backend updateIncidentStatus failed, applying local state:", err);
+    }
 
     incidents[index].status = status;
     incidents[index].updatedAt = new Date().toISOString();
@@ -783,9 +948,31 @@ export const staffApi = {
   },
 
   /**
-   * Bàn giao ca trực
+   * [REAL API SHIFT HANDOVER] Bàn giao ca trực
    */
-  async submitHandover(payload: HandoverPayload): Promise<boolean> {
+  async submitHandover(payload: HandoverPayload, lotId = "b1e2a3c4-5678-90ab-cdef-111122223333"): Promise<boolean> {
+    const idempotencyKey = crypto.randomUUID();
+
+    // Gọi API Backend bàn giao ca thật
+    try {
+      const senderShiftId = crypto.randomUUID();
+      const receiverShiftId = crypto.randomUUID();
+      const receiverUserId = "00000000-0000-0000-0000-000000000004"; // Mặc định người nhận ca tiếp theo
+
+      await api.createShiftHandover(lotId, {
+        senderShiftId,
+        receiverShiftId,
+        receiverUserId,
+        completedTasks: payload.completedTasks,
+        unresolvedIssues: payload.unresolvedIssues,
+        pendingTransactions: payload.pendingTransactions,
+        equipmentStatus: payload.equipmentStatus,
+        notesForNext: payload.notesForNext,
+      }, idempotencyKey);
+    } catch (err) {
+      console.warn("Backend createShiftHandover failed, recording local handover state:", err);
+    }
+
     const shift = getStored<ShiftInfo | null>(SHIFTS_KEY, null);
     if (shift) {
       shift.status = "Handover";
@@ -902,6 +1089,37 @@ export const staffApi = {
         processingTimeMs: 45,
         isFallback: true,
       };
+    }
+  },
+
+  /**
+   * [REAL API AI] Nhân viên soát xét và cập nhật biển số xe OCR thủ công
+   */
+  async reviewPlateRecognition(
+    lotId: string,
+    recognitionId: string,
+    correctedPlate: string,
+    reviewNotes?: string
+  ): Promise<{ id: string; status: string }> {
+    return api.reviewPlateRecognition(lotId, recognitionId, correctedPlate, reviewNotes);
+  },
+
+  /**
+   * [REAL API PAYMENT] Tra cứu biên lai điện tử (E-Receipt) kèm mã xác thực số (SCRUM-72)
+   */
+  async getPaymentReceipt(paymentId: string): Promise<PaymentReceiptDto> {
+    return api.getPaymentReceipt(paymentId);
+  },
+
+  /**
+   * [REAL API PARKING] Tra cứu chi tiết đơn đặt chỗ từ Backend (Facility RBAC Lookup)
+   */
+  async getBookingDetail(bookingId: string): Promise<BookingDetailDto | null> {
+    try {
+      return await api.getBookingDetail(bookingId);
+    } catch (err) {
+      console.warn("Backend getBookingDetail failed:", err);
+      return null;
     }
   },
 };

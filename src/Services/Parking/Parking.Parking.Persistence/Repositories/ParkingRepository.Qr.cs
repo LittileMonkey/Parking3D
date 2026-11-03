@@ -1,4 +1,4 @@
-﻿using Parking.Parking.Application.DTOs;
+using Parking.Parking.Application.DTOs;
 using Npgsql;
 using Parking.Parking.Application.Interfaces;
 using Parking.ServiceDefaults;
@@ -6,6 +6,7 @@ namespace Parking.Parking.Persistence.Repositories;
 
 public sealed partial class ParkingRepository
 {
+    /// <summary>Đọc owner, bãi, xe, trạng thái và hạn đến bãi để Handler quyết định có được cấp QR.</summary>
     public async Task<BookingQrContextDto?> GetBookingQrContextAsync(
         Guid bookingId,
         CancellationToken ct)
@@ -48,6 +49,7 @@ public sealed partial class ParkingRepository
         );
     }
 
+    /// <summary>Khóa VEHICLE rồi SLOT, kiểm tra lại điều kiện CONFIRMED, thu hồi QR cũ và lưu QR mới cùng transaction.</summary>
     public async Task SaveIssuedQrTokenAsync(
     Guid bookingId,
     Guid expectedLotId,

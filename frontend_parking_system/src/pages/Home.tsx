@@ -3,14 +3,16 @@ import { Link } from "react-router-dom";
 import {
   ArrowRight,
   BadgeCheck,
-  Bell,
   Calendar,
   Car,
   Check,
+  ChevronDown,
+  Clock,
   Cpu,
   CreditCard,
   Droplets,
   FileText,
+  Filter,
   Flame,
   LogOut,
   MapPin,
@@ -22,7 +24,6 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sun,
-  User,
   Wind,
   X,
   Zap,
@@ -30,6 +31,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import { api, type BuildingEnvironment, type ParkingSlot } from "../services/api";
+import CustomerLayout from "../components/customer/CustomerLayout";
 
 const parkingPhotos = [
   {
@@ -101,13 +103,25 @@ const SOLUTIONS = [
 ];
 
 export default function Home() {
-  const { user, isAuthenticated, logout } = useAuth();
-  const { lang, setLang, t } = useLanguage();
+  const { logout } = useAuth();
+  const { lang, t } = useLanguage();
   const [slots, setSlots] = useState<ParkingSlot[]>([]);
   const [apiState, setApiState] = useState<"loading" | "online" | "offline">("loading");
   const [showLogout, setShowLogout] = useState(false);
-  const [mobileMenu, setMobileMenu] = useState(false);
   const [mapTab, setMapTab] = useState<"map" | "satellite" | "3d">("map");
+
+  // Search Filter Criteria States
+  const [searchVehicle, setSearchVehicle] = useState<"car" | "bike" | "ev">("car");
+  const [searchLocation, setSearchLocation] = useState<string>("all");
+  const [searchDuration, setSearchDuration] = useState<string>("120"); // 2 hours
+  const [searchRadius, setSearchRadius] = useState<string>("5"); // 5 km
+  const [selectedFilters, setSelectedFilters] = useState<string[]>(["nearest", "cheapest"]);
+
+  const toggleFilter = (filterKey: string) => {
+    setSelectedFilters((prev) =>
+      prev.includes(filterKey) ? prev.filter((k) => k !== filterKey) : [...prev, filterKey]
+    );
+  };
 
   const [envData, setEnvData] = useState<BuildingEnvironment>({
     smokeDensity: "0.014 mg/m³",
@@ -188,118 +202,34 @@ export default function Home() {
   );
 
   return (
-    <div className="site-shell light-theme">
-      {/* ── 1. Top Status Banner (Animated Ticker: Trượt từ phải sang trái liên tục) ── */}
-      <div className="top-status-bar marquee-status-bar" aria-label="Bảng tin môi trường và cảm biến bãi đỗ xe trực tuyến">
-        <div className="marquee-track">
-          <div className="marquee-content">
-            {marqueeTelemetryItems}
-          </div>
-          <div className="marquee-content" aria-hidden="true">
-            {marqueeTelemetryItems}
+    <CustomerLayout
+      onRequestLogout={() => setShowLogout(true)}
+      topSlot={
+        <div className="top-status-bar marquee-status-bar" aria-label="Bảng tin môi trường và cảm biến bãi đỗ xe trực tuyến">
+          <div className="marquee-track">
+            <div className="marquee-content">{marqueeTelemetryItems}</div>
+            <div className="marquee-content" aria-hidden="true">{marqueeTelemetryItems}</div>
           </div>
         </div>
-      </div>
-
-      {/* ── 2. Header / Navbar ── */}
-      <header className="site-header-light">
-        <div className="page-width header-inner">
-          <Link className="brand" to="/" aria-label="ParkMatrix trang chủ">
-            <span className="brand-logo-icon">
-              <ParkingCircle size={24} className="text-cyan-600" />
-            </span>
-            <div className="brand-text">
-              <span className="brand-title">
-                Park<span className="brand-cyan">Matrix</span>
-              </span>
-              <span className="brand-sub">SMART PARKING PLATFORM</span>
-            </div>
-          </Link>
-
-          <nav className={`main-nav-light ${mobileMenu ? "is-open" : ""}`} aria-label="Điều hướng chính">
-            <Link to="/booking" onClick={() => setMobileMenu(false)} className="nav-item">
-              {lang === "en" ? "Book a slot" : "Đặt chỗ 3D"}
-            </Link>
-            <Link to="/search" onClick={() => setMobileMenu(false)} className="nav-item">
-              {t("nav.find")}
-            </Link>
-            <a href="#gis-section" onClick={() => setMobileMenu(false)} className="nav-item">
-              {t("nav.map")}
-            </a>
-            <Link to="/faq" onClick={() => setMobileMenu(false)} className="nav-item">
-              FAQ
-            </Link>
-            <a href="#solutions" onClick={() => setMobileMenu(false)} className="nav-item">
-              {t("nav.solutions")}
-            </a>
-            <a href="#about" onClick={() => setMobileMenu(false)} className="nav-item">
-              {t("nav.infrastructure")}
-            </a>
-            <Link to="/staff/dashboard" onClick={() => setMobileMenu(false)} className="nav-item" style={{ color: "var(--teal)", fontWeight: 700 }}>
-              {lang === "en" ? "Staff Portal" : "Cổng Vận Hành"}
-            </Link>
-            <Link to="/manager/dashboard" onClick={() => setMobileMenu(false)} className="nav-item" style={{ color: "#087f8c", fontWeight: 700 }}>
-              {lang === "en" ? "Manager V7" : "Quản Lý V7"}
-            </Link>
-          </nav>
-
-          <div className="header-actions-light">
-            <div className="lang-switcher" role="group" aria-label="Chọn ngôn ngữ">
-              <button
-                type="button"
-                className={`lang-btn ${lang === "vi" ? "active" : ""}`}
-                onClick={() => setLang("vi")}
-                title="Tiếng Việt"
-              >
-                VN
-              </button>
-              <span className="lang-sep">|</span>
-              <button
-                type="button"
-                className={`lang-btn ${lang === "en" ? "active" : ""}`}
-                onClick={() => setLang("en")}
-                title="English"
-              >
-                EN
-              </button>
-            </div>
-
-            <button className="icon-btn" aria-label="Thông báo">
-              <Bell size={18} />
-            </button>
-
-            {isAuthenticated ? (
-              <div className="user-profile-badge">
-                <div className="avatar-circle">
-                  <User size={16} />
-                </div>
-                <div className="user-info-text">
-                  <span className="user-name">{user?.fullName || user?.userName}</span>
-                  <span className="user-role">{t("nav.vip")}</span>
-                </div>
-                <button className="logout-icon-btn" title={t("nav.logout")} onClick={() => setShowLogout(true)}>
-                  <LogOut size={15} />
-                </button>
-              </div>
-            ) : (
-              <div className="auth-btns">
-                <Link className="login-btn-black header-auth-btn" to="/login">
-                  {t("nav.login")}
-                </Link>
-                <Link className="register-btn-cyan header-auth-btn" to="/register">
-                  {t("nav.register")}
-                </Link>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+      }
+    >
 
       <main>
-        {/* ── 3. Light Hero Section ── */}
+        {/* ── 3. Light Hero Section with Clarified Background & Animations ── */}
         <section className="hero-light-section hero-animated-parking-bg">
-          {/* Animated Parking Layer */}
+          {/* Animated Parking & Video Layer */}
           <div className="parking-motion-bg">
+            <video
+              className="hero-drift-video"
+              autoPlay
+              loop
+              muted
+              playsInline
+              poster="/assets/smart_parking_hero.png"
+            >
+              <source src="/assets/car_drift_parking.mp4" type="video/mp4" />
+              <source src="/assets/car_drift_parking.webm" type="video/webm" />
+            </video>
             <div className="parking-neon-grid" />
             <div className="parking-laser-scanner" />
             <div className="parking-traffic-stream">
@@ -307,8 +237,16 @@ export default function Home() {
               <span className="car-pulse car-pulse-2" />
               <span className="car-pulse car-pulse-3" />
             </div>
+            {/* Live Sensor Beacon Pulses for Rich IoT Aesthetics */}
+            <div className="parking-sensor-beacons">
+              <span className="sensor-beacon beacon-pos-1" title="Sensor Slot A1 - Available" />
+              <span className="sensor-beacon beacon-pos-2" title="Sensor Slot B4 - Available" />
+              <span className="sensor-beacon beacon-pos-3" title="Sensor Slot EV1 - Charging" />
+              <span className="sensor-beacon beacon-pos-4" title="Sensor Slot C2 - Available" />
+            </div>
             <div className="hero-bg-overlay-glass" />
           </div>
+
           <div className="page-width hero-light-content">
             <div className="hero-pill-badge">
               <span className="pill-dot" />
@@ -325,35 +263,182 @@ export default function Home() {
               {t("hero.desc")}
             </p>
 
-            {/* Floating Glass Search Container */}
-            <div className="search-floating-card">
-              <div className="customer-home-search">
-                <div>
-                  <strong>{lang === "en" ? "Find a parking lot" : "Tìm bãi đỗ xe phù hợp"}</strong>
-                  <span>{lang === "en" ? "Compare distance, availability and estimated price." : "So sánh khoảng cách, chỗ trống và giá ước tính theo thời gian gửi."}</span>
-                </div>
-                <Link className="search-submit-btn" to="/search">
-                  <Search size={18} /> {lang === "en" ? "Search lots" : "Tìm bãi"}
-                </Link>
+            {/* Interactive Multi-Criteria Search Card */}
+            <div className="search-interactive-card">
+              {/* Vehicle Type Tabs */}
+              <div className="search-vehicle-tabs">
+                <button
+                  type="button"
+                  className={`vehicle-tab-btn ${searchVehicle === "car" ? "active" : ""}`}
+                  onClick={() => setSearchVehicle("car")}
+                >
+                  <Car size={16} />
+                  <span>{lang === "en" ? "Car 4 - 7 Seats" : "Ô tô 4 - 7 chỗ"}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`vehicle-tab-btn ${searchVehicle === "bike" ? "active" : ""}`}
+                  onClick={() => setSearchVehicle("bike")}
+                >
+                  <Navigation size={16} />
+                  <span>{lang === "en" ? "Motorbike" : "Xe máy"}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`vehicle-tab-btn ${searchVehicle === "ev" ? "active" : ""}`}
+                  onClick={() => setSearchVehicle("ev")}
+                >
+                  <Zap size={16} />
+                  <span>{lang === "en" ? "EV Charging Station" : "Trạm sạc xe điện EV"}</span>
+                </button>
               </div>
-              <div className="search-filter-row">
-                <span className="filter-title">{lang === "en" ? "Search options" : "Tiêu chí tìm kiếm"}</span>
-                <span className="customer-home-search-hint">
-                  {lang === "en" ? "NEAREST · CHEAPEST · full-duration estimate" : "GẦN NHẤT · GIÁ THẤP NHẤT · ước tính toàn thời lượng"}
+
+              {/* Search Inputs Grid */}
+              <div className="search-inputs-grid">
+                {/* Location / Lot Selector */}
+                <div className="search-field-group">
+                  <label htmlFor="search-location">
+                    <MapPin size={13} className="field-icon-muted" />
+                    <span>{lang === "en" ? "LOCATION / PARKING LOT" : "KHU VỰC / BÃI ĐỖ XE"}</span>
+                  </label>
+                  <div className="search-select-wrapper">
+                    <select
+                      id="search-location"
+                      value={searchLocation}
+                      onChange={(e) => setSearchLocation(e.target.value)}
+                      className="search-field-select"
+                    >
+                      <option value="all">{lang === "en" ? "All Facilities (HCMC)" : "Tất cả bãi đỗ xe (TP. Hồ Chí Minh)"}</option>
+                      <option value="landmark81">{lang === "en" ? "Landmark 81 Central Park" : "Landmark 81 Central Park (Bình Thạnh)"}</option>
+                      <option value="bitexco">{lang === "en" ? "Bitexco Financial Tower" : "Bitexco Financial Tower (Quận 1)"}</option>
+                      <option value="ftown3">{lang === "en" ? "F-Town 3 (Hi-Tech Park)" : "F-Town 3 (Khu Công Nghệ Cao)"}</option>
+                      <option value="tan_son_nhat">{lang === "en" ? "Tan Son Nhat Airport - TCP" : "Sân bay Tân Sơn Nhất - Nhà xe TCP"}</option>
+                    </select>
+                    <ChevronDown size={14} className="select-arrow" />
+                  </div>
+                </div>
+
+                {/* Duration Selector */}
+                <div className="search-field-group">
+                  <label htmlFor="search-duration">
+                    <Clock size={13} className="field-icon-muted" />
+                    <span>{lang === "en" ? "EXPECTED DURATION" : "THỜI LƯỢNG DỰ KIẾN"}</span>
+                  </label>
+                  <div className="search-select-wrapper">
+                    <select
+                      id="search-duration"
+                      value={searchDuration}
+                      onChange={(e) => setSearchDuration(e.target.value)}
+                      className="search-field-select"
+                    >
+                      <option value="60">{lang === "en" ? "1 Hour (Short stay)" : "1 giờ (Tiêu chuẩn)"}</option>
+                      <option value="120">{lang === "en" ? "2 - 4 Hours (Half-day)" : "2 - 4 giờ (Nửa ngày)"}</option>
+                      <option value="480">{lang === "en" ? "4 - 8 Hours (Full-day)" : "4 - 8 giờ (Trong ngày)"}</option>
+                      <option value="1440">{lang === "en" ? "Overnight (24h)" : "Gửi qua đêm (Overnight)"}</option>
+                    </select>
+                    <ChevronDown size={14} className="select-arrow" />
+                  </div>
+                </div>
+
+                {/* Search Radius */}
+                <div className="search-field-group">
+                  <label htmlFor="search-radius">
+                    <SlidersHorizontal size={13} className="field-icon-muted" />
+                    <span>{lang === "en" ? "SEARCH RADIUS" : "PHẠM VI TÌM KIẾM"}</span>
+                  </label>
+                  <div className="search-select-wrapper">
+                    <select
+                      id="search-radius"
+                      value={searchRadius}
+                      onChange={(e) => setSearchRadius(e.target.value)}
+                      className="search-field-select"
+                    >
+                      <option value="2">{lang === "en" ? "< 2 km (Walking)" : "Bán kính < 2 km (Đi bộ)"}</option>
+                      <option value="5">{lang === "en" ? "< 5 km (Recommended)" : "Bán kính < 5 km (Tối ưu)"}</option>
+                      <option value="10">{lang === "en" ? "< 10 km (Expanded)" : "Bán kính < 10 km (Mở rộng)"}</option>
+                      <option value="all">{lang === "en" ? "Entire city" : "Toàn thành phố"}</option>
+                    </select>
+                    <ChevronDown size={14} className="select-arrow" />
+                  </div>
+                </div>
+
+                {/* Submit Search Button */}
+                <div className="search-btn-col">
+                  <Link
+                    to={`/search?lot=${searchLocation}&vehicle=${searchVehicle}&duration=${searchDuration}&radius=${searchRadius}&criteria=${selectedFilters.join(",")}`}
+                    className="search-action-btn"
+                  >
+                    <Search size={18} />
+                    <span>{lang === "en" ? "Find Parking" : "Tìm Bãi Đỗ"}</span>
+                    <ArrowRight size={15} />
+                  </Link>
+                </div>
+              </div>
+
+              {/* Priority Criteria Filter Row */}
+              <div className="search-criteria-row">
+                <span className="criteria-label">
+                  <Filter size={13} className="field-icon-muted mr-1" />
+                  {lang === "en" ? "Priority Criteria:" : "Tiêu chí ưu tiên:"}
                 </span>
+                <div className="criteria-chips-list">
+                  <button
+                    type="button"
+                    className={`criteria-chip ${selectedFilters.includes("nearest") ? "is-selected" : ""}`}
+                    onClick={() => toggleFilter("nearest")}
+                  >
+                    <Navigation size={12} className="chip-icon" />
+                    <span>{lang === "en" ? "Nearest (GPS)" : "Gần tôi nhất (GPS)"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`criteria-chip ${selectedFilters.includes("cheapest") ? "is-selected" : ""}`}
+                    onClick={() => toggleFilter("cheapest")}
+                  >
+                    <CreditCard size={12} className="chip-icon" />
+                    <span>{lang === "en" ? "Cheapest Price" : "Giá thấp nhất"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`criteria-chip ${selectedFilters.includes("available") ? "is-selected" : ""}`}
+                    onClick={() => toggleFilter("available")}
+                  >
+                    <Check size={12} className="chip-icon" />
+                    <span>{lang === "en" ? "Most Slots Available" : "Nhiều chỗ trống nhất"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`criteria-chip ${selectedFilters.includes("ev_station") ? "is-selected" : ""}`}
+                    onClick={() => toggleFilter("ev_station")}
+                  >
+                    <Zap size={12} className="chip-icon" />
+                    <span>{lang === "en" ? "Fast EV Charger" : "Có trụ sạc EV"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`criteria-chip ${selectedFilters.includes("sheltered") ? "is-selected" : ""}`}
+                    onClick={() => toggleFilter("sheltered")}
+                  >
+                    <ShieldCheck size={12} className="chip-icon" />
+                    <span>{lang === "en" ? "Sheltered & Security" : "Có mái che & Camera AI"}</span>
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Under Search Badges */}
+            {/* High-Contrast Luminous Trust Bar */}
             <div className="hero-trust-bar">
               <div className="trust-item">
-                <BadgeCheck size={16} className="text-cyan-600" /> {t("hero.trust_1")}
+                <BadgeCheck size={16} className="trust-icon" />
+                <span>{t("hero.trust_1")}</span>
               </div>
               <div className="trust-item">
-                <ShieldCheck size={16} className="text-cyan-600" /> {t("hero.trust_2")}
+                <ShieldCheck size={16} className="trust-icon" />
+                <span>{t("hero.trust_2")}</span>
               </div>
               <div className="trust-item">
-                <Zap size={16} className="text-cyan-600" /> {t("hero.trust_3")}
+                <Zap size={16} className="trust-icon" />
+                <span>{t("hero.trust_3")}</span>
               </div>
             </div>
           </div>
@@ -472,7 +557,7 @@ export default function Home() {
               {lang === "en"
                 ? "The homepage map is illustrative. Use live lot search for current availability and duration-based price estimates."
                 : "Bản đồ trang chủ mang tính minh họa. Dùng tìm kiếm bãi để xem chỗ trống và giá ước tính từ API."}
-              {" "}<Link to="/search">{lang === "en" ? "Search lots" : "Tìm bãi đỗ"}</Link>
+              {" "}<Link to="/booking">{lang === "en" ? "Search lots" : "Tìm và đặt chỗ"}</Link>
             </p>
 
             {/* Interactive Vector GIS Canvas */}
@@ -710,71 +795,6 @@ export default function Home() {
         </section>
       </main>
 
-      {/* ── 9. Multi-Column Footer ── */}
-      <footer className="site-footer-dark">
-        <div className="page-width footer-grid-4">
-          <div className="footer-brand-col">
-            <Link className="brand footer-brand" to="/">
-              <span className="brand-logo-icon">
-                <ParkingCircle size={22} className="text-cyan-400" />
-              </span>
-              <div className="brand-text">
-                <span className="brand-title text-white">
-                  Park<span className="brand-cyan">Matrix</span>
-                </span>
-                <span className="brand-sub text-gray-400">SMART PARKING PLATFORM</span>
-              </div>
-            </Link>
-            <p className="footer-desc mt-4">
-              {t("footer.desc")}
-            </p>
-          </div>
-
-          <div className="footer-col">
-            <h4 className="footer-col-title">{t("footer.support")}</h4>
-            <ul className="footer-links">
-              <li><a href="#gis-section">{lang === "en" ? "Booking Guide" : "Hướng dẫn đặt chỗ"}</a></li>
-              <li><a href="#solutions">{lang === "en" ? "Parking Rules" : "Quy định bãi đỗ"}</a></li>
-              <li><a href="#solutions">{lang === "en" ? "EV Charging Station" : "Trạm sạc EV"}</a></li>
-              <li><a href="mailto:support@parkmatrix.vn">{lang === "en" ? "Report Incident 24/7" : "Báo sự cố 24/7"}</a></li>
-              <li><a href="#gis-section">API Integration Docs</a></li>
-            </ul>
-          </div>
-
-          <div className="footer-col">
-            <h4 className="footer-col-title">{lang === "en" ? "Infrastructure Coverage" : "Độ Phủ Hạ Tầng"}</h4>
-            <ul className="footer-links">
-              <li><a href="#gis-section">{lang === "en" ? "Ho Chi Minh City (62 hubs)" : "TP. Hồ Chí Minh (62 bãi)"}</a></li>
-              <li><a href="#gis-section">{lang === "en" ? "Hanoi (48 hubs)" : "Hà Nội (48 bãi)"}</a></li>
-              <li><a href="#gis-section">{lang === "en" ? "Da Nang (24 hubs)" : "Đà Nẵng (24 bãi)"}</a></li>
-              <li><a href="#gis-section">{lang === "en" ? "Binh Duong (18 hubs)" : "Bình Dương (18 bãi)"}</a></li>
-              <li><a href="#gis-section">{lang === "en" ? "Hai Phong (12 hubs)" : "Hải Phòng (12 bãi)"}</a></li>
-            </ul>
-          </div>
-
-          <div className="footer-col">
-            <h4 className="footer-col-title">{lang === "en" ? "For Enterprise" : "Dành Cho Doanh Nghiệp"}</h4>
-            <ul className="footer-links">
-              <li><a href="#solutions">{lang === "en" ? "Parking Lot Owners" : "Chủ bãi đỗ xe"}</a></li>
-              <li><a href="#solutions">{lang === "en" ? "VMS Platform Integration" : "Tích hợp VMS Platform"}</a></li>
-              <li><a href="#solutions">{lang === "en" ? "AI ANPR Camera Partner" : "Hợp tác Camera ANPR AI"}</a></li>
-              <li><a href="/register">{lang === "en" ? "Partner Registration" : "Đăng ký Đối tác"}</a></li>
-            </ul>
-          </div>
-        </div>
-
-        <div className="page-width footer-bottom-dark">
-          <span>{t("footer.rights")}</span>
-          <div className="footer-bottom-links">
-            <a href="#">{t("footer.privacy")}</a>
-            <span>•</span>
-            <a href="#">{t("footer.terms")}</a>
-            <span>•</span>
-            <a href="mailto:support@parkmatrix.vn">Support: support@parkmatrix.vn</a>
-          </div>
-        </div>
-      </footer>
-
       {/* Logout Modal */}
       {showLogout && (
         <div
@@ -819,6 +839,6 @@ export default function Home() {
           </section>
         </div>
       )}
-    </div>
+    </CustomerLayout>
   );
 }

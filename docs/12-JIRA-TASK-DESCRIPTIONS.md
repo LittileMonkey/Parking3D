@@ -364,11 +364,13 @@
 ## 📌 SCRUM SPRINT 5: QUẢN TRỊ NỀN TẢNG, BIỂU PHÍ ĐỘNG & ĐẶT CHỖ THỜI GIAN THỰC
 
 ### 18. SCRUM-84: [S5-01][TV2 Quang][P0] Backend: Hold Slot 15m Engine with Advisory Locks & Time-Window Overlap Guard
+
+> Tiêu đề trên giữ tên task lịch sử. Chính sách hold hiện hành đã đổi thành mặc định 5 phút theo mentor/SCRUM-100.
 ```markdown
 1. Phân công: Owner TV6 Hàn & TV2 Quang.
-2. Triển khai: Hoàn thiện động cơ Giữ chỗ tạm thời 15 phút, Sweeper định kỳ quét slot quá hạn chưa thanh toán cọc để trả về Available.
+2. Triển khai: Giữ chỗ chờ thanh toán mặc định 5 phút; worker quét mỗi 10 giây, chỉ release hold đủ điều kiện và bảo vệ physical occupancy.
 3. Tiêu chí:
-   - Thời gian giữ chỗ chính xác 15 phút đếm ngược.
+   - Frontend đếm ngược theo HoldExpiresAt do backend trả về; mặc định 5 phút, cấu hình theo policy.
    - Bảo vệ tuyệt đối bằng pg_advisory_xact_lock(slot_id).
 4. Mốc bàn giao: Ngày D5.
 ```
@@ -386,9 +388,9 @@
 ### 20. SCRUM-86: [S5-03][TV4 Tien][P0] Frontend: Real-time Slot Reservation UI & Hold Countdown Timer
 ```markdown
 1. Phân công: Owner TV4 Tiến; Phối hợp TV3 A.Đức.
-2. Triển khai: Giao diện đặt chỗ cho khách hàng kèm đồng hồ đếm ngược thời gian thanh toán 15 phút.
+2. Triển khai: Giao diện đặt chỗ cho khách hàng kèm đồng hồ đếm ngược theo HoldExpiresAt của backend, mặc định 5 phút (SCRUM-100).
 3. Tiêu chí:
-   - Đồng hồ đếm ngược thời gian thực; tự động hủy vé và thông báo khi hết 15 phút chưa trả tiền.
+   - Đồng hồ đếm ngược thời gian thực; khi về 0 hiển thị hết hạn và tải lại trạng thái. Backend quyết định expiry trong transaction; frontend không tự hủy booking.
 4. Mốc bàn giao: Ngày D5.
 ```
 

@@ -8,6 +8,7 @@ namespace Parking.Parking.Application;
 public static class DependencyInjection
 {
     // Đăng ký handler/validator cùng assembly; validation chạy trước handler.
+    /// <summary>Đăng ký MediatR, validators và pipeline để kiểm tra đầu vào trước khi gọi Handler.</summary>
     public static IServiceCollection AddApplicationServices(this IServiceCollection services)
     {
         var assembly = typeof(DependencyInjection).Assembly;

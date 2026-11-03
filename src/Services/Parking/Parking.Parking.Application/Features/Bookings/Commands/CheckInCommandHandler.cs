@@ -10,14 +10,21 @@ public sealed class CheckInCommandHandler(
     IParkingRepository repository, IQrTokenService qrTokens, IFacilityAccess access)
     : IRequestHandler<CheckInCommand, CheckInResponseDto>
 {
+    /// <summary>Hỏi Identity quyền CHECK_IN và xác minh QR trước khi gọi transaction tạo phiên một lần.</summary>
     public async Task<CheckInResponseDto> Handle(CheckInCommand command, CancellationToken ct)
     {
         // Hỏi Identity trước khi giữ khóa DB, tránh chờ mạng trong transaction.
         await access.RequireAsync(command.ActorId, command.Request.LotId, "CHECK_IN", ct);
-        if (!qrTokens.TryValidateAndExtract(command.Request.QrPayload, out var token) || token is null)
-            throw new ConflictException("QR is invalid or expired.");
-        if (token.LotId != command.Request.LotId)
-            throw new ConflictException("QR does not belong to the requested parking lot.");
-        return await repository.CheckInAsync(command.ActorId, command.Request, token, command.IdempotencyKey, ct);
+        if (!string.IsNullOrWhiteSpace(command.Request.QrPayload))
+        {
+            if (!qrTokens.TryValidateAndExtract(command.Request.QrPayload, out var token) || token is null)
+                throw new ConflictException("QR is invalid or expired.");
+            if (token.LotId != command.Request.LotId)
+                throw new ConflictException("QR does not belong to the requested parking lot.");
+            return await repository.CheckInAsync(command.ActorId, command.Request, token, command.IdempotencyKey, ct);
+        }
+
+        // Khách vãng lai (không có QR payload) -> cấp AUTO_SLOT và ParkingSession mới
+        return await repository.CheckInWalkInAsync(command.ActorId, command.Request, command.IdempotencyKey, ct);
     }
 }

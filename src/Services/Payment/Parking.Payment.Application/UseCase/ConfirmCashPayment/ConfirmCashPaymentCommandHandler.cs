@@ -11,16 +11,16 @@ namespace Parking.Payment.Application.UseCase.ConfirmCashPayment
 {
     public class ConfirmCashPaymentCommandHandler : IRequestHandler<ConfirmCashPaymentCommand, ConfirmCashPaymentResultDto>
     {
-        private readonly IPaymentRepository _paymentRepository;
+        private readonly IPaymentService _paymentService;
 
-        public ConfirmCashPaymentCommandHandler (IPaymentRepository paymentRepository)
+        public ConfirmCashPaymentCommandHandler (IPaymentService paymentService)
         {
-            _paymentRepository = paymentRepository;
+            _paymentService = paymentService;
         }
 
         public async Task<ConfirmCashPaymentResultDto> Handle(ConfirmCashPaymentCommand request, CancellationToken cancellationToken)
         {
-            return await _paymentRepository.ConfirmCashPaymentAsync(request, cancellationToken);
+            return await _paymentService.ConfirmCashPaymentAsync(request, cancellationToken);
         }
     }
 }

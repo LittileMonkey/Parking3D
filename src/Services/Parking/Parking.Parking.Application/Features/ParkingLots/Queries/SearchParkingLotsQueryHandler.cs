@@ -2,6 +2,7 @@ using MediatR;
 using Parking.Parking.Application.DTOs;
 using Parking.Parking.Application.Interfaces;
 using Parking.Parking.Domain;
+using Parking.Parking.Domain.Entities;
 using System;
 using System.Collections.Generic;
 using System.Linq;

@@ -69,10 +69,17 @@ export interface ParkingLot {
 }
 
 export interface EstimatedPricing {
-  expectedDurationMinutes: number;
-  estimatedTotalFee: number;
-  currency: string;
+  expectedDurationMinutes?: number | null;
+  estimatedTotalFee?: number | null;
+  currency?: string | null;
   billingDetails?: string;
+}
+
+export interface UserVehicle {
+  id: string;
+  licensePlate: string;
+  vehicleType: string;
+  isDefault: boolean;
 }
 
 export interface ParkingSearchItem {
@@ -113,6 +120,22 @@ export interface AvailableSlot {
   status: "AVAILABLE" | "HELD" | "OCCUPIED" | "MAINTENANCE" | string;
 }
 
+export interface ParkingMapObject {
+  levelId: string;
+  objectType?: string | number;
+  refEntityId?: string;
+  slotId?: string;
+  positionX?: number;
+  positionY?: number;
+  positionZ?: number;
+  rotationX?: number;
+  rotationY?: number;
+  rotationZ?: number;
+  scaleX?: number;
+  scaleY?: number;
+  scaleZ?: number;
+}
+
 export interface ParkingLevelAvailability {
   levelId: string;
   levelCode: string;
@@ -130,6 +153,7 @@ export interface LotAvailability {
   occupiedCount: number;
   maintenanceCount: number;
   levels: ParkingLevelAvailability[];
+  mapObjects?: ParkingMapObject[];
 }
 
 export interface CreateBookingPayload {
@@ -163,7 +187,7 @@ export interface BookingDetail {
   holdExpiresAt?: string | null;
   arrivalDeadline: string;
   status: string;
-  totalAmount: number;
+  totalAmount?: number | null;
   qrToken?: string | null;
   createdAt: string;
 }
@@ -172,7 +196,7 @@ export interface Payment {
   id: string;
   lotId: string;
   bookingId: string;
-  amount: number;
+  amount?: number | null;
   currency: string;
   method: string;
   status: string;
@@ -271,6 +295,10 @@ export const api = {
 
   async getParkingLots(): Promise<ParkingLot[]> {
     return request<ParkingLot[]>("/api/v1/parking-lots");
+  },
+
+  async getUserVehicles(): Promise<UserVehicle[]> {
+    return request<UserVehicle[]>("/api/v1/user-vehicles");
   },
 
   async getAvailability(
@@ -488,7 +516,256 @@ export const api = {
       body: formData,
     });
   },
+
+  /**
+   * [REAL API PAYMENT] Tính toán phí đỗ xe chính xác (Block 15p, cao điểm, trần ngày)
+   */
+  async calculateFee(payload: CalculateFeeRequest): Promise<CalculateFeeResponse> {
+    return request<CalculateFeeResponse>("/api/v1/payments/calculate-fee", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * [REAL API PARKING] Thực hiện Check-In vào bãi xe (Staff Barrier / Camera)
+   */
+  async checkIn(payload: BackendCheckInPayload, idempotencyKey: string): Promise<BackendCheckInResponse> {
+    return request<BackendCheckInResponse>("/api/v1/check-in", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * [REAL API PARKING] Phát hành mã QR Check-in bảo mật HMAC sau thanh toán (SCRUM-49)
+   */
+  async issueBookingQr(bookingId: string): Promise<BookingQrResponse> {
+    return request<BookingQrResponse>(`/api/v1/bookings/${encodeURIComponent(bookingId)}/qr`, {
+      method: "POST",
+    });
+  },
+
+  /**
+   * [REAL API IDENTITY] Lấy danh sách bãi xe mà nhân viên/quản lý được phân công (Facility RBAC)
+   */
+  async getStaffAssignmentsMe(): Promise<StaffAssignmentItem[]> {
+    return request<StaffAssignmentItem[]>("/api/v1/staff-assignments/me");
+  },
+
+  /**
+   * [REAL API IDENTITY] Gán nhân viên vào bãi xe (Manager/Admin)
+   */
+  async assignStaffToLot(payload: { staffUserId: string; lotId: string; roleCode: string; validFrom?: string; validUntil?: string }): Promise<StaffAssignmentItem> {
+    return request<StaffAssignmentItem>("/api/v1/staff-assignments", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * [REAL API IDENTITY] Thu hồi quyền nhân viên tại bãi xe (Manager/Admin)
+   */
+  async revokeStaffAssignment(assignmentId: string): Promise<{ success: boolean; message?: string }> {
+    return request<{ success: boolean; message?: string }>(
+      `/api/v1/staff-assignments/${encodeURIComponent(assignmentId)}/revoke`,
+      { method: "POST" }
+    );
+  },
+
+  /**
+   * [REAL API AI] Soát xét và cập nhật biển số xe OCR thủ công (Staff Review)
+   */
+  async reviewPlateRecognition(
+    lotId: string,
+    recognitionId: string,
+    correctedPlate: string,
+    reviewNotes?: string
+  ): Promise<{ id: string; status: string }> {
+    return request<{ id: string; status: string }>(
+      `/api/v1/parking-lots/${encodeURIComponent(lotId)}/plate-recognitions/${encodeURIComponent(recognitionId)}/review`,
+      {
+        method: "POST",
+        body: JSON.stringify({ correctedPlate, reviewNotes }),
+      }
+    );
+  },
+
+  /**
+   * [REAL API PAYMENT] Tra cứu biên lai điện tử (E-Receipt) sau thanh toán (SCRUM-72)
+   */
+  async getPaymentReceipt(paymentId: string): Promise<PaymentReceiptDto> {
+    return request<PaymentReceiptDto>(`/api/v1/payments/${encodeURIComponent(paymentId)}/receipt`);
+  },
+
+  /**
+   * [REAL API PARKING] Tra cứu chi tiết booking theo mã (SCRUM-48 - Facility RBAC Lookup)
+   */
+  async getBookingDetail(bookingId: string): Promise<BookingDetailDto> {
+    return request<BookingDetailDto>(`/api/v1/bookings/${encodeURIComponent(bookingId)}`);
+  },
+
+  /**
+   * [REAL API IDENTITY] Lấy danh sách tất cả tài khoản người dùng hệ thống (Admin/Manager)
+   */
+  async getAllAccounts(): Promise<AccountUserDto[]> {
+    return request<AccountUserDto[]>("/api/v1/account");
+  },
+
+  /**
+   * [REAL API IDENTITY] Tra cứu tài khoản người dùng theo email (Admin/Manager)
+   */
+  async getAccountByEmail(email: string): Promise<AccountUserDto> {
+    return request<AccountUserDto>(`/api/v1/account/by-email?email=${encodeURIComponent(email)}`);
+  },
+
+  /**
+   * [REAL API IDENTITY] Cập nhật vai trò người dùng (Admin/Manager Role Assignment)
+   */
+  async updateUserRole(userId: string, roleCode: string): Promise<AccountUserDto> {
+    return request<AccountUserDto>("/api/v1/author/update-role", {
+      method: "POST",
+      body: JSON.stringify({ userId, roleCode }),
+    });
+  },
+
+  // ─── [SCRUM-99] REAL INCIDENTS & EXCEPTIONS ENDPOINTS ───────────────────────
+  async getIncidents(lotId: string, status?: string, severity?: string, query?: string, page = 1, pageSize = 25): Promise<{ items: any[]; totalCount: number }> {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (status && status !== "All") params.set("status", status);
+    if (severity && severity !== "All") params.set("severity", severity);
+    if (query) params.set("query", query);
+    return request<{ items: any[]; totalCount: number }>(`/api/v1/parking-lots/${lotId}/incidents?${params.toString()}`);
+  },
+
+  async getIncidentById(lotId: string, incidentId: string): Promise<any> {
+    return request<any>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}`);
+  },
+
+  async createIncident(lotId: string, payload: any, idempotencyKey?: string): Promise<any> {
+    const headers: Record<string, string> = {};
+    if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+    return request<any>(`/api/v1/parking-lots/${lotId}/incidents`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateIncidentStatus(lotId: string, incidentId: string, payload: { status: string; notes?: string; expectedVersion: number }): Promise<any> {
+    return request<any>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async reopenIncident(lotId: string, incidentId: string, payload: { reason: string; expectedVersion: number }): Promise<any> {
+    return request<any>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/reopen`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async cancelIncident(lotId: string, incidentId: string, payload: { reason: string; expectedVersion: number }): Promise<any> {
+    return request<any>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/cancel`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async createIncidentDecision(lotId: string, incidentId: string, payload: { decision: string; reason: string; evidence: any[]; expectedVersion: number }): Promise<any> {
+    return request<any>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/decisions`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getIncidentHistory(lotId: string, incidentId: string, page = 1, pageSize = 25): Promise<{ items: any[]; totalCount: number }> {
+    return request<{ items: any[]; totalCount: number }>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/history?page=${page}&pageSize=${pageSize}`);
+  },
+
+  // ─── [SCRUM-99] REAL SHIFT HANDOVER ENDPOINTS ──────────────────────────────
+  async getShiftHandovers(lotId: string, status?: string, page = 1, pageSize = 25): Promise<{ items: any[]; totalCount: number }> {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (status && status !== "All") params.set("status", status);
+    return request<{ items: any[]; totalCount: number }>(`/api/v1/parking-lots/${lotId}/shift-handovers?${params.toString()}`);
+  },
+
+  async getShiftHandoverById(lotId: string, handoverId: string): Promise<any> {
+    return request<any>(`/api/v1/parking-lots/${lotId}/shift-handovers/${handoverId}`);
+  },
+
+  async createShiftHandover(lotId: string, payload: any, idempotencyKey?: string): Promise<any> {
+    const headers: Record<string, string> = {};
+    if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+    return request<any>(`/api/v1/parking-lots/${lotId}/shift-handovers`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async confirmShiftHandover(lotId: string, handoverId: string, payload: { expectedVersion: number }, idempotencyKey?: string): Promise<any> {
+    const headers: Record<string, string> = {};
+    if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+    return request<any>(`/api/v1/parking-lots/${lotId}/shift-handovers/${handoverId}/confirm`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async reassignShiftHandoverReceiver(lotId: string, handoverId: string, payload: { receiverUserId: string; reason: string; expectedVersion: number }): Promise<any> {
+    return request<any>(`/api/v1/parking-lots/${lotId}/shift-handovers/${handoverId}/receiver`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
 };
+
+export interface PaymentReceiptDto {
+  receiptNumber: string;
+  paymentId: string;
+  bookingId: string;
+  lotName: string;
+  plateNumber: string;
+  paymentMethod: string;
+  totalAmount: number;
+  currency: string;
+  paidAt: string;
+  collectedByStaff?: string | null;
+  bankTransactionNo?: string | null;
+  verificationHash: string;
+}
+
+export interface BookingDetailDto {
+  bookingId: string;
+  bookingCode: string;
+  lotId: string;
+  lotName: string;
+  slotId?: string | null;
+  slotCode?: string | null;
+  plateSnapshot: string;
+  vehicleType: string;
+  startsAt: string;
+  endsAt: string;
+  holdExpiresAt?: string | null;
+  arrivalDeadline: string;
+  status: string;
+  estimatedAmount: number;
+  qrToken?: string | null;
+  createdAt: string;
+}
+
+export interface AccountUserDto {
+  id: string;
+  emailNormalized?: string | null;
+  phoneE164?: string | null;
+  fullName: string;
+  status: string;
+  roles?: string[];
+}
 
 export interface PlateRecognitionResult {
   recognitionId?: string;
@@ -503,4 +780,71 @@ export interface PlateRecognitionResult {
   vehicleTypeSuggestion?: string | number;
   processingTimeMs?: number;
   isFallback?: boolean;
+}
+
+export interface CalculateFeeRequest {
+  parkingLotId: string;
+  entryTime: string;
+  exitTime: string;
+  isGoldStarMember?: boolean;
+  vehicleType: string;
+}
+
+export interface CalculateFeeResponse {
+  parkingLotId: string;
+  entryTime: string;
+  exitTime: string;
+  totalMinutes: number;
+  totalBillableBlocks: number;
+  totalGrossAmountVnd: number;
+  totalDailyCapDiscountVnd: number;
+  subtotalAfterDailyCapVnd: number;
+  isGoldStarMember: boolean;
+  goldStarDiscountAmountVnd: number;
+  finalNetAmountVnd: number;
+  currency: string;
+  dailyBreakdowns?: Array<{
+    date: string;
+    grossAmountVnd: number;
+    dailyCapApplied: boolean;
+    netAmountVnd: number;
+  }>;
+}
+
+export interface BackendCheckInPayload {
+  lotId: string;
+  gateId: string;
+  qrPayload: string;
+  detectedPlate: string;
+}
+
+export interface BackendCheckInResponse {
+  sessionId: string;
+  bookingId: string;
+  lotId: string;
+  slotId: string;
+  status: string;
+  entryAt: string;
+}
+
+export interface BookingQrResponse {
+  bookingId: string;
+  qrToken?: string;
+  token?: string;
+  qrTokenPayload?: {
+    bookingId: string;
+    nonce: string;
+    expiresAt: string;
+    signature: string;
+  };
+  expiresAt?: string;
+}
+
+export interface StaffAssignmentItem {
+  assignmentId: string;
+  lotId: string;
+  roleCode: string;
+  validFrom: string;
+  validUntil?: string | null;
+  canManageStaffAssignments: boolean;
 }

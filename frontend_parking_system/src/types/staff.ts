@@ -69,6 +69,8 @@ export interface CheckInPayload {
   bookingCode?: string;
   licensePlate?: string;
   qrCode?: string;
+  qrToken?: string;
+  lotId?: string;
   gateId?: string;
 }
 
@@ -102,6 +104,7 @@ export interface CheckOutPayload {
   sessionId: string;
   paymentMethod?: "Cash" | "Card" | "Wallet";
   gateId?: string;
+  paymentId?: string;
 }
 
 export interface Incident {
@@ -121,6 +124,7 @@ export interface Incident {
   resolvedAt?: string;
   notes?: string;
   updatedAt: string;
+  version?: number;
 }
 
 export interface IncidentLog {

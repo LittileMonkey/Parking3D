@@ -1,26 +1,6 @@
 namespace Parking.Parking.Application.DTOs;
 
-public sealed record QueryTimeRangeDto(
-    DateTimeOffset StartsAt,
-    DateTimeOffset EndsAt
-);
-
-public sealed record SlotAvailabilityItemDto(
-    Guid SlotId,
-    string SlotCode,
-    string ZoneCode,
-    IReadOnlyList<string> SupportedVehicleTypes,
-    IReadOnlyList<string> Features,
-    string Status
-);
-
-public sealed record LevelAvailabilityItemDto(
-    Guid LevelId,
-    string LevelCode,
-    string LevelName,
-    IReadOnlyList<SlotAvailabilityItemDto> Slots
-);
-
+// Kết quả availability: các bộ đếm áp dụng cho tập ô đỗ đã lọc.
 public sealed record LotAvailabilityDto(
     Guid LotId,
     string LotCode,
@@ -30,5 +10,4 @@ public sealed record LotAvailabilityDto(
     int HeldCount,
     int OccupiedCount,
     int MaintenanceCount,
-    IReadOnlyList<LevelAvailabilityItemDto> Levels
-);
+    IReadOnlyList<LevelAvailabilityItemDto> Levels);

@@ -116,7 +116,7 @@ Khung phản hồi chuẩn bọc trong `ApiResponse<BookingDetailViewDto>`:
     "bookingMode": "EXACT_SLOT",
     "startsAt": "2026-10-08T09:00:00Z",
     "endsAt": "2026-10-08T12:00:00Z",
-    "holdExpiresAt": "2026-10-08T09:15:00Z",
+    "holdExpiresAt": "2026-10-08T09:05:00Z",
     "arrivalDeadline": "2026-10-08T09:30:00Z",
     "status": "PENDING_PAYMENT",
     "estimatedAmount": 45000,
@@ -135,47 +135,27 @@ Khung phản hồi chuẩn bọc trong `ApiResponse<BookingDetailViewDto>`:
 ## 4. Background Service: Hold Expiry Worker
 
 - **Kiểu Service:** `BackgroundService` (.NET 9) sử dụng `PeriodicTimer(TimeSpan.FromSeconds(10))`.
-- **Mục đích:** Tự động thu hồi slot từ các đơn đặt chỗ quá hạn giữ chỗ (`hold_expires_at <= now()`, mặc định 5 phút) mà khách chưa thanh toán.
+- **Mục đích:** Xử lý hold pending đã hết hạn (`hold_expires_at <= @now`, mặc định 5 phút). `@now` lấy từ `TimeProvider` backend, cùng nguồn thời gian dùng khi tạo booking và kiểm tra thanh toán (SCRUM-100).
 
 ### 4.1. Thứ tự Khóa Tài nguyên (Lock Order Invariant)
 Để tránh Deadlock giữa Worker chạy ngầm và luồng Đặt chỗ / Thanh toán, thứ tự khóa bắt buộc là:
-1. **Worker Task Lock:** `SELECT pg_advisory_xact_lock(hashtextextended('HOLD_EXPIRY_WORKER', 0))`
-2. **Vehicle Lock:** `SELECT lock_parking_resource('VEHICLE', @vehicleId)`
-3. **Slot Lock:** `SELECT lock_parking_resource('SLOT', @slotId)`
+1. **Vehicle Lock:** `SELECT lock_parking_resource('VEHICLE', @vehicleId)`
+2. **Slot Lock:** `SELECT lock_parking_resource('SLOT', @slotId)`; sắp xếp các slot trước khi khóa.
+
+Mỗi booking có transaction riêng, không có global worker lock trong implementation hiện hành. Worker đọc lại thời gian và trạng thái sau khi lấy khóa, đồng thời kiểm tra reservation confirmed và physical occupancy.
 
 ### 4.2. Logic Cập nhật SQL Đảm bảo Idempotency & Bảo toàn Dữ liệu
 ```sql
--- 1. Giải phóng Reservation của các booking PENDING_PAYMENT hết hạn
--- ĐIỀU KIỆN TIÊN QUYẾT: Xe vật lý không đang đỗ tại slot
-UPDATE slot_reservations 
-SET status = 'RELEASED',
-    released_at = now(),
-    release_reason = 'HOLD_EXPIRED'
-WHERE status = 'HELD'
-  AND booking_id IN (
-      SELECT id FROM bookings 
-      WHERE status = 'PENDING_PAYMENT' 
-        AND hold_expires_at <= now()
-  )
-  AND NOT EXISTS (
-      SELECT 1 FROM session_slot_assignments a 
-      WHERE a.slot_id = slot_reservations.slot_id 
-        AND a.vacated_at IS NULL
-  );
-
--- 2. Chuyển trạng thái Booking sang EXPIRED và tăng version
-UPDATE bookings 
-SET status = 'EXPIRED',
-    version = version + 1
-WHERE status = 'PENDING_PAYMENT' 
-  AND hold_expires_at <= now();
-
--- 3. Ghi vết kiểm toán tự động (Audit Log)
-INSERT INTO audit_logs (id, lot_id, actor_type, action, entity_type, entity_id, reason, created_at)
-SELECT gen_random_uuid(), lot_id, 'SYSTEM', 'EXPIRE_HOLD', 'BOOKING', id::text, 'Hold 5m timeout', now()
-FROM bookings 
-WHERE status = 'EXPIRED' AND updated_at = now();
+-- Trong transaction, sau advisory lock VEHICLE -> các SLOT:
+SELECT id FROM bookings
+WHERE id = @id AND vehicle_id = @vehicle
+  AND status = 'PENDING_PAYMENT' AND hold_expires_at <= @now
+FOR UPDATE;
 ```
+
+Nếu không còn thỏa điều kiện, bỏ qua booking. Nếu có reservation `CONFIRMED`, assignment chưa vacate hoặc tập slot đã thay đổi, cũng bỏ qua toàn bộ booking. Chỉ khi mọi kiểm tra đã đạt mới release reservation `HELD`, đổi booking `EXPIRED`, tăng version và ghi audit trong cùng transaction rồi commit. Chi tiết SQL thực thi nằm trong `ParkingRepository.HoldExpiry.cs`; không dùng một câu UPDATE hàng loạt để bỏ qua các kiểm tra này.
+
+Chạy worker lặp trên booking đã hết hạn không tăng version hoặc thêm audit expiry lần nữa. Exception tại một booking làm dừng lượt quét hiện tại; các transaction trước đó đã commit vẫn giữ nguyên, worker ghi lỗi và thử lại ở chu kỳ sau.
 
 ---
 
@@ -208,17 +188,16 @@ flowchart TD
     end
 
     subgraph HoldExpiryFlow [Luồng Worker Quét Hết Hạn 10s]
-        TimerTrigger([PeriodicTimer 10s Trigger]) --> AcquireAdvisory[Acquire Advisory Lock Worker]
-        AcquireAdvisory --> FindExpired[Tìm Bookings PENDING_PAYMENT có hold_expires_at <= now]
+        TimerTrigger([PeriodicTimer 10s Trigger]) --> FindExpired[Tìm Bookings PENDING_PAYMENT có hold_expires_at <= backend now]
         FindExpired --> HasExpired{Có booking hết hạn không?}
         HasExpired -- Không --> EndWorker([Kết thúc vòng lặp])
         HasExpired -- Có --> BeginTx[Bắt đầu Database Transaction]
         BeginTx --> LockResources[Khóa tài nguyên theo thứ tự VEHICLE -> SLOT]
         LockResources --> CheckPhysical{Xe có đang đỗ vật lý không?}
-        CheckPhysical -- Có xe đỗ --> SkipRelease[Giữ nguyên slot, chỉ đổi status booking]
+        CheckPhysical -- Có xe đỗ --> SkipRelease[Bỏ qua booking, giữ nguyên dữ liệu]
         CheckPhysical -- Không có xe --> ReleaseSlot[UPDATE slot_reservations = RELEASED]
-        SkipRelease --> UpdateBooking[UPDATE bookings = EXPIRED & version + 1]
-        ReleaseSlot --> UpdateBooking
+        SkipRelease --> EndWorker
+        ReleaseSlot --> UpdateBooking[UPDATE bookings = EXPIRED & version + 1]
         UpdateBooking --> WriteAudit[INSERT audit_logs SYSTEM EXPIRE_HOLD]
         WriteAudit --> CommitTx[Commit Transaction]
         CommitTx --> EndWorker

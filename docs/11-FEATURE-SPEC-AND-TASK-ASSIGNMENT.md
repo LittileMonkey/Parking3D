@@ -91,8 +91,8 @@ graph TB
     - `AutoSlot`: Hệ thống tự động gợi ý ô tối ưu nhất gần cửa thang máy/lối ra vào.
   - **Chống Overbooking tuyệt đối:** Khóa giao dịch cấp cơ sở dữ liệu bằng **PostgreSQL Advisory Lock** (`pg_advisory_xact_lock(slot_id)`).
   - Kiểm tra dải thời gian đặt chỗ (`tstzrange` overlap) đảm bảo không có 2 xe đặt trùng dải thời gian trên cùng 1 slot.
-  - Cơ chế **Giữ chỗ tạm thời (Hold 15 phút)**: Chuyển slot sang trạng thái `Reserved` trong 15 phút chờ thanh toán tiền cọc.
-  - **Background Sweeper Worker**: Quét định kỳ mỗi 10 giây, tự động hoàn trả slot về `Available` nếu quá hạn 15 phút chưa thanh toán.
+  - Cơ chế **Giữ chỗ chờ thanh toán (Hold mặc định 5 phút, SCRUM-100)**: Reservation ở trạng thái `HELD`; thời hạn lấy từ policy theo bãi/loại xe và frontend đọc `HoldExpiresAt` từ backend.
+  - **Background Sweeper Worker**: Quét định kỳ mỗi 10 giây, xử lý hold chờ thanh toán đã đến `HoldExpiresAt` (mặc định 5 phút). Không giải phóng physical occupancy hoặc reservation đã confirmed.
 - **PK-04: Điều phối Cổng Vào/Ra & Phiên Đỗ Xe Phần Mềm (`ParkingSession`):**
   - **Sinh vé điện tử (E-Ticket QR):** Sinh mã QR động có Nonce và chữ ký HMAC SHA-256 chống chụp màn hình chia sẻ.
   - **Check-in Cổng vào:**
@@ -259,7 +259,7 @@ Dựa trên cấu trúc 4 Microservices (thuần phần mềm & AI) và 5 Module
 | **S2-01** | DevOps: Review microservices architecture, Docker compose & CI pipeline | DevOps / Infra | `QA Testing & DevOps CI/CD` | **TV8 Nhật** |
 | **S2-02** | Identity: Quyền theo bãi (Facility RBAC), xe Customer và cấu trúc bãi | Identity Service | `Identity & API Gateway` | **TV5 N.Đức** |
 | **S2-03** | Parking: Search NEAREST, CHEAPEST và quote toàn thời lượng | Parking & Payment | `Parking Core & 3D Spatial` | **TV7 Sơn** |
-| **S2-04** | Parking: Availability booking lookup và hold expiry worker (Advisory Lock, Sweeper 15p) | Parking Service | `Parking Core & 3D Spatial` | **TV6 Hàn** |
+| **S2-04** | Parking: Availability booking lookup và hold expiry worker (Advisory Lock, hold mặc định 5p, quét mỗi 10s) | Parking Service | `Parking Core & 3D Spatial` | **TV6 Hàn** |
 | **S2-05** | Parking: QR một lần và Staff check-in tạo parking session | Parking Service | `Parking Core & 3D Spatial` | **TV6 Hàn** |
 | **S2-06** | Payment: Cước phí, VNPay Sandbox (Tạo URL & Webhook IPN) và CASH payment | Payment Service | `Payment & Pricing (VNPay)` | **TV7 Sơn** |
 | **S2-07** | Frontend: Staff UI chọn bãi, CASH, QR check-in & Operations Hub Dashboard | Frontend Module 2 | `Frontend ParkMatrix Web & 3D` | **TV4 Tiến** |
@@ -366,7 +366,7 @@ gantt
 - **DoD:** Đăng nhập thành công, phân quyền cơ bản, Seed dữ liệu 3 bãi đỗ mẫu hiển thị được trên API và khung Frontend.
 
 ### 📌 Sprint 2: Lõi Đặt Chỗ, Khóa Giao Dịch Chống Trùng Lịch & 3D Map View
-- **Mục tiêu:** Chống overbooking tuyệt đối bằng PostgreSQL Advisory Lock, Sweeper Worker hoàn trả slot sau 15 phút, hiển thị bản đồ 3D Digital Twin tầng B1-B3 (Three.js) và Drawer chi tiết ô đỗ.
+- **Mục tiêu:** Chống overbooking bằng PostgreSQL Advisory Lock và GiST, worker xử lý hold hết hạn mặc định 5 phút có bảo vệ physical occupancy, hiển thị bản đồ 3D Digital Twin tầng B1-B3 (Three.js) và Drawer chi tiết ô đỗ.
 - **DoD:** 2 user cùng đặt 1 slot cùng dải giờ $\rightarrow$ 1 người thành công, 1 người nhận lỗi `409 Conflict`. Bản đồ 3D đổi màu slot thời gian thực.
 
 ### 📌 Sprint 3: Vận hành Cổng Check-in/out, AI ANPR Camera & Thanh toán Thực tế

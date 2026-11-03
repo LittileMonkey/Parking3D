@@ -1,6 +1,51 @@
 syntax = "proto3";
+
 package parking.catalog.v1;
+
 option csharp_namespace = "Parking.Contracts.Catalog.V1";
-service ParkingCatalog { rpc LotExists(LotRequest) returns (LotReply); }
-message LotRequest { string lot_id = 1; }
-message LotReply { bool exists = 1; }
+
+// Dịch vụ danh mục bãi đỗ xe và tra cứu biểu giá cước
+service ParkingCatalog {
+  // Kiểm tra bãi đỗ xe có tồn tại hay không
+  rpc LotExists(LotRequest) returns (LotReply);
+
+  // Lấy cấu hình biểu giá hiệu lực theo bãi đỗ, loại xe và thời điểm gửi xe
+  rpc GetPricingPolicy(PricingPolicyRequest) returns (PricingPolicyReply);
+}
+
+message LotRequest {
+  string lot_id = 1;
+}
+
+message LotReply {
+  bool exists = 1;
+}
+
+// Yêu cầu tra cứu biểu giá
+message PricingPolicyRequest {
+  string lot_id = 1;               // UUID của bãi đỗ xe
+  string vehicle_type = 2;         // Loại xe: "CAR" hoặc "MOTORBIKE"
+  int64 timestamp_unix_seconds = 3;// Thời điểm xe vào bãi (Unix timestamp) để xét hạn hiệu lực
+}
+
+// Kết quả phản hồi biểu giá chi tiết
+message PricingPolicyReply {
+  bool found = 1;                  // true nếu có biểu giá hiệu lực, false nếu chưa cấu hình
+
+  int32 initial_block_minutes = 2; // Thời lượng block đầu (ví dụ: 60 phút)
+  int64 initial_rate_vnd = 3;      // Giá block đầu (ví dụ: 20.000 đ)
+
+  int32 subsequent_block_minutes = 4; // Thời lượng các block sau (ví dụ: 15 phút)
+  int64 subsequent_rate_vnd = 5;      // Giá mỗi block sau (ví dụ: 5.000 đ)
+
+  double peak_multiplier = 6;      // Hệ số nhân giờ cao điểm (ví dụ: 1.2 tương đương +20%)
+  string peak1_start = 7;          // Bắt đầu cao điểm trưa (ví dụ: "11:30")
+  string peak1_end = 8;            // Kết thúc cao điểm trưa (ví dụ: "13:00")
+  string peak2_start = 9;          // Bắt đầu cao điểm chiều (ví dụ: "17:30")
+  string peak2_end = 10;           // Kết thúc cao điểm chiều (ví dụ: "19:00")
+
+  int64 daily_cap_vnd = 11;        // Mức trần giá tối đa 1 ngày (ví dụ: 150.000 đ)
+  double gold_star_discount_rate = 12; // Chiết khấu Gold Star (ví dụ: 0.10 = 10%)
+
+  string timezone = 13;            // Múi giờ của bãi xe (ví dụ: "Asia/Ho_Chi_Minh")
+}

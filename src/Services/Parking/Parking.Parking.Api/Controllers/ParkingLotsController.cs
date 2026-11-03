@@ -24,12 +24,12 @@ namespace Parking.Parking.Api.Controllers
         }
         // Định nghĩa Endpoint GET: /api/v1/parking-lots/search
         [HttpGet("search")]
-        public async Task<IActionResult> Search([FromQuery] SearchParkingLotsQuery query,CancellationToken cancellationToken)
+        public async Task<IActionResult> Search([FromQuery] SearchParkingLotsQuery query, CancellationToken cancellationToken)
         {
             // 1. Nhờ MediatR bắn cái Query này vào đường ống (Pipeline).
             // Pipeline sẽ TỰ ĐỘNG gọi file Validator kiểm tra lỗi (Báo 400 nếu có lỗi).
             // Nếu qua ải Validator, Pipeline tự động dẫn tiếp vào file Handler để chạy thuật toán.
-            var resultDto = await _mediator.Send(query,cancellationToken);
+            var resultDto = await _mediator.Send(query, cancellationToken);
             // 2. Bọc kết quả DTO vào "lớp vỏ" chuẩn của công ty (ApiResponse)
             var response = new ApiResponse<SearchParkingLotsResultDto>(resultDto, "Search completed successfully.");
             // 3. Trả về HTTP 200 OK
@@ -37,14 +37,15 @@ namespace Parking.Parking.Api.Controllers
         }
 
         // Endpoint GET: /api/v1/parking-lots/{lotId}/availability
+        /// <summary>Nhận bộ lọc tra cứu và trả tình trạng ô đỗ công khai; không trả dữ liệu cá nhân khách.</summary>
         [HttpGet("{lotId:guid}/availability")]
         public async Task<IActionResult> GetAvailability(
-            [FromRoute] Guid lotId,
-            [FromQuery] DateTimeOffset? startTime,
-            [FromQuery] DateTimeOffset? endTime,
-            [FromQuery] string? vehicleType,
-            [FromQuery] Guid? levelId,
-            CancellationToken cancellationToken)
+                [FromRoute] Guid lotId,
+                [FromQuery] DateTimeOffset? startTime,
+                [FromQuery] DateTimeOffset? endTime,
+                [FromQuery] string? vehicleType,
+                [FromQuery] Guid? levelId,
+                CancellationToken cancellationToken)
         {
             var query = new GetLotAvailabilityQuery
             {

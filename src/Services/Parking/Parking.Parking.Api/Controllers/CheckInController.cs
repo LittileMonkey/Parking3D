@@ -10,8 +10,10 @@ namespace Parking.Parking.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/v1/check-in")]
+// Nhận HTTP, lấy actor từ JWT và chuyển yêu cầu check-in sang MediatR.
 public sealed class CheckInController(ISender sender) : ControllerBase
 {
+    /// <summary>Nhận dữ liệu quét và Idempotency-Key, lấy Staff từ JWT rồi chuyển sang MediatR.</summary>
     [HttpPost]
     public async Task<IActionResult> CheckIn([FromBody] CheckInRequestDto request, CancellationToken ct)
     {

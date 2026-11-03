@@ -54,7 +54,7 @@ Mọi quy tắc nghiệp vụ, quyết định kiến trúc và quy chuẩn phá
    - `NEAREST`: Sử dụng công thức Haversine tính toán khoảng cách đường chim bay dựa trên GPS (lat/long).
    - `CHEAPEST`: Phải tính toán toàn bộ chi phí dự kiến (`EstimatedPriceService`) cho toàn bộ thời lượng khách dự kiến gửi (`expectedDuration`), áp dụng block tính phí (default 15 phút), daily cap, peak multiplier của từng bãi.
 8. **Cơ chế Giữ chỗ & Giải phóng Slot thực tế:**
-   - Hold time mặc định theo SRS mentor là 15 phút. Slot chỉ chuyển về `Available` khi xe vật lý thực sự rời bãi (xác nhận bởi barrier/camera hoặc Staff).
+   - Hold chờ thanh toán mặc định là **5 phút** theo cập nhật mentor trong SCRUM-100, cấu hình theo `lot_vehicle_policies.hold_minutes`. Slot chỉ chuyển về `Available` khi xe vật lý thực sự rời bãi (xác nhận bởi barrier/camera hoặc Staff).
 9. **Bảo vệ dữ liệu nhạy cảm & DTO Separation:**
    - Không được trả số điện thoại, biển số xe đầy đủ, hoặc `AuditLogs` qua các API công khai cho Guest. Không nhận hoặc trả trực tiếp Entity qua API.
 10. **Git & Repository Hygiene:**

@@ -56,16 +56,37 @@ public sealed partial class ParkingWorkflowTests
         var jwtKey = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
         var settings = new Dictionary<string, string>
         {
-            ["DOTNET_ENVIRONMENT"] = "Development", ["ASPNETCORE_ENVIRONMENT"] = "Development",
-            ["Jwt__Key"] = jwtKey, ["Jwt__Issuer"] = "parking-identity", ["Jwt__Audience"] = "parking-api",
-            ["Jwt__AccessTokenExpirationMinutes"] = "30", ["Grpc__ServiceKey"] = serviceKey,
+            ["DOTNET_ENVIRONMENT"] = "Development",
+            ["ASPNETCORE_ENVIRONMENT"] = "Development",
+            ["Jwt__Key"] = jwtKey,
+            ["Jwt__Issuer"] = "parking-identity",
+            ["Jwt__Audience"] = "parking-api",
+            ["Jwt__AccessTokenExpirationMinutes"] = "30",
+            ["Grpc__ServiceKey"] = serviceKey,
             ["ConnectionStrings__DefaultConnectionString"] = identityConnection,
             ["ConnectionStrings__Service"] = parkingConnection,
-            ["SeedAccounts__Enabled"] = "false", ["Qr__SigningKey"] = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"),
+            ["SeedAccounts__Enabled"] = "false",
+            ["SeedAdmin__Email"] = "admin@example.test",
+            ["SeedAdmin__Password"] = "Admin123456!",
+            ["SeedAdmin__FullName"] = "Admin Test",
+            ["SeedStaff__Email"] = "staff@example.test",
+            ["SeedStaff__Password"] = "Staff123456!",
+            ["SeedStaff__FullName"] = "Staff Test",
+            ["Qr__SigningKey"] = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"),
             ["Services__IdentityGrpc"] = $"http://127.0.0.1:{ports[1]}"
         };
-        using var identityHost = new LocalHost(Environment.GetEnvironmentVariable("PARKING_TEST_IDENTITY_DLL")!, ports[0], ports[1], settings);
-        using var parkingHost = new LocalHost(Environment.GetEnvironmentVariable("PARKING_TEST_API_DLL")!, ports[2], ports[3], settings);
+        var identitySettings = new Dictionary<string, string>(settings)
+        {
+            ["ConnectionStrings__Service"] = identityConnection,
+            ["ConnectionStrings__DefaultConnectionString"] = identityConnection
+        };
+        var parkingSettings = new Dictionary<string, string>(settings)
+        {
+            ["ConnectionStrings__Service"] = parkingConnection,
+            ["ConnectionStrings__DefaultConnectionString"] = parkingConnection
+        };
+        using var identityHost = new LocalHost(Environment.GetEnvironmentVariable("PARKING_TEST_IDENTITY_DLL")!, ports[0], ports[1], identitySettings);
+        using var parkingHost = new LocalHost(Environment.GetEnvironmentVariable("PARKING_TEST_API_DLL")!, ports[2], ports[3], parkingSettings);
         await identityHost.WaitUntilStarted(); await parkingHost.WaitUntilStarted();
         using var identityHttp = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{ports[0]}"), Timeout = TimeSpan.FromSeconds(10) };
         using var http = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{ports[2]}"), Timeout = TimeSpan.FromSeconds(10) };
@@ -106,8 +127,13 @@ public sealed partial class ParkingWorkflowTests
         var payments = new ParkingPaymentEvents.ParkingPaymentEventsClient(channel);
         var payment = new PaymentSucceeded
         {
-            EventId = Guid.NewGuid().ToString(), PaymentId = Guid.NewGuid().ToString(), BookingId = bookingId.ToString(),
-            LotId = Lot.ToString(), AmountMinor = amount, Currency = "VND", PaidAtUnixSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+            EventId = Guid.NewGuid().ToString(),
+            PaymentId = Guid.NewGuid().ToString(),
+            BookingId = bookingId.ToString(),
+            LotId = Lot.ToString(),
+            AmountMinor = amount,
+            Currency = "VND",
+            PaidAtUnixSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
         };
         Assert.Equal("CONFIRMED", (await payments.DeliverPaymentSucceededAsync(payment, new Metadata { { "x-service-key", serviceKey } })).Outcome);
         using var issued = await Post(qrRoute, new { }, ownerToken);
