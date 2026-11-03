@@ -120,6 +120,22 @@ export interface AvailableSlot {
   status: "AVAILABLE" | "HELD" | "OCCUPIED" | "MAINTENANCE" | string;
 }
 
+export interface ParkingMapObject {
+  levelId: string;
+  objectType?: string | number;
+  refEntityId?: string;
+  slotId?: string;
+  positionX?: number;
+  positionY?: number;
+  positionZ?: number;
+  rotationX?: number;
+  rotationY?: number;
+  rotationZ?: number;
+  scaleX?: number;
+  scaleY?: number;
+  scaleZ?: number;
+}
+
 export interface ParkingLevelAvailability {
   levelId: string;
   levelCode: string;
@@ -137,6 +153,7 @@ export interface LotAvailability {
   occupiedCount: number;
   maintenanceCount: number;
   levels: ParkingLevelAvailability[];
+  mapObjects?: ParkingMapObject[];
 }
 
 export interface CreateBookingPayload {

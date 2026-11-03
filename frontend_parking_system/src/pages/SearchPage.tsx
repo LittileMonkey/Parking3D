@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError, api, type LotAvailability, type ParkingSearchItem, type ParkingLevelAvailability, type UserVehicle } from "../services/api";
-import ParkingViewer, { type ModelSlot } from "../components/parking/ParkingViewer";
+import ParkingViewer, { type ModelLevel } from "../components/parking/ParkingViewer";
 import { applySlotStatusChanges, type SlotStatusChange } from "../components/parking/parkingRealtime";
 import { useParkingHub } from "../components/parking/useParkingHub";
 import { useAuth } from "../context/AuthContext";
@@ -306,15 +306,24 @@ export default function SearchPage() {
       floorCode: selectedLevel.levelCode,
       floorName: selectedLevel.levelName,
     })) ?? [], [selectedLevel, vehicleType]);
-  const viewerSlots = useMemo<ModelSlot[]>(() => levelSlots.map(slot => ({
-    slotId: slot.slotId,
-    slotCode: slot.slotCode,
-    floorCode: slot.floorCode,
-    zoneCode: slot.zoneCode,
-    supportedVehicleTypes: slot.supportedVehicleTypes,
-    features: slot.features,
-    status: slot.status,
-  })), [levelSlots]);
+  const viewerLevels = useMemo<ModelLevel[]>(() => availability?.levels
+    .map(level => ({
+      levelId: level.levelId,
+      levelCode: level.levelCode,
+      levelName: level.levelName,
+      slots: level.slots
+        .filter(slot => slot.supportedVehicleTypes.includes(vehicleType))
+        .map(slot => ({
+          slotId: slot.slotId,
+          slotCode: slot.slotCode,
+          floorCode: level.levelCode,
+          zoneCode: slot.zoneCode,
+          supportedVehicleTypes: slot.supportedVehicleTypes,
+          features: slot.features,
+          status: slot.status,
+        })),
+    }))
+    .filter(level => level.slots.length > 0) ?? [], [availability, vehicleType]);
   const selectedSlot = levelSlots.find(slot => slot.slotId === selectedSlotId) ?? null;
   const currentRange = useMemo(() => {
     const start = new Date(startsAt);
@@ -548,7 +557,8 @@ export default function SearchPage() {
           {levelSlots.length > 0 && availabilityIsCurrent && (
             <div className="booking-map-layout">
               <section className="booking-map-card" aria-label="Sơ đồ slot bãi đỗ">
-                <ParkingViewer slots={viewerSlots} selectedId={selectedSlotId || null}
+                <ParkingViewer levels={viewerLevels} mapObjects={availability?.mapObjects}
+                  selectedLevelCode={selectedLevelCode} selectedId={selectedSlotId || null}
                   onSelect={slot => {
                     setSelectedSlotId(slot.slotId);
                     setBookingError("");
