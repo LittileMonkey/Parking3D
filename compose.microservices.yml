@@ -159,6 +159,10 @@ services:
       Gemini__ApiKey: ${GEMINI_API_KEY:-}
       AI__GeminiApiKey: ${GEMINI_API_KEY:-}
       Gemini__Model: ${GEMINI_MODEL:-gemini-2.5-flash}
+      Ollama__Endpoint: ${OLLAMA_ENDPOINT:-http://host.docker.internal:11434}
+      AI__OllamaEndpoint: ${OLLAMA_ENDPOINT:-http://host.docker.internal:11434}
+      Ollama__Model: ${OLLAMA_MODEL:-qwen2.5:3b}
+      AI__OllamaModel: ${OLLAMA_MODEL:-qwen2.5:3b}
     depends_on:
       ai-db:
         condition: service_healthy
