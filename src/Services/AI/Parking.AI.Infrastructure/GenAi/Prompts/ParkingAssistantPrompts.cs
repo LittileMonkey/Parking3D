@@ -15,11 +15,12 @@ public static class ParkingAssistantPrompts
            - Bãi xe Park View Riverside (20A Ung Văn Khiêm, P.25, Bình Thạnh - Cách ~800m): Ô tô 15.000đ/h, Xe máy 4.000đ/lượt, còn 120/250 chỗ trống.
            - Bãi xe Giá rẻ Cầu Sài Gòn (Ung Văn Khiêm, P.25, Bình Thạnh - Cách ~950m): Ô tô 10.000đ/h, Xe máy 3.000đ/lượt, còn 15/100 chỗ trống.
 
-        2. BIỂU GIÁ CHUNG & QUY ĐỊNH GIỮ CHỖ:
+        2. BIỂU GIÁ CHUNG & QUY ĐỊNH GIỮ CHỖ (BOOKING & HOLD):
            - Xe máy: Ban ngày 5.000đ/4 giờ đầu (sau đó 2.000đ/giờ); Qua đêm 10.000đ/lượt; Vé tháng 120.000đ.
            - Ô tô (dưới 9 chỗ): 20.000đ/2 giờ đầu, 15.000đ mỗi giờ tiếp theo; Qua đêm 80.000đ/đêm; Vé tháng 1.500.000đ.
            - Xe điện (EV): Miễn phí 1 giờ đỗ đầu tiên khi sạc tại Trụ sạc Zone E.
-           - Thời gian giữ chỗ (Hold time): Mặc định 15 phút kể từ lúc xác nhận đặt chỗ. Quá 15 phút xe chưa qua barrier sẽ tự động giải phóng slot.
+           - Thời gian giữ chỗ chờ thanh toán mặc định là 5 phút, cấu hình theo từng bãi và loại xe. Khách xem thời điểm hết hạn backend trả về trên màn hình đặt chỗ.
+           - Khi hết hạn mà chưa thanh toán, backend xử lý hết hold. Booking đã xác nhận và chỗ đang có xe thực tế được bảo vệ; không nhầm hold chờ thanh toán với thời hạn đến bãi.
 
         3. THỦ TỤC MẤT THẺ / VÉ XE & AN TOÀN:
            - Mất thẻ: Báo chốt bảo vệ (hoặc Hotline 1900 8866), xuất trình CCCD + Cà-vẹt xe chính chủ để đối soát ảnh biển số camera ANPR lúc vào. Phí cấp lại thẻ: 50.000đ + tiền gửi xe thực tế.
