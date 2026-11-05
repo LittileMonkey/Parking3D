@@ -1,310 +1,125 @@
-# SCRUM-70 / S3-04 — ĐẶC TẢ THIẾT KẾ API CHECK-OUT, ĐỐI SOÁT BIỂN SỐ & GIẢI PHÓNG SLOT
+# SCRUM-70 — Check-out và giải phóng slot
 
-> **Tài liệu:** Thiết kế Kỹ thuật & Đặc tả API (API Design Specification)  
-> **User Story:** SCRUM-70 / Task S3-04: `Parking: Luồng Check-out đối soát biển số, chốt cước & giải phóng slot Available`  
-> **Người phụ trách (Owner):** Hàn (TV6 Hàn - Core Parking & Database)  
-> **Phối hợp:** TV7 Sơn (Payment & Pricing), TV1 Phát (AI ANPR), TV4 Tiến (Staff Gate UI), TV3 A.Đức (3D Digital Twin)  
-> **Thời gian:** 29/10/2026  
-> **Tiêu chuẩn tuân thủ:** Clean Architecture, .NET 9 / C# 13, Standard Envelope `ApiResponse<T>`, PostgreSQL Advisory Lock.
+Cập nhật 01/11/2026. Owner Hàn; phối hợp Sơn (Payment), Phát (OCR), Tiến (Staff UI), A.Đức (map). Thiết kế này thay luồng hai bước cũ bằng **quote → authorize-exit → xác nhận xe thực sự rời bãi**.
 
----
+## 1. Quy tắc bắt buộc
 
-## 1. TỔNG QUAN (OVERVIEW)
+- JWT + Identity kiểm tra Staff/Manager hoạt động, không khóa, có quyền GATE đúng bãi; lấy bãi từ session trong database. Identity lỗi thì dừng với 503.
+- Cổng EXIT/BOTH đúng bãi. Session ACTIVE, đúng xe/slot, biển số quan sát phải khớp. Sai biển số được trả incidentCode/ghi audit, không cấp quote/permit để xuất bãi.
+- QR check-in PARK1 không dùng làm QR xuất bãi. EXIT1 chỉ giúp xác định session; vẫn cần biển số quan sát trước khi cho xe ra.
+- Quote ký HMAC, gắn actor/session/bãi/cổng/slot/xe/snapshot/biển số/giờ/số tiền. Quote và permit có hạn 5 phút; không cho client tự sửa nội dung.
+- Booking tính phụ thu từ expectedExitAt, walk-in tính toàn bộ từ entryAt. Dùng snapshot và hàm CheckOutFee chung, làm tròn lên block ở độ chính xác thời gian thật, không cắt bỏ dưới 1 phút.
+- Trước thu phí và khi hoàn tất phải kiểm tra lại block phí. Sang block mới trả 409 lấy quote mới; không tự miễn thêm 5 phút. Tiền đã thu ở session là credit, không thu trùng.
+- Payment sở hữu ledger/biên nhận. CASH cần Staff xác nhận đã thu tiền, số tiền đủ, ghi actor/audit/outbox. VNPAY_QR cần Payment ID SUCCESS của đúng session/bãi/VND và provider attempt thành công. PREPAID không phải cách bỏ qua phụ thu.
+- Authorize-exit xác nhận đủ điều kiện tài chính nhưng giữ slot OCCUPIED. Staff thao tác cổng, quan sát xe ra rồi Confirm với staffObservedExit=true. API không trả giả barrier OPEN.
+- Trước khi cập nhật: request lock → VEHICLE → SLOT → khóa dòng và đọc lại. Session COMPLETED, assignment vacated_at, booking, reservation, audit, inbox và realtime outbox cùng transaction.
+- Retry cùng actor/key/body trả outcome cũ sau khi kiểm tra quyền hiện tại. Body khác với key cũ trả 409. Sau commit worker gửi SlotStatusChanged; delivery có thể lặp nên không tuyên bố exactly-once.
 
-### 1.1. Bối cảnh & Mục đích
-Sau khi xe đã thực hiện Check-in thành công (SCRUM-49) và chiếm giữ ô đỗ vật lý (`OCCUPIED`), hệ thống cần một luồng **Check-out khép kín** khi xe rời bãi đỗ:
-1. **Đối soát nhận diện phương tiện:** Nhận diện biển số xe tại cổng ra (`detectedPlate`) từ camera trạm cổng (phối hợp AI OCR) hoặc mã vé QR, đối chiếu với biển số lúc vào (`plate_snapshot`).
-2. **Kích hoạt cảnh báo sai lệch biển số (Incident #0482):** Ngăn chặn gian lận, tráo xe hoặc nhầm lẫn vé bằng cách khóa luồng check-out tự động khi phát hiện biển số không khớp và chuyển sang chế độ can thiệp thủ công của Staff.
-3. **Chốt thời gian đỗ & Quyết toán cước phí:**
-   - **Khách đặt trước (Booking):** Nếu ra đúng giờ (`currentTime <= expectedExitAt`), cước phụ thu là `0 VNĐ`. Nếu quá hạn (`currentTime > expectedExitAt`), tính phí phụ thu ngoài giờ (Overtime Fee) theo block 15 phút thông qua Payment Service.
-   - **Khách vãng lai (Walk-in):** Tính cước phí toàn bộ thời gian gửi thực tế từ lúc vào đến lúc ra.
-4. **Giải phóng ô đỗ & Đồng bộ thời gian thực:**
-   - Đóng `parking_sessions` (`status = 'COMPLETED'`), cập nhật `session_slot_assignments` (`vacated_at = now`).
-   - Giải phóng ô đỗ về **`AVAILABLE`** dưới sự bảo vệ của **PostgreSQL Advisory Lock** (`pg_advisory_xact_lock`).
-   - Phát sự kiện SignalR `SlotStatusChanged` tới Web Client và 3D Digital Twin, đồng thời phát lệnh mở barrier cổng ra.
+## 2. Các endpoint
 
----
+Tất cả REST trả envelope result/isSuccess/statusCode/message. Các endpoint Parking dưới đây yêu cầu Bearer Staff/Manager đúng bãi.
 
-## 2. QUY TRÌNH NGHIỆP VỤ 2 GIAI ĐOẠN (TWO-PHASE CHECK-OUT)
+### POST /api/v1/check-out/quote
 
-Để đảm bảo hiệu năng (< 1.2s), trải nghiệm bốt trực thực tế và an toàn giao dịch, luồng Check-out được chia làm **2 API**:
-1. **API 1 — Tính cước & Đối soát (Quote / Preview):** `POST /api/v1/check-out/quote`  
-   Xe dừng trước vạch cổng ra -> Camera đọc biển số -> Hệ thống tra cứu phiên đỗ, đối soát biển số, tính tiền thừa/thiếu và hiển thị lên màn hình bốt trực.
-2. **API 2 — Xác nhận Check-out & Mở cổng (Confirm & Release):** `POST /api/v1/check-out`  
-   Sau khi khách thanh toán xong (tiền mặt cho Staff hoặc quét VNPay-QR thành công) -> Staff xác nhận hoặc hệ thống tự động hoàn tất check-out, giải phóng slot và mở barrier.
+Request: {"lotId":"UUID","gateId":"UUID","sessionId":"UUID","detectedPlate":"78A-99999"}. Có thể truyền qrPayload EXIT1 thay sessionId. QR-only xác định được session nhưng trả PLATE_OBSERVATION_REQUIRED và không có quoteToken.
 
----
+Response result chính: sessionId, entryPlate, exitPlate, isPlateMatched, quoteAt, totalAmountDue, paymentRequired, checkoutCredit, quoteToken, validUntil. Biển số không khớp: isPlateMatched=false, incidentCode=INCIDENT_0482_PLATE_MISMATCH, quoteToken=null; không cấp quyền xuất bãi.
 
-## 3. ĐẶC TẢ CHI TIẾT API 1: TÍNH CƯỚC & ĐỐI SOÁT (CHECK-OUT QUOTE)
+### POST /api/v1/check-out/authorize-exit
 
-### 3.1. Đặc tả kỹ thuật
-- **Method:** `POST`
-- **Endpoint:** `/api/v1/check-out/quote`
-- **Authentication:** Yêu cầu JWT Token (Bearer).
-- **Phân quyền (RBAC):** `PARKING_STAFF`, `PARKING_MANAGER` (có phân công hiệu lực tại bãi đỗ `lotId`).
+Header Idempotency-Key. Request:
 
-### 3.2. Request Payload Mẫu
-```json
-{
-  "lotId": "11111111-1111-4111-8111-111111111111",
-  "gateId": "22222222-2222-4222-8222-222222222222",
-  "detectedPlate": "51A-123.45",
-  "qrPayload": null
-}
-```
+~~~json
+{"sessionId":"UUID","gateId":"UUID","detectedPlate":"78A-99999","quoteToken":"CHECKOUT1...","paymentMethod":"CASH","cashReceived":7500,"staffNotes":"Đã thu đủ tiền"}
+~~~
 
-**Bảng mô tả tham số đầu vào:**
-| Trường (Field) | Kiểu dữ liệu | Bắt buộc | Mô tả & Ràng buộc |
-| :--- | :---: | :---: | :--- |
-| `lotId` | `UUID` | Có | Định danh bãi đỗ xe xảy ra check-out. |
-| `gateId` | `UUID` | Có | Định danh cổng ra (phải là cổng OUT của đúng bãi đỗ). |
-| `detectedPlate` | `string` | Có* | Biển số xe ghi nhận tại camera cổng ra (chuẩn hóa không dấu, VD: `51A-123.45`). |
-| `qrPayload` | `string` | Không* | Chuỗi mã QR vé xuất trình (nếu dùng phương thức quét vé). |
+Response result: {"sessionId":"UUID","exitPermitToken":"EXITPERMIT1...","validUntil":"ISO8601","amountPaid":7500,"paymentId":"UUID","barrierStatus":"MANUAL_OPEN_AUTHORIZED","slotStatus":"OCCUPIED"}.
 
-*\* Bắt buộc có ít nhất một trong hai: `detectedPlate` hoặc `qrPayload`.*
+NONE chỉ được chấp nhận khi không còn phí. VNPay dùng paymentMethod=VNPAY_QR và paymentReference là Payment ID thật. Mạng lỗi sau khi Payment đã commit: retry/quote mới vẫn dùng số tiền đã ghi nhận; không hoàn tác giả giao dịch tiền bằng rollback Parking.
 
-### 3.3. Response Payload Mẫu (Thành công — 200 OK)
-```json
-{
-  "result": {
-    "sessionId": "a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c8d",
-    "bookingId": "7da3c6a1-41cc-412d-98e6-f53a280dadb8",
-    "slotId": "77777777-7777-4777-8777-777777777777",
-    "slotCode": "A01",
-    "entryPlate": "51A-123.45",
-    "exitPlate": "51A-123.45",
-    "isPlateMatched": true,
-    "entryAt": "2026-10-30T09:05:00+07:00",
-    "expectedExitAt": "2026-10-30T10:05:00+07:00",
-    "quoteAt": "2026-10-30T10:20:00+07:00",
-    "totalDurationMinutes": 75,
-    "overdueMinutes": 15,
-    "prepaidAmount": 20000,
-    "overtimeAmount": 5000,
-    "totalAmountDue": 5000,
-    "paymentRequired": true,
-    "incidentCode": null
-  },
-  "isSuccess": true,
-  "statusCode": 200,
-  "message": "Tra cứu thông tin cước phí check-out thành công."
-}
-```
+### POST /api/v1/check-out
 
----
+Header Idempotency-Key. Gửi cùng thông tin nhận diện/quote, thêm exitPermitToken và staffObservedExit=true. Staff chỉ xác nhận sau khi quan sát xe đã ra. Backend xác minh lại quyền, token, biển số, phí, trạng thái và số tiền còn hiệu lực.
 
-## 4. ĐẶC TẢ CHI TIẾT API 2: XÁC NHẬN CHECK-OUT & GIẢI PHÓNG SLOT (CONFIRM CHECK-OUT)
+Response result: sessionId, bookingId, lotId, slotId, slotCode, exitedAt, finalAmountPaid, paymentMethod, paymentId, barrierStatus=STAFF_CONFIRMED_EXIT, slotStatus=AVAILABLE. finalAmountPaid là khoản phụ thu/walk-in đã ghi nhận cho session, không cộng lại khoản booking trả trước.
 
-### 4.1. Đặc tả kỹ thuật
-- **Method:** `POST`
-- **Endpoint:** `/api/v1/check-out`
-- **Headers bắt buộc:**
-  - `Authorization: Bearer <Token>`
-  - `Idempotency-Key: <UUID hoặc chuỗi duy nhất>` (Bảo đảm chống trừ tiền / mở barrier lặp lại)
-- **Phân quyền (RBAC):** `PARKING_STAFF`, `PARKING_MANAGER` (có phân công tại đúng bãi).
+### POST /api/v1/check-out/{sessionId}/qr
 
-### 4.2. Request Payload Mẫu
-```json
-{
-  "sessionId": "a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c8d",
-  "gateId": "22222222-2222-4222-8222-222222222222",
-  "paymentMethod": "CASH",
-  "cashReceived": 5000,
-  "paymentReference": null,
-  "staffNotes": "Thu tiền mặt đủ tại bốt ra, barrier mở cho xe qua."
-}
-```
+Không có Body. Staff đúng bãi nhận {"qrPayload":"EXIT1...","expiresAt":"ISO8601"}. QR này dùng để tra session; không tự mở cổng hoặc giải phóng chỗ.
 
-**Bảng mô tả tham số đầu vào:**
-| Trường (Field) | Kiểu dữ liệu | Bắt buộc | Mô tả & Ràng buộc |
-| :--- | :---: | :---: | :--- |
-| `sessionId` | `UUID` | Có | Định danh phiên gửi xe đang ở trạng thái `ACTIVE`. |
-| `gateId` | `UUID` | Có | Định danh cổng ra mà xe đang thực sự xuất bến. |
-| `paymentMethod` | `string` | Có | Hình thức thanh toán: `NONE` (nếu tiền = 0), `CASH` (tiền mặt tại bốt), `VNPAY_QR`. |
-| `cashReceived` | `decimal` | Có* | Số tiền mặt thực tế nhân viên thu từ khách (*bắt buộc nếu `paymentMethod = CASH`). |
-| `paymentReference`| `string` | Không | Mã giao dịch tham chiếu từ cổng thanh toán (nếu thanh toán qua VNPay). |
-| `staffNotes` | `string` | Không | Ghi chú của nhân viên bốt trực khi cho xe ra. |
+### POST /api/v1/payments/checkout/vnpay
 
-### 4.3. Response Payload Mẫu (Thành công — 200 OK)
-```json
-{
-  "result": {
-    "sessionId": "a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c8d",
-    "bookingId": "7da3c6a1-41cc-412d-98e6-f53a280dadb8",
-    "lotId": "11111111-1111-4111-8111-111111111111",
-    "slotId": "77777777-7777-4777-8777-777777777777",
-    "slotCode": "A01",
-    "exitedAt": "2026-10-30T10:20:15+07:00",
-    "finalAmountPaid": 5000,
-    "paymentMethod": "CASH",
-    "barrierStatus": "OPEN",
-    "slotStatus": "AVAILABLE"
-  },
-  "isSuccess": true,
-  "statusCode": 200,
-  "message": "Xác nhận check-out thành công. Ô đỗ đã được giải phóng và mở barrier."
-}
-```
+Bearer Staff đúng bãi. Request {"quoteToken":"CHECKOUT1..."}. Payment gọi Parking xác minh quote, tạo khoản PENDING theo session, trả paymentId/amount/status/paymentUrl. Retry quote cũ trả cùng khoản pending. Khi đã có khoản pending phải giải quyết trạng thái trước khi tạo khoản khác.
 
----
+IPN dùng GET /api/v1/payments/vnpay/ipn; merchant ref CO... đi vào checkout handler. Chỉ chữ ký hợp lệ + số tiền chính xác + ResponseCode=00 + TransactionStatus=00 mới cập nhật SUCCESS, audit/outbox cùng transaction. Return URL không xác nhận thanh toán. Callback không kết thúc session hoặc giải phóng slot.
 
-## 5. BẢNG MÃ LỖI VÀ XỬ LÝ NGOẠI LỆ (VALIDATION & ERROR CODES)
+### SignalR /hubs/parking
 
-Tất cả phản hồi lỗi đều tuân thủ `ApiResponse<T>` với `isSuccess: false` và `result: null`:
+Event SlotStatusChanged gồm eventId, parkingLotId, slotId, status, observedAt. Chỉ dữ liệu trạng thái công khai; không chứa biển số/người dùng/session. Worker gửi sau commit. Client reconnect phải lấy lại snapshot availability; không coi sự kiện đã gửi là bằng chứng mọi client đã nhận.
 
-| HTTP Status | Error / Business Code | Nguyên nhân vi phạm | Phản hồi mẫu (JSON) |
-| :---: | :--- | :--- | :--- |
-| **400** | `INVALID_ARGUMENT` | Thiếu biển số, sai định dạng UUID hoặc dữ liệu tiền âm. | `{"result": null, "isSuccess": false, "statusCode": 400, "message": "Biển số xe quan sát không được để trống."}` |
-| **401** | `UNAUTHORIZED` | Token JWT không hợp lệ hoặc đã hết hạn. | `{"result": null, "isSuccess": false, "statusCode": 401, "message": "Yêu cầu xác thực tài khoản."}` |
-| **403** | `FORBIDDEN_FACILITY` | Nhân viên không được phân công quản lý bãi xe này. | `{"result": null, "isSuccess": false, "statusCode": 403, "message": "Nhân viên không có quyền thao tác tại bãi đỗ xe này."}` |
-| **404** | `SESSION_NOT_FOUND` | Không có phiên đỗ nào đang `ACTIVE` với biển số tương ứng tại bãi. | `{"result": null, "isSuccess": false, "statusCode": 404, "message": "Không tìm thấy phiên gửi xe hợp lệ đang hoạt động cho biển số này."}` |
-| **409** | `INCIDENT_PLATE_MISMATCH` | Biển số xe lúc ra không khớp biển số lúc vào (Kích hoạt Incident #0482). | `{"result": null, "isSuccess": false, "statusCode": 409, "message": "Cảnh báo #0482: Biển số lúc ra không khớp với dữ liệu lúc vào bãi. Yêu cầu kiểm tra trực tiếp."}` |
-| **409** | `PAYMENT_UNPAID` | Chưa hoàn tất thanh toán số tiền phụ thu mà đã bấm xác nhận check-out. | `{"result": null, "isSuccess": false, "statusCode": 409, "message": "Đơn gửi xe còn khoản phí chưa thanh toán (5,000 VNĐ). Không thể mở cổng."}` |
-| **409** | `SESSION_ALREADY_COMPLETED` | Phiên gửi xe này đã được check-out trước đó. | `{"result": null, "isSuccess": false, "statusCode": 409, "message": "Phiên gửi xe này đã kết thúc."}` |
+## 3. Mã lỗi
 
----
+400: thiếu trường, chưa xác nhận physical exit, UUID/tiền sai, cổng ENTRY ở quote. 401: JWT sai/hết hạn. 403: không có quyền bãi. 404: không có session. 409: token/biển số/giá/trạng thái/key xung đột hoặc chưa thanh toán. 503: Identity/Payment/database/snapshot không sẵn sàng; không cho qua.
 
-## 6. SƠ ĐỒ HOẠT ĐỘNG VÀ TRÌNH TỰ (DIAGRAMS)
+## 4. Activity
 
-### 6.1. Activity Diagram (Sơ đồ luồng nghiệp vụ Check-out)
-
-```mermaid
+~~~mermaid
 flowchart TD
-    Start([Xe tiến vào làn cổng ra]) --> ReadCamera[Camera ANPR quét biển số ra detectedPlate]
-    ReadCamera --> CallQuote[Staff UI gửi request POST /api/v1/check-out/quote]
-    CallQuote --> CheckActiveSession{Tìm thấy session ACTIVE trong bãi?}
-    
-    CheckActiveSession -- Không --> Return404[Trả lỗi 404: Không tìm thấy phiên gửi xe]
-    CheckActiveSession -- Có --> ComparePlate{Biển số ra trùng khớp biển số vào?}
-    
-    ComparePlate -- Không khớp --> Trigger0482[Kích hoạt Cảnh báo Sự cố #0482 PLATE_MISMATCH]
-    Trigger0482 --> BlockAutoExit[Khóa mở barrier - Chuyển Staff xử lý thủ công]
-    
-    ComparePlate -- Khớp --> CalcTime[Tính thời gian thực tế exit_at so với expected_exit_at]
-    CalcTime --> CheckOverdue{Có phát sinh quá giờ hoặc vãng lai?}
-    
-    CheckOverdue -- Không quá giờ --> QuoteFree[Tiền phụ thu = 0 VNĐ - Sẵn sàng check-out]
-    CheckOverdue -- Quá giờ/Vãng lai --> CallPaymentEngine[Gọi Payment Service tính cước theo Block 15p]
-    CallPaymentEngine --> DisplayFee[Hiển thị số tiền phụ thu lên màn hình Staff]
-    
-    QuoteFree --> SendConfirm[Gửi POST /api/v1/check-out xác nhận]
-    DisplayFee --> PaymentProcess{Khách chọn hình thức thanh toán}
-    
-    PaymentProcess -- Tiền mặt CASH --> StaffCollect[Nhân viên bốt thu tiền mặt & nhập ghi chú]
-    PaymentProcess -- VNPay-QR --> CustomerScanQR[Khách quét mã VNPay-QR trên ứng dụng ngân hàng]
-    
-    CustomerScanQR --> WaitIPN[Chờ Webhook IPN VNPay thành công]
-    WaitIPN --> SendConfirm
-    StaffCollect --> SendConfirm
-    
-    SendConfirm --> AcquireLock[PostgreSQL Advisory Lock slot_id]
-    AcquireLock --> DBTransaction[Cập nhật DB: parking_sessions COMPLETED, assignments vacated_at]
-    DBTransaction --> ReleaseSlot[Giải phóng slot -> AVAILABLE]
-    DBTransaction --> AuditLog[Ghi nhật ký AuditLogs Append-Only]
-    AuditLog --> CommitTx[Commit Transaction]
-    CommitTx --> BroadcastSignalR[Phát SignalR SlotStatusChanged: AVAILABLE]
-    CommitTx --> OpenBarrier[Gửi lệnh mở Barrier cho xe xuất bãi]
-    OpenBarrier --> End([Kết thúc lượt gửi xe hoàn tất])
-```
+ A[Staff gửi session hoặc EXIT1 QR] --> B[Kiểm tra quyền và cổng]
+ B --> C[Đối chiếu biển số và tạo quote có chữ ký]
+ C --> D{Khớp biển số?}
+ D -- Không --> X[Ghi audit và chặn xuất bãi]
+ D -- Có --> E[Authorize-exit xác minh phí qua Payment]
+ E --> F{Đã đủ tiền?}
+ F -- Không --> Y[Giữ slot OCCUPIED]
+ F -- Có --> G[Cấp permit cho Staff thao tác cổng]
+ G --> H[Staff quan sát xe ra và gửi Confirm]
+ H --> I[Kiểm tra lại và transaction VEHICLE → SLOT]
+ I --> J[Commit session COMPLETED và outbox]
+ J --> K[Worker phát SlotStatusChanged]
+~~~
 
----
+## 5. Sequence
 
-### 6.2. Sequence Diagram (Sơ đồ trình tự tương tác các thành phần)
-
-```mermaid
+~~~mermaid
 sequenceDiagram
-    autonumber
-    actor Staff as Nhân viên Bốt Trực
-    participant FE as Gate Station UI (Frontend)
-    participant API as Parking Controller (.NET 9)
-    participant Core as Parking Checkout Handler
-    participant Pay as Payment Service
-    participant DB as PostgreSQL Database
-    participant Hub as SignalR ParkingHub
-    participant Barrier as Barrier Controller
+ actor Staff
+ participant P as Parking API
+ participant I as Identity
+ participant M as Payment
+ participant DB as Parking DB
+ participant H as SignalR
+ Staff->>P: Issue exit QR (tùy chọn)
+ P->>I: GATE tại bãi của session
+ P-->>Staff: EXIT1 QR có hạn
+ Staff->>P: Quote session/QR và biển số quan sát
+ P->>I: Kiểm tra quyền hiện tại
+ P->>DB: Đọc session + snapshot
+ P-->>Staff: CHECKOUT1 quote có chữ ký
+ opt Thanh toán VNPay
+ Staff->>M: Prepare VNPay bằng quoteToken
+ M->>P: gRPC xác minh quote/actor
+ M-->>Staff: PENDING và paymentUrl
+ Note over M: IPN có chữ ký mới ghi SUCCESS + outbox
+ end
+ Staff->>P: Authorize-exit
+ P->>M: Thu CASH hoặc xác minh payment/credit
+ M-->>P: Biên nhận thật
+ P-->>Staff: Permit; slot vẫn OCCUPIED
+ Note over Staff: Thao tác cổng và quan sát xe thực sự rời bãi
+ Staff->>P: Confirm + permit + staffObservedExit
+ P->>I: Kiểm tra lại GATE
+ P->>M: Kiểm tra credit nếu có phụ thu
+ P->>DB: Transaction, khóa theo thứ tự, đọc lại và cập nhật
+ DB-->>P: Commit
+ P-->>Staff: STAFF_CONFIRMED_EXIT / AVAILABLE
+ DB->>H: Worker đọc outbox và phát sau commit
+~~~
 
-    Note over Staff,FE: Pha 1: Nhận diện & Tính cước (Quote)
-    Staff->>FE: Xe đến cổng, nhận diện biển số 51A-123.45
-    FE->>API: POST /api/v1/check-out/quote (lotId, gateId, detectedPlate)
-    API->>Core: Handle(GetCheckOutQuoteQuery)
-    Core->>DB: Truy vấn parking_sessions ACTIVE kèm slot_id & plate_snapshot
-    DB-->>Core: Session Entity (entry_at, expected_exit_at, plate_snapshot)
-    
-    alt Biển số sai lệch
-        Core-->>API: Trả lỗi 409 (Incident #0482 Plate Mismatch)
-        API-->>FE: Hiển thị cảnh báo lệch biển số màu đỏ
-    else Biển số trùng khớp
-        Core->>Pay: CalculateFee(duration, pricingSnapshotId, isGoldStar)
-        Pay-->>Core: FeeResult (overtimeAmount: 5,000 VNĐ)
-        Core-->>API: CheckOutQuoteResultDto
-        API-->>FE: 200 OK (Cước: 5,000 VNĐ, Cần thanh toán)
-    end
+## 6. Chạy local và giới hạn
 
-    Note over Staff,FE: Pha 2: Xác nhận thu tiền & Giải phóng Slot
-    Staff->>FE: Khách đưa tiền mặt 5,000 VNĐ, bấm "Xác nhận Check-out"
-    FE->>API: POST /api/v1/check-out (sessionId, paymentMethod: CASH, cashReceived: 5000)
-    API->>Core: Handle(ConfirmCheckOutCommand)
-    
-    Core->>DB: BEGIN TRANSACTION
-    Core->>DB: SELECT pg_advisory_xact_lock(slot_id)
-    Core->>DB: UPDATE parking_sessions SET status='COMPLETED', exit_at=now, exit_gate_id=@gateId
-    Core->>DB: UPDATE session_slot_assignments SET vacated_at=now WHERE session_id=@id
-    Core->>DB: UPDATE bookings SET status='COMPLETED' WHERE id=@bookingId
-    Core->>DB: INSERT INTO audit_logs (CHECK_OUT, slotId, AVAILABLE)
-    Core->>DB: COMMIT TRANSACTION
-    
-    par Phát sự kiện Real-time
-        Core->>Hub: Broadcast SlotStatusChanged(slotId, "AVAILABLE")
-        Hub-->>FE: 3D Canvas chuyển màu slot từ Đỏ sang Xanh
-    and Điều khiển phần cứng
-        Core->>Barrier: Send Command "OPEN"
-    end
+Parking cấu hình Services:PaymentGrpc=http://127.0.0.1:8085 trong Development; Payment cần Services:ParkingGrpc=http://127.0.0.1:8081. Dùng cùng service key, giữ credential trong secrets/env. Không thêm bảng mới cho checkout: tận dụng billing_accounts/session, billing_lines, payments, audit/inbox/outbox hiện có. Không tự chạy SQL trên database demo.
 
-    Core-->>API: CheckOutResultDto (Barrier OPEN, Slot AVAILABLE)
-    API-->>FE: 200 OK (Check-out thành công)
-```
+Đây là **chế độ Staff vận hành cổng và xác nhận physical exit**. Chưa có contract/thiết bị IoT được cung cấp nên chưa kết nối barrier/camera thật. VNPay được kiểm thử bằng callback có chữ ký giả lập; không tuyên bố đã giao dịch ngân hàng thật. Thời gian mẫu local không thay cho kiểm thử tải/SLA <1.2 giây. Màn hình FE Staff chưa được nghiệm thu theo contract mới. Bộ Postman demo cá nhân chỉ lưu local; request mẫu và sơ đồ tích hợp chính thức nằm trong tài liệu này.
 
----
-
-## 7. RÀNG BUỘC CSDL & DỮ LIỆU BẤT BIẾN (DATABASE INVARIANTS)
-
-1. **Trigger `tr_session_identity` & `ct_session_occupancy`:**  
-   Khi `parking_sessions` được cập nhật sang trạng thái `COMPLETED` kèm `exit_at`, bảng `session_slot_assignments` bắt buộc phải cập nhật `vacated_at = exit_at` trong cùng một transaction. Nếu không, PostgreSQL Trigger sẽ rollback toàn bộ giao dịch với lỗi mã `23514`.
-2. **Khóa chống tranh chấp ô đỗ:**  
-   Thao tác check-out phải giữ `pg_advisory_xact_lock(slot_id)` để đảm bảo ô đỗ không bị cấp cho booking mới hoặc worker khác can thiệp trong tích tắc đang đổi trạng thái.
-3. **Phân quyền cơ sở (Facility-Scoped Isolation):**  
-   Nhân viên bãi nào chỉ được phép thực hiện check-out cho xe tại bãi đó. Không thể dùng quyền ở Bãi A để xác nhận check-out cho xe ở Bãi B.
-4. **Idempotency Key:**  
-   Header `Idempotency-Key` bảo đảm nếu mạng chập chờn gửi lại 2 lần liên tiếp, hệ thống không thu tiền 2 lần và không ghi nhận 2 lần mở barrier.
-
----
-
-## 8. DANH SÁCH FILE VÀ CẤU TRÚC CLEAN ARCHITECTURE DỰ KIẾN TRIỂN KHAI
-
-Khi chuyển sang pha Implementation, mã nguồn sẽ được bố trí chuẩn chỉ theo Clean Architecture:
-
-```
-src/Services/Parking/
-├── Parking.Parking.Api/
-│   └── Controllers/
-│       └── CheckOutController.cs                 // 2 Endpoints: Quote & Confirm
-├── Parking.Parking.Application/
-│   ├── DTOs/
-│   │   ├── CheckOutQuoteRequestDto.cs
-│   │   ├── CheckOutQuoteResultDto.cs
-│   │   ├── ConfirmCheckOutRequestDto.cs
-│   │   └── ConfirmCheckOutResultDto.cs
-│   ├── Features/CheckOut/
-│   │   ├── Queries/
-│   │   │   ├── GetCheckOutQuoteQuery.cs
-│   │   │   └── GetCheckOutQuoteQueryHandler.cs
-│   │   └── Commands/
-│   │       ├── ConfirmCheckOutCommand.cs
-│   │       ├── ConfirmCheckOutCommandValidator.cs
-│   │       └── ConfirmCheckOutCommandHandler.cs
-│   └── Interfaces/
-│       └── IParkingRepository.cs                 // Khai báo hàm GetActiveSession & CompleteCheckOutAsync
-└── Parking.Parking.Persistence/
-    └── Repositories/
-        └── ParkingRepository.CheckOut.cs         // Thực thi SQL Transaction, Advisory Lock & Assignments
-```
+Build bằng `dotnet build Parking.Microservices.slnx --no-restore`. Chạy kiểm thử bằng `dotnet test tests/Parking.Microservices.Tests/Parking.Microservices.Tests.csproj --no-restore`; các test PostgreSQL cần `PARKING_TEST_ADMIN_CONNECTION` trỏ tới PostgreSQL localhost có quyền tạo database tạm. Không dùng connection string production cho kiểm thử. Kết quả phải phân biệt test đạt và test bị bỏ qua do thiếu cấu hình host/database.

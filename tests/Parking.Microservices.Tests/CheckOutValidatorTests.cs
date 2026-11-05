@@ -69,7 +69,7 @@ public class CheckOutValidatorTests
                 GateId: Guid.NewGuid(),
                 PaymentMethod: "CASH",
                 CashReceived: 10000,
-                StaffNotes: "Thu tiền đủ tại bốt"),
+                StaffNotes: "Thu tiền đủ tại bốt",DetectedPlate:"51A12345",QuoteToken:"server-quote",StaffObservedExit:true,ExitPermitToken:"server-permit"),
             IdempotencyKey: "checkout-key-01");
 
         var result = _confirmValidator.TestValidate(command);

@@ -24,7 +24,7 @@ public sealed class BookingPaymentQueryGrpc(NpgsqlDataSource db,IFacilityAccess 
             if(!await r.ReadAsync(context.CancellationToken))throw new RpcException(new Status(StatusCode.NotFound,"Booking not found"));
             lot=r.GetGuid(1);vehicle=r.GetGuid(2);owner=r.IsDBNull(3)?null:r.GetGuid(3);amount=checked((long)r.GetDecimal(4));currency=r.GetString(5);state=r.GetString(6);expiry=r.IsDBNull(7)?null:r.GetDateTime(7);
         }
-        if(state!="PENDING_PAYMENT" || expiry<=DateTime.UtcNow)throw new RpcException(new Status(StatusCode.FailedPrecondition,"Booking no longer payable"));
+        if(state!="PENDING_PAYMENT" || expiry is null || expiry<=clock.GetUtcNow().UtcDateTime)throw new RpcException(new Status(StatusCode.FailedPrecondition,"Booking no longer payable"));
         if(owner!=user)
         {
             try{await access.RequireAsync(user,lot,"CASH",context.CancellationToken);}

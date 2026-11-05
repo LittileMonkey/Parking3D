@@ -57,6 +57,16 @@ while (searchDir != null)
                     {
                         builder.Configuration["AI:OcrEndpoint"] = v;
                     }
+                    else if (k == "OLLAMA_ENDPOINT")
+                    {
+                        builder.Configuration["Ollama:Endpoint"] = v;
+                        builder.Configuration["AI:OllamaEndpoint"] = v;
+                    }
+                    else if (k == "OLLAMA_MODEL")
+                    {
+                        builder.Configuration["Ollama:Model"] = v;
+                        builder.Configuration["AI:OllamaModel"] = v;
+                    }
                 }
             }
         }

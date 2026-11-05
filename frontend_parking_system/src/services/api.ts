@@ -120,6 +120,22 @@ export interface AvailableSlot {
   status: "AVAILABLE" | "HELD" | "OCCUPIED" | "MAINTENANCE" | string;
 }
 
+export interface ParkingMapObject {
+  levelId: string;
+  objectType?: string | number;
+  refEntityId?: string;
+  slotId?: string;
+  positionX?: number;
+  positionY?: number;
+  positionZ?: number;
+  rotationX?: number;
+  rotationY?: number;
+  rotationZ?: number;
+  scaleX?: number;
+  scaleY?: number;
+  scaleZ?: number;
+}
+
 export interface ParkingLevelAvailability {
   levelId: string;
   levelCode: string;
@@ -137,6 +153,7 @@ export interface LotAvailability {
   occupiedCount: number;
   maintenanceCount: number;
   levels: ParkingLevelAvailability[];
+  mapObjects?: ParkingMapObject[];
 }
 
 export interface CreateBookingPayload {
@@ -610,6 +627,99 @@ export const api = {
     return request<AccountUserDto>("/api/v1/author/update-role", {
       method: "POST",
       body: JSON.stringify({ userId, roleCode }),
+    });
+  },
+
+  // ─── [SCRUM-99] REAL INCIDENTS & EXCEPTIONS ENDPOINTS ───────────────────────
+  async getIncidents(lotId: string, status?: string, severity?: string, query?: string, page = 1, pageSize = 25): Promise<{ items: any[]; totalCount: number }> {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (status && status !== "All") params.set("status", status);
+    if (severity && severity !== "All") params.set("severity", severity);
+    if (query) params.set("query", query);
+    return request<{ items: any[]; totalCount: number }>(`/api/v1/parking-lots/${lotId}/incidents?${params.toString()}`);
+  },
+
+  async getIncidentById(lotId: string, incidentId: string): Promise<any> {
+    return request<any>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}`);
+  },
+
+  async createIncident(lotId: string, payload: any, idempotencyKey?: string): Promise<any> {
+    const headers: Record<string, string> = {};
+    if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+    return request<any>(`/api/v1/parking-lots/${lotId}/incidents`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateIncidentStatus(lotId: string, incidentId: string, payload: { status: string; notes?: string; expectedVersion: number }): Promise<any> {
+    return request<any>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async reopenIncident(lotId: string, incidentId: string, payload: { reason: string; expectedVersion: number }): Promise<any> {
+    return request<any>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/reopen`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async cancelIncident(lotId: string, incidentId: string, payload: { reason: string; expectedVersion: number }): Promise<any> {
+    return request<any>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/cancel`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async createIncidentDecision(lotId: string, incidentId: string, payload: { decision: string; reason: string; evidence: any[]; expectedVersion: number }): Promise<any> {
+    return request<any>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/decisions`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getIncidentHistory(lotId: string, incidentId: string, page = 1, pageSize = 25): Promise<{ items: any[]; totalCount: number }> {
+    return request<{ items: any[]; totalCount: number }>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/history?page=${page}&pageSize=${pageSize}`);
+  },
+
+  // ─── [SCRUM-99] REAL SHIFT HANDOVER ENDPOINTS ──────────────────────────────
+  async getShiftHandovers(lotId: string, status?: string, page = 1, pageSize = 25): Promise<{ items: any[]; totalCount: number }> {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (status && status !== "All") params.set("status", status);
+    return request<{ items: any[]; totalCount: number }>(`/api/v1/parking-lots/${lotId}/shift-handovers?${params.toString()}`);
+  },
+
+  async getShiftHandoverById(lotId: string, handoverId: string): Promise<any> {
+    return request<any>(`/api/v1/parking-lots/${lotId}/shift-handovers/${handoverId}`);
+  },
+
+  async createShiftHandover(lotId: string, payload: any, idempotencyKey?: string): Promise<any> {
+    const headers: Record<string, string> = {};
+    if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+    return request<any>(`/api/v1/parking-lots/${lotId}/shift-handovers`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async confirmShiftHandover(lotId: string, handoverId: string, payload: { expectedVersion: number }, idempotencyKey?: string): Promise<any> {
+    const headers: Record<string, string> = {};
+    if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+    return request<any>(`/api/v1/parking-lots/${lotId}/shift-handovers/${handoverId}/confirm`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async reassignShiftHandoverReceiver(lotId: string, handoverId: string, payload: { receiverUserId: string; reason: string; expectedVersion: number }): Promise<any> {
+    return request<any>(`/api/v1/parking-lots/${lotId}/shift-handovers/${handoverId}/receiver`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
     });
   },
 };
