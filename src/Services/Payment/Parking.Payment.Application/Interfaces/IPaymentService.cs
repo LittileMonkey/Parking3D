@@ -47,10 +47,11 @@ namespace Parking.Payment.Application.Interfaces
         /// Tra cứu trạng thái thanh toán
         /// </summary>
         Task<PaymentStatusDto?> GetPaymentStatusByBookingIdAsync(Guid bookingId, CancellationToken ct = default);
+
         /// <summary>
-        /// Tra cứu và khởi tạo thông tin biên lai điện tử (E-Receipt) kèm mã xác thực số SHA-256.
+        /// Tra cứu, kiểm tra quyền Customer chính chủ hoặc Active Staff bãi xe, và in thông tin biên lai điện tử (E-Receipt).
         /// </summary>
-        Task<EReceiptDto?> GetReceiptAsync(Guid paymentId, CancellationToken ct = default);
+        Task<EReceiptDto?> GetReceiptAsync(Guid paymentId, Guid requestingUserId, CancellationToken ct = default);
 
 
     }

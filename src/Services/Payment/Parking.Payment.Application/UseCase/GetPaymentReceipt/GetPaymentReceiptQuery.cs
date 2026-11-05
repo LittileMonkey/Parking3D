@@ -9,8 +9,8 @@ using System.Threading.Tasks;
 namespace Parking.Payment.Application.UseCase.GetPaymentReceipt
 {
     /// <summary>
-    /// Query tra cứu hóa đơn điện tử (E-Receipt) theo PaymentId.
+    /// Query tra cứu và in hóa đơn điện tử (E-Receipt) theo PaymentId kèm định danh người yêu cầu đã qua xác thực.
     /// </summary>
-    public record GetPaymentReceiptQuery(Guid PaymentId) : IRequest<EReceiptDto?>;
+    public record GetPaymentReceiptQuery(Guid PaymentId, Guid RequestingUserId = default) : IRequest<EReceiptDto?>;
 
 }

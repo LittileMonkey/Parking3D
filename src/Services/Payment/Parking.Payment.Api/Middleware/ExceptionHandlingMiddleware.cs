@@ -100,30 +100,49 @@ namespace Parking.Payment.Api.Middleware
         private ErrorMessage HandleServiceException(Exception exception)
         {
             var serviceException = (ServiceException)exception;
+            // 1. Đặt tên mã lỗi ngắn gọn, có nghĩa thay vì dùng HTTP_409
+            var errorCode = serviceException.StatusCode switch
+            {
+                400 => "INVALID_REQUEST",
+                403 => "FORBIDDEN",
+                404 => "BOOKING_NOT_FOUND",
+                409 when serviceException.Message.Contains("Expired") || serviceException.Message.Contains("qua han")
+                    => "BOOKING_EXPIRED",
+                409 => "BOOKING_STATUS_CONFLICT",
+                422 => "CONCURRENCY_ERROR",
+                503 => "SERVICE_UNAVAILABLE",
+                _ => "PAYMENT_ERROR"
+            };
+            // 2. Xác định biến đang bị lỗi (ở trường hợp này là bookingId)
+            var errorField = (serviceException.StatusCode == 404 || serviceException.StatusCode == 409)
+                ? "bookingId"
+                : string.Empty;
             return new ErrorMessage
             {
                 Message = serviceException.Message,
                 ErrorDetails = new List<ErrorDetail>
-        {
-            new()
-            {
-                ErrorMessage = serviceException.Message,
-                ErrorCode = $"HTTP_{serviceException.StatusCode}",
-                ErrorField = string.Empty
-            }
-        }
+                {
+                    new()
+                    {
+                        ErrorMessage = null,        // Gán null để không bị lặp lại dòng chữ trên
+                        ErrorCode = errorCode,       // Ví dụ: "BOOKING_EXPIRED"
+                        ErrorField = errorField      // Gán: "bookingId"
+                    }
+                }
             };
         }
     }
+
+
     public class ExceptionHandlingMiddleware : IMiddleware
     {
-       public async Task InvokeAsync(HttpContext context, RequestDelegate next)
+        public async Task InvokeAsync(HttpContext context, RequestDelegate next)
         {
             try
             {
                 await next(context);
-            } 
-            catch(Exception ex)
+            }
+            catch (Exception ex)
             {
                 var exceptionHandle = new ErrorExceptionHandler();
                 var (status, errorMessage) = exceptionHandle.HandleException(ex);

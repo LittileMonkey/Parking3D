@@ -137,5 +137,45 @@ namespace Parking.Payment.Infrastructure.Repositories
                 VerificationHash: verificationHash
             );
         }
+
+
+        public async Task<PaymentAuthCheckDto?> GetPaymentForAuthCheckAsync(Guid paymentId, CancellationToken ct = default)
+        {
+            const string sql = """
+                SELECT 
+                    p.id, 
+                    a.lot_id, 
+                    a.booking_id, 
+                    p.status::text, 
+                    p.method::text, 
+                    p.collected_by,
+                    COALESCE(
+                        a.customer_id, 
+                        (SELECT actor_user_id FROM audit_logs WHERE entity_id = p.id::text AND action = 'CREATE_PAYMENT' LIMIT 1)
+                    ) AS customer_id
+                FROM payments p
+                JOIN billing_accounts a ON a.id = p.account_id
+                WHERE p.id = @paymentId OR a.booking_id = @paymentId
+                LIMIT 1;
+                """;
+
+            await using var cmd = _db.CreateCommand(sql);
+            cmd.Parameters.AddWithValue("paymentId", paymentId);
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+            if (!await reader.ReadAsync(ct))
+            {
+                return null;
+            }
+
+            return new PaymentAuthCheckDto(
+                PaymentId: reader.GetGuid(0),
+                LotId: reader.GetGuid(1),
+                BookingId: reader.IsDBNull(2) ? null : reader.GetGuid(2),
+                Status: reader.GetString(3),
+                Method: reader.GetString(4),
+                CollectedBy: reader.IsDBNull(5) ? null : reader.GetGuid(5),
+                CustomerId: reader.IsDBNull(6) ? null : reader.GetGuid(6)
+            );
+        }
     }
 }

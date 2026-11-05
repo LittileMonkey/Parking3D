@@ -14,14 +14,17 @@ namespace Parking.Payment.Application.UseCase.GetPaymentReceipt
     /// </summary>
     public class GetPaymentReceiptQueryHandler : IRequestHandler<GetPaymentReceiptQuery, EReceiptDto?>
     {
-        private readonly IPaymentRepository _paymentRepository;
-        public GetPaymentReceiptQueryHandler(IPaymentRepository paymentRepository)
+        private readonly IPaymentService _paymentService;
+
+        public GetPaymentReceiptQueryHandler(IPaymentService paymentService)
         {
-            _paymentRepository = paymentRepository;
+            _paymentService = paymentService;
         }
+
         public async Task<EReceiptDto?> Handle(GetPaymentReceiptQuery request, CancellationToken cancellationToken)
         {
-            return await _paymentRepository.GetReceiptAsync(request.PaymentId, cancellationToken);
+            return await _paymentService.GetReceiptAsync(request.PaymentId, request.RequestingUserId, cancellationToken);
         }
     }
+
 }

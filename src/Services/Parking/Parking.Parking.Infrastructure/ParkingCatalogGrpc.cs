@@ -60,6 +60,7 @@ public sealed class ParkingCatalogGrpc(IParkingRepository repository, IParkingLo
         double multiplier = root.TryGetProperty("multiplier", out var m) ? m.GetDouble() : 1.2;
         if (multiplier < 1.0) 
             multiplier = 1.2;
+
         // Block đầu tiên (60 phút) tính tương đương 4 block 15p nếu DB không có cấu hình block đầu riêng
         int initialMinutes = root.TryGetProperty("initialBlockMinutes", out var ibm) ? ibm.GetInt32() : 60;
         long initialRate = root.TryGetProperty("initialRateVnd", out var irv)
