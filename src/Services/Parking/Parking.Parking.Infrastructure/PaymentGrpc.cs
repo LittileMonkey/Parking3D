@@ -34,7 +34,16 @@ public sealed class BookingPaymentQueryGrpc(NpgsqlDataSource db,IFacilityAccess 
                 // Fallback nếu Identity gRPC bận hoặc timeout khi test nội bộ
             }
         }
-        return new BookingQuoteReply{BookingId=booking.ToString(),LotId=lot.ToString(),VehicleId=vehicle.ToString(),AmountMinor=amount,Currency=currency,Status=state};
+        return new BookingQuoteReply
+        {
+            BookingId = booking.ToString(),
+            LotId = lot.ToString(),
+            VehicleId = vehicle.ToString(),
+            AmountMinor = amount,
+            Currency = currency,
+            Status = state,
+            CustomerId = owner?.ToString() ?? string.Empty
+        };
     }
 }
 

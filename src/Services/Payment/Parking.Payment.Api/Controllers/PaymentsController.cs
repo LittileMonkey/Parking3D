@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Parking.Payment.Api.Common;
 using Parking.Payment.Application.DTOs;
@@ -149,24 +150,38 @@ namespace Parking.Payment.Api.Controllers
             return Ok(response);
         }
         /// <summary>
-        /// Tra cứu hóa đơn điện tử (E-Receipt) kèm mã xác thực số theo PaymentId (API 5 - SCRUM-72)
+        /// Tra cứu / in hóa đơn điện tử (E-Receipt) kèm kiểm tra quyền Customer chính chủ hoặc Staff bãi xe (API 5 - SCRUM-72 & S3-06)
         /// </summary>
+        [Authorize]
         [HttpGet("{paymentId:guid}/receipt")]
         public async Task<IActionResult> GetPaymentReceipt(Guid paymentId, CancellationToken cancellationToken)
         {
-            var query = new GetPaymentReceiptQuery(paymentId);
-            // 1. Gửi qua MediatR chạy qua ValidationBehavior và Handler
+            // 1. Trích xuất User ID từ JWT Token (sub, NameIdentifier, id) hoặc Header X-User-Id
+            var userClaim = User.FindFirst("sub")?.Value
+                         ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                         ?? User.FindFirst("id")?.Value
+                         ?? Request.Headers["X-User-Id"].FirstOrDefault();
+            // 2. Chặn đứng request không hợp lệ: Tuyệt đối KHÔNG cấp fallback ID
+            if (!Guid.TryParse(userClaim, out var requestingUserId) || requestingUserId == Guid.Empty)
+            {
+                return Unauthorized(ApiResponse<EReceiptDto>.Fail(
+                    default!,
+                    "Authentication required. Invalid or missing user token.",
+                    401));
+            }
+            // 3. Gửi sang MediatR với UserId thật của người gọi
+            var query = new GetPaymentReceiptQuery(paymentId, requestingUserId);
             var resultDto = await _mediator.Send(query, cancellationToken);
-            // 2. Nếu không tìm thấy bản ghi thanh toán hoặc đơn chưa thanh toán thành công
+            // 4. Nếu không tìm thấy
             if (resultDto == null)
             {
                 var notFoundResponse = ApiResponse<EReceiptDto>.Fail(
                     default!,
-                    "Payment receipt not found or payment is not completed yet.",
+                    "Payment receipt not found.",
                     404);
                 return NotFound(notFoundResponse);
             }
-            // 3. Bọc kết quả vào phong bì ApiResponse chuẩn 200 OK
+            // 5. Trả về kết quả đóng gói chuẩn ApiResponse 200 OK
             var response = ApiResponse<EReceiptDto>.Success(
                 resultDto,
                 "Electronic receipt retrieved successfully.",
