@@ -6,6 +6,13 @@ namespace Parking.Parking.Application;
 // Application phụ thuộc hợp đồng này; kết nối, SQL và transaction nằm ở Persistence.
 public interface IParkingRepository
 {
+
+    /// <summary>Lấy chi tiết thông tin bãi đỗ xe theo ID.</summary>
+    Task<ParkingLotDetailDto?> GetParkingLotDetailAsync(Guid lotId, CancellationToken ct) => Task.FromResult<ParkingLotDetailDto?>(null);
+
+    /// <summary>Lấy toàn bộ cây cấu trúc không gian 3D của bãi xe (Level -> Zone -> Slot kèm tọa độ).</summary>
+    Task<LotLayout3DDto?> GetLotLayout3DAsync(Guid lotId, CancellationToken ct) => Task.FromResult<LotLayout3DDto?>(null);
+    
     /// <summary>Liệt kê các bãi đang hoạt động với dữ liệu công khai.</summary>
     Task<IReadOnlyList<LotView>> ListLotsAsync(CancellationToken ct);
 
