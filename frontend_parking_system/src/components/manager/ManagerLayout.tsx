@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
+  LogOut,
   Building2,
   Box,
   Car,
@@ -102,18 +103,6 @@ export default function ManagerLayout() {
       fullName: "Báo cáo & Audit logs",
       icon: <FileText size={21} />,
     },
-    {
-      to: "/booking",
-      label: "Bản đồ 3D",
-      fullName: "Bản đồ 3D bãi xe",
-      icon: <Box size={21} />,
-    },
-    {
-      to: "/staff/operations",
-      label: "Kiểm soát xe",
-      fullName: "Cổng kiểm soát xe",
-      icon: <Car size={21} />,
-    },
   ];
 
   return (
@@ -132,15 +121,6 @@ export default function ManagerLayout() {
             <ParkingCircle size={24} />
           </div>
 
-          <button
-            type="button"
-            className="pm-dock-link"
-            style={{ width: "36px", height: "36px", opacity: 0.7 }}
-            onClick={() => navigate("/staff/operations")}
-            title="Chuyển chế độ điều phối"
-          >
-            <ArrowLeftRight size={17} />
-          </button>
         </div>
 
         {/* Vertical Icon Navigation List */}
@@ -326,16 +306,23 @@ export default function ManagerLayout() {
                 <button
                   type="button"
                   style={{ width: "100%", background: "none", border: "none", color: "var(--pm-text-heading)", textAlign: "left", padding: "10px 12px", borderRadius: "10px", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", fontSize: "12px", fontWeight: 600 }}
-                  onClick={() => { setShowProfileMenu(false); navigate("/staff/dashboard"); }}
+                  onClick={() => { setShowProfileMenu(false); navigate("/manager/reports-audit"); }}
                 >
-                  <Users size={14} style={{ color: "#ff7828" }} /> Chuyển Cổng Nhân Viên
+                  <FileText size={14} style={{ color: "#ff7828" }} /> Nhật Ký Hoạt Động & Audit
                 </button>
                 <button
                   type="button"
                   style={{ width: "100%", background: "none", border: "none", color: "var(--pm-text-heading)", textAlign: "left", padding: "10px 12px", borderRadius: "10px", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", fontSize: "12px", fontWeight: 600 }}
-                  onClick={() => { setShowProfileMenu(false); navigate("/"); }}
+                  onClick={() => { setShowProfileMenu(false); navigate("/manager/staff-shifts"); }}
                 >
-                  <Building2 size={14} style={{ color: "#14afbe" }} /> Về Trang Chủ Khách Hàng
+                  <Users size={14} style={{ color: "#14afbe" }} /> Đối Soát Ca & Bàn Giao
+                </button>
+                <button
+                  type="button"
+                  style={{ width: "100%", background: "none", border: "none", color: "#f43f5e", textAlign: "left", padding: "10px 12px", borderRadius: "10px", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", fontSize: "12px", fontWeight: 600 }}
+                  onClick={() => { setShowProfileMenu(false); navigate("/login"); }}
+                >
+                  <LogOut size={14} style={{ color: "#f43f5e" }} /> Đăng Xuất Quản Lý
                 </button>
               </div>
             )}

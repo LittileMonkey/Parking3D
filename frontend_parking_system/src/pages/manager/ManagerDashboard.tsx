@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   Clock,
   Zap,
+  Sliders,
   Sun,
   Moon,
   ChevronLeft,
@@ -451,65 +452,82 @@ export default function ManagerDashboard() {
               </div>
             </div>
 
-            {/* Scheduled / Live Feed Section */}
+            {/* Scheduled / Manager Actionable Tasks Section */}
             <div className="pm-v8-scheduled-section">
               <div className="pm-v8-scheduled-title-row">
                 <span className="pm-v8-scheduled-accent-line" />
-                <h4 className="pm-v8-scheduled-title">Scheduled</h4>
+                <h4 className="pm-v8-scheduled-title">Lịch trình & Việc cần xử lý</h4>
               </div>
 
               <div className="pm-v8-feed-list">
-                <div className="pm-v8-feed-item">
-                  <div className="pm-v8-feed-thumb">
-                    <Car size={18} />
+                <div
+                  className="pm-v8-feed-item"
+                  onClick={() => navigate("/manager/staff-shifts")}
+                  role="button"
+                  tabIndex={0}
+                  style={{ cursor: "pointer" }}
+                  title="Nhấn để xem và duyệt kết ca"
+                >
+                  <div className="pm-v8-feed-thumb" style={{ background: "rgba(16, 185, 129, 0.15)", borderColor: "rgba(16, 185, 129, 0.3)", color: "#10b981" }}>
+                    <CheckCircle2 size={18} />
                   </div>
                   <div className="pm-v8-feed-details">
-                    <span className="pm-v8-feed-name">Check-in: 30F-889.92</span>
-                    <span className="pm-v8-feed-sub">Cổng 1 • L1-A04 • 2 phút trước</span>
+                    <span className="pm-v8-feed-name">Duyệt đối soát ca sáng</span>
+                    <span className="pm-v8-feed-sub">64.85M đ (Chênh lệch: 0 đ) • Chờ duyệt 12:00</span>
                   </div>
                 </div>
 
-                <div className="pm-v8-feed-item">
-                  <div className="pm-v8-feed-thumb">
-                    <Coins size={18} />
+                <div
+                  className="pm-v8-feed-item"
+                  onClick={() => navigate("/manager/incidents-approvals")}
+                  role="button"
+                  tabIndex={0}
+                  style={{ cursor: "pointer" }}
+                  title="Nhấn để xét duyệt miễn trừ sự cố"
+                >
+                  <div className="pm-v8-feed-thumb" style={{ background: "rgba(244, 63, 94, 0.15)", borderColor: "rgba(244, 63, 94, 0.3)", color: "#f43f5e" }}>
+                    <AlertTriangle size={18} />
                   </div>
                   <div className="pm-v8-feed-details">
-                    <span className="pm-v8-feed-name">Thanh toán VNPay 45.000đ</span>
-                    <span className="pm-v8-feed-sub">51G-123.45 • 6 phút trước</span>
+                    <span className="pm-v8-feed-name">Xét duyệt sự cố miễn phí</span>
+                    <span className="pm-v8-feed-sub">Kẹt barrier Cổng Tây • 1 yêu cầu cần ký duyệt</span>
                   </div>
                 </div>
 
-                <div className="pm-v8-feed-item">
-                  <div className="pm-v8-feed-thumb">
-                    <Clock size={18} />
+                <div
+                  className="pm-v8-feed-item"
+                  onClick={() => navigate("/manager/pricing")}
+                  role="button"
+                  tabIndex={0}
+                  style={{ cursor: "pointer" }}
+                  title="Nhấn để xem biểu giá và điều chỉnh Surge"
+                >
+                  <div className="pm-v8-feed-thumb" style={{ background: "rgba(255, 120, 40, 0.15)", borderColor: "rgba(255, 120, 40, 0.3)", color: "#ff7828" }}>
+                    <Zap size={18} />
                   </div>
                   <div className="pm-v8-feed-details">
-                    <span className="pm-v8-feed-name">Giải phóng Hold Slot</span>
-                    <span className="pm-v8-feed-sub">L2-B12 (Timeout 15p) • 14 phút trước</span>
+                    <span className="pm-v8-feed-name">Đánh giá Surge Multiplier 1.25x</span>
+                    <span className="pm-v8-feed-sub">Tự động áp dụng khung cao điểm 08:30 - 11:30</span>
+                  </div>
+                </div>
+
+                <div
+                  className="pm-v8-feed-item"
+                  onClick={() => navigate("/manager/facility-layout")}
+                  role="button"
+                  tabIndex={0}
+                  style={{ cursor: "pointer" }}
+                  title="Nhấn để xem kế hoạch bảo trì"
+                >
+                  <div className="pm-v8-feed-thumb" style={{ background: "rgba(34, 211, 238, 0.15)", borderColor: "rgba(34, 211, 238, 0.3)", color: "#22d3ee" }}>
+                    <Sliders size={18} />
+                  </div>
+                  <div className="pm-v8-feed-details">
+                    <span className="pm-v8-feed-name">Bảo trì định kỳ Camera ANPR</span>
+                    <span className="pm-v8-feed-sub">14:00 - 14:30 hôm nay • Zone C (Gate 02)</span>
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* Floating Action Circle Triggers (Bottom Right of Screenshot) */}
-            <div className="pm-v8-floating-actions">
-              <button
-                type="button"
-                className="pm-v8-circle-trigger green"
-                onClick={() => navigate("/staff/operations")}
-                title="Hỗ trợ hotline điều phối bãi xe"
-              >
-                <MessageSquare size={20} />
-              </button>
-
-              <button
-                type="button"
-                className="pm-v8-circle-trigger pink"
-                onClick={() => setShowQuickActionModal(true)}
-                title="Thao tác khẩn cấp / Đặt chỗ cưỡng chế"
-              >
-                <Plus size={22} />
-              </button>
             </div>
           </aside>
         </div>
