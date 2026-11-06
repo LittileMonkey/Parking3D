@@ -1,11 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Parking.Payment.Domain.Pricing
-{
+namespace Parking.Pricing;
     /// <summary>
     /// Value Object đại diện cho toàn bộ chính sách biểu giá của một bãi đỗ xe.
     /// </summary>
@@ -13,7 +12,7 @@ namespace Parking.Payment.Domain.Pricing
         int InitialBlockMinutes,            // Thời lượng của block đầu tiên (VD: 60 phút)
         long InitialRateVnd,                // Giá cước cho block đầu tiên (VD: 20.000 đ)
         int SubsequentBlockMinutes,         // Thời lượng cho các block tiếp theo (VD: 15 phút)
-        long SubsequentRateVnd,             //  Giá cước cho mỗi block tiếp theo (VD: 5.000 đ)
+        long SubsequentRateVnd,             // Giá cước cho mỗi block tiếp theo (VD: 5.000 đ)
         decimal PeakMultiplier,             // Hệ số nhân giờ cao điểm (VD: 1.2m tương đương +20%)
         TimeOnly Peak1Start,                // Giờ bắt đầu cao điểm trưa (VD: 11:30)
         TimeOnly Peak1End,                  // Giờ kết thúc cao điểm trưa (VD: 13:00)
@@ -23,14 +22,13 @@ namespace Parking.Payment.Domain.Pricing
         decimal GoldStarDiscountRate        // Tỷ lệ chiết khấu hội viên Gold Star (VD: 0.10m = 10%)
     )
     {
-    /// <summary>
-    /// Kiểm tra tính toàn vẹn (Invariants) của chính sách giá để ngăn chặn dữ liệu cấu hình sai ngay từ đầu.
-    /// </summary>
+        /// <summary>
+        /// Kiểm tra tính toàn vẹn (Invariants) của chính sách giá để ngăn chặn dữ liệu cấu hình sai ngay từ đầu.
+        /// </summary>
         public void Validate()
         {
             if (InitialBlockMinutes <= 0)
                 throw new ArgumentException("Thời lượng các block đầu tiên phải lớn hơn 0 phút.", nameof(InitialBlockMinutes));
-
 
             if (SubsequentBlockMinutes <= 0)
                 throw new ArgumentException("Thời lượng các block tiếp theo phải lớn hơn 0 phút.", nameof(SubsequentBlockMinutes));
@@ -50,9 +48,4 @@ namespace Parking.Payment.Domain.Pricing
             if (Peak2End <= Peak2Start)
                 throw new ArgumentException("Giờ kết thúc cao điểm 2 phải sau giờ bắt đầu.", nameof(Peak2End));
         }
-
-
-
-
     }
-}

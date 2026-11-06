@@ -1,11 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Parking.Payment.Domain.Pricing
-{
+namespace Parking.Pricing;
     /// <summary>
     /// Domain Service chứa thuật toán tính cước tài chính cốt lõi:
     /// - Phân tách theo ranh giới nửa đêm địa phương (Midnight Boundary Split).
@@ -23,6 +22,7 @@ namespace Parking.Payment.Domain.Pricing
 
             if (exitTime <= entryTime)
                 throw new ArgumentException("Thời gian ra (ExitTime) phải lớn hơn thời gian vào (EntryTime).", nameof(exitTime));
+
             var currentCursor = entryTime;
             var dayBreakdowns = new List<DayPricingBreakdown>();
 
@@ -30,7 +30,6 @@ namespace Parking.Payment.Domain.Pricing
             while (currentCursor < exitTime)
             {
                 var localCurrent = TimeZoneInfo.ConvertTime(currentCursor, timeZone);
-
                 var nextMidnightLocal = DateTime.SpecifyKind(localCurrent.Date.AddDays(1), DateTimeKind.Unspecified);
 
                 // Phòng thủ thời gian không hợp lệ (nếu có chuyển đổi giờ mùa hè DST)
@@ -59,6 +58,7 @@ namespace Parking.Payment.Domain.Pricing
                     var initialEnd = dayCursor.AddMinutes(policy.InitialBlockMinutes);
                     dayCursor = dayEnd < initialEnd ? dayEnd : initialEnd;
                 }
+
                 // 3. CÁC BLOCK 15 PHÚT TIẾP THEO (SUBSEQUENT BLOCKS - LÀM TRÒN LÊN)
                 while (dayCursor < dayEnd)
                 {
@@ -94,8 +94,6 @@ namespace Parking.Payment.Domain.Pricing
                 );
                 dayBreakdowns.Add(breakdown);
                 currentCursor = dayEnd;
-
-
             }
 
             // 5. TỔNG HỢP VÀO ĐỐI TƯỢNG PRICINGRESULT
@@ -106,17 +104,14 @@ namespace Parking.Payment.Domain.Pricing
                 GoldStarDiscountRate: policy.GoldStarDiscountRate,
                 DailyBreakdowns: dayBreakdowns
             );
-
         }
 
-    
-
-    /// <summary>
-    /// Kiểm tra xem một block thời gian [blockStart, blockEnd) có giao nhau với bất kỳ khung giờ cao điểm nào không.
-    /// Khung 1: 11:30 -> 13:00
-    /// Khung 2: 17:30 -> 19:00
-    /// </summary>
-    private static bool IsInPeakHour(DateTimeOffset start, DateTimeOffset end, PricingPolicy policy, TimeZoneInfo timeZone)
+        /// <summary>
+        /// Kiểm tra xem một block thời gian [blockStart, blockEnd) có giao nhau với bất kỳ khung giờ cao điểm nào không.
+        /// Khung 1: 11:30 -> 13:00
+        /// Khung 2: 17:30 -> 19:00
+        /// </summary>
+        private static bool IsInPeakHour(DateTimeOffset start, DateTimeOffset end, PricingPolicy policy, TimeZoneInfo timeZone)
         {
             var startLocal = TimeOnly.FromTimeSpan(TimeZoneInfo.ConvertTime(start, timeZone).TimeOfDay);
             var endLocal = TimeOnly.FromTimeSpan(TimeZoneInfo.ConvertTime(end, timeZone).TimeOfDay);
@@ -139,6 +134,4 @@ namespace Parking.Payment.Domain.Pricing
             }
             return false;
         }
-
     }
-}
