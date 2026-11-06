@@ -463,11 +463,13 @@ public sealed class PaymentService(
             );
             isAllowed = permission.Allowed;
         }
-        catch (Grpc.Core.RpcException ex) when (ex.StatusCode == Grpc.Core.StatusCode.DeadlineExceeded || ex.StatusCode == Grpc.Core.StatusCode.Unavailable)
+        catch (Grpc.Core.RpcException ex)
         {
-            // Graceful Fallback: nếu gRPC Identity timeout trong môi trường test nội bộ
-            if (actorId != Guid.Empty) isAllowed = true;
+            // Nguyên tắc Fail-Closed: Identity lỗi thì từ chối ngay lập tức (503), tuyệt đối không tự mở cửa
+            logger.LogError(ex, "Lỗi gRPC Identity khi kiểm tra quyền CASH của nhân viên {UserId} tại bãi {LotId}", actorId, lotId);
+            throw new ServiceException(503, "Dịch vụ xác thực phân quyền (Identity Service) tạm thời không khả dụng, vui lòng thử lại sau.");
         }
+
         if (!isAllowed)
             throw new ServiceException(403, "Forbidden. Staff is not assigned to this parking facility.");
         // 6. Cập nhật Database, ghi Outbox Event và Audit Log trong cùng 1 Transaction nguyên tử
