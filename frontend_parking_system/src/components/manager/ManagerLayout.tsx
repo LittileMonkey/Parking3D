@@ -4,8 +4,6 @@ import {
   LayoutDashboard,
   LogOut,
   Building2,
-  Box,
-  Car,
   Users,
   AlertTriangle,
   Bell,
@@ -16,7 +14,6 @@ import {
   FileText,
   Sun,
   Moon,
-  ArrowLeftRight,
   Menu,
   X,
 } from "lucide-react";

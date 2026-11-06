@@ -72,7 +72,7 @@ function getBookingIdempotencyKey(signature: string) {
 export default function SearchPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   const paramVehicle = searchParams.get("vehicle") || searchParams.get("vehicleType");
   const initialVehicle: VehicleType = (paramVehicle && (paramVehicle.toLowerCase().includes("bike") || paramVehicle.toLowerCase().includes("motor")))
