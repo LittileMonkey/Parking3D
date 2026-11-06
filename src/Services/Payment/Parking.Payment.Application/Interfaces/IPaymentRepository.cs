@@ -15,5 +15,10 @@ namespace Parking.Payment.Application.Interfaces
         /// Tra cứu và khởi tạo thông tin biên lai điện tử (E-Receipt) kèm mã băm SHA-256 đối soát.
         /// </summary>
         Task<EReceiptDto?> GetReceiptAsync(Guid paymentId, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Đọc thông tin thanh toán thô phục vụ kiểm tra nghiệp vụ và phân quyền.
+        /// </summary>
+        Task<PaymentAuthCheckDto?> GetPaymentForAuthCheckAsync(Guid paymentId, CancellationToken ct = default);
     }
 }

@@ -23,4 +23,5 @@ message BookingQuoteRequest { string booking_id = 1; string user_id = 2; }
 message BookingQuoteReply {
   string booking_id = 1; string lot_id = 2; string vehicle_id = 3;
   int64 amount_minor = 4; string currency = 5; string status = 6;
+  string customer_id = 7;
 }

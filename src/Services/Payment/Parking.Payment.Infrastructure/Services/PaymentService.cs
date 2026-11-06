@@ -1,5 +1,6 @@
 ﻿using Google.Protobuf;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using Parking.Contracts.Identity.V1;
 using Parking.Contracts.Payments.V1;
@@ -16,12 +17,13 @@ namespace Parking.Payment.Infrastructure.Services;
 /// Dịch vụ điều phối thanh toán trung tâm, tích hợp cơ sở dữ liệu PostgreSQL, gRPC và cổng VNPay.
 /// </summary>
 public sealed class PaymentService(
-    NpgsqlDataSource db, 
+    NpgsqlDataSource db,
     BookingPaymentQuery.BookingPaymentQueryClient parking,
-    FacilityAuthorization.FacilityAuthorizationClient identity, 
+    FacilityAuthorization.FacilityAuthorizationClient identity,
     IConfiguration config,
     IVnPayService vnPayService,
-    IPaymentRepository paymentRepository) : IPaymentService
+    IPaymentRepository paymentRepository,
+    Microsoft.Extensions.Logging.ILogger<PaymentService> logger) : IPaymentService
 {
     /// <summary>
     /// Khởi tạo lượt thanh toán (CASH hoặc VNPAY), sinh mã giao dịch duy nhất và URL thanh toán bảo mật.
@@ -145,18 +147,22 @@ public sealed class PaymentService(
         await using (var existing = new NpgsqlCommand("SELECT id FROM billing_accounts WHERE booking_id=@id", conn, tx))
         { existing.Parameters.AddWithValue("id", request.BookingId); var old = await existing.ExecuteScalarAsync(ct); if (old is Guid previous) account = previous; }
         await using (var write = new NpgsqlCommand("""
-            INSERT INTO billing_accounts(id,lot_id,vehicle_id,booking_id,currency,created_at)
-            VALUES(@account,@lot,@vehicle,@booking,@currency,now()) ON CONFLICT(booking_id) DO NOTHING;
-            INSERT INTO payments(id,account_id,amount,method,status,idempotency_key,created_at)
-            VALUES(@id,@account,@amount,@method::public.payment_method,'PENDING',@key,now());
-            INSERT INTO audit_logs(id,lot_id,actor_user_id,actor_type,action,entity_type,entity_id,created_at)
-            VALUES(gen_random_uuid(),@lot,@user,'USER','CREATE_PAYMENT','PAYMENT',@entity,now());
+            INSERT INTO billing_accounts(id, lot_id, vehicle_id, booking_id, customer_id, currency, created_at)
+            VALUES(@account, @lot, @vehicle, @booking, @customer, @currency, now()) 
+            ON CONFLICT(booking_id) DO UPDATE SET customer_id = COALESCE(billing_accounts.customer_id, EXCLUDED.customer_id);
+
+            INSERT INTO payments(id, account_id, amount, method, status, idempotency_key, created_at)
+            VALUES(@id, @account, @amount, @method::public.payment_method, 'PENDING', @key, now());
+
+            INSERT INTO audit_logs(id, lot_id, actor_user_id, actor_type, action, entity_type, entity_id, created_at)
+            VALUES(gen_random_uuid(), @lot, @user, 'USER', 'CREATE_PAYMENT', 'PAYMENT', @entity, now());
             """, conn, tx))
         {
             write.Parameters.AddWithValue("account", account); 
             write.Parameters.AddWithValue("lot", lot); 
             write.Parameters.AddWithValue("vehicle", Guid.Parse(quote.VehicleId));
-            write.Parameters.AddWithValue("booking", request.BookingId); 
+            write.Parameters.AddWithValue("booking", request.BookingId);
+            write.Parameters.AddWithValue("customer", user); // Lưu Customer ID vào billing_accounts
             write.Parameters.AddWithValue("currency", quote.Currency); 
             write.Parameters.AddWithValue("id", id);
             write.Parameters.AddWithValue("amount", quote.AmountMinor);
@@ -246,7 +252,10 @@ public sealed class PaymentService(
 
         await using (var update = new NpgsqlCommand("""
             UPDATE payments SET status='SUCCESS',succeeded_at=@now,collected_by=@actor,version=version+1 WHERE id=@id;
-            INSERT INTO integration_outbox(event_id,event_type,aggregate_id,payload) VALUES(@event,'PaymentSucceeded.v1',@id,@payload::jsonb);
+
+            INSERT INTO integration_outbox(event_id,event_type,aggregate_id,payload) 
+            VALUES(@event,'PaymentSucceeded.v1',@id,@payload::jsonb);
+
             INSERT INTO audit_logs(id,lot_id,actor_user_id,actor_type,action,entity_type,entity_id,reason,created_at)
             VALUES(gen_random_uuid(),@lot,@actor,'USER','CONFIRM_CASH','PAYMENT',@entity,@reason,now());
             """, conn, tx))
@@ -352,12 +361,13 @@ public sealed class PaymentService(
                     var existingAcc = await checkAccount.ExecuteScalarAsync(ct);
                     if (existingAcc is Guid acc) accountId = acc;
                 }
-                // 3. Khởi tạo tài khoản thanh toán và bản ghi 'CASH' vào bảng payments
+                // Lấy Customer ID từ gRPC Parking gửi sang
+                Guid? customerId = Guid.TryParse(quote.CustomerId, out var parsedCust) ? parsedCust : null;
+                // 3. Khởi tạo tài khoản thanh toán và bản ghi 'CASH' vào bảng payments (lưu kèm customer_id)
                 const string insertSql = """
-                    INSERT INTO billing_accounts(id, lot_id, vehicle_id, booking_id, currency, created_at)
-                    VALUES(@account, @lot, @vehicle, @booking, @currency, now())
-                    ON CONFLICT(booking_id) DO NOTHING;
-
+                    INSERT INTO billing_accounts(id, lot_id, vehicle_id, booking_id, customer_id, currency, created_at)
+                    VALUES(@account, @lot, @vehicle, @booking, @customer, @currency, now())
+                    ON CONFLICT(booking_id) DO UPDATE SET customer_id = COALESCE(billing_accounts.customer_id, EXCLUDED.customer_id);
                     INSERT INTO payments(id, account_id, amount, method, status, idempotency_key, created_at)
                     VALUES(@id, @account, @amount, 'CASH'::public.payment_method, 'PENDING', @key, now());
                     """;
@@ -367,6 +377,7 @@ public sealed class PaymentService(
                     insertCmd.Parameters.AddWithValue("lot", lotId);
                     insertCmd.Parameters.AddWithValue("vehicle", Guid.Parse(quote.VehicleId));
                     insertCmd.Parameters.AddWithValue("booking", command.BookingId);
+                    insertCmd.Parameters.AddWithValue("customer", (object?)customerId ?? DBNull.Value);
                     insertCmd.Parameters.AddWithValue("currency", currency);
                     insertCmd.Parameters.AddWithValue("id", paymentId);
                     insertCmd.Parameters.AddWithValue("amount", amount);
@@ -452,11 +463,13 @@ public sealed class PaymentService(
             );
             isAllowed = permission.Allowed;
         }
-        catch (Grpc.Core.RpcException ex) when (ex.StatusCode == Grpc.Core.StatusCode.DeadlineExceeded || ex.StatusCode == Grpc.Core.StatusCode.Unavailable)
+        catch (Grpc.Core.RpcException ex)
         {
-            // Graceful Fallback: nếu gRPC Identity timeout trong môi trường test nội bộ
-            if (actorId != Guid.Empty) isAllowed = true;
+            // Nguyên tắc Fail-Closed: Identity lỗi thì từ chối ngay lập tức (503), tuyệt đối không tự mở cửa
+            logger.LogError(ex, "Lỗi gRPC Identity khi kiểm tra quyền CASH của nhân viên {UserId} tại bãi {LotId}", actorId, lotId);
+            throw new ServiceException(503, "Dịch vụ xác thực phân quyền (Identity Service) tạm thời không khả dụng, vui lòng thử lại sau.");
         }
+
         if (!isAllowed)
             throw new ServiceException(403, "Forbidden. Staff is not assigned to this parking facility.");
         // 6. Cập nhật Database, ghi Outbox Event và Audit Log trong cùng 1 Transaction nguyên tử
@@ -753,12 +766,68 @@ public sealed class PaymentService(
 
         return result;
     }
+
+
     /// <summary>
-    /// Điều phối tra cứu biên lai điện tử E-Receipt từ Repository.
+    /// Điều phối tra cứu biên lai:
+    /// 1. Gọi Repo lấy thông tin thanh toán.
+    /// 2. Kiểm tra trạng thái hóa đơn & xác nhận tiền mặt.
+    /// 3. Phân quyền: Customer chính chủ HOẶC gọi gRPC Identity kiểm tra Staff (Fail-Closed).
+    /// 4. Yêu cầu Repo sinh mã hóa đơn và hash SHA-256.
     /// </summary>
-    public async Task<EReceiptDto?> GetReceiptAsync(Guid paymentId, CancellationToken ct = default)
+    public async Task<EReceiptDto?> GetReceiptAsync(Guid paymentId, Guid requestingUserId, CancellationToken ct = default)
     {
-        return await paymentRepository.GetReceiptAsync(paymentId, ct);
+        // 1. Repo làm việc của Repo: Đọc CSDL
+        var payment = await paymentRepository.GetPaymentForAuthCheckAsync(paymentId, ct);
+        if (payment == null)
+        {
+            return null; // Không tìm thấy bản ghi
+        }
+        // 2. Service làm việc của Service: Kiểm tra nghiệp vụ
+        if (payment.Status != "SUCCESS")
+        {
+            throw new ServiceException(400, "Đơn thanh toán chưa hoàn tất (chưa thành công), không thể xuất biên lai.");
+        }
+        if (payment.Method == "CASH" && payment.CollectedBy == null)
+        {
+            throw new ServiceException(400, "Hóa đơn tiền mặt chưa được nhân viên xác nhận thu tiền tại quầy.");
+        }
+        // 3. Service làm việc của Service: Kiểm tra phân quyền
+        bool isCustomerOwner = (payment.CustomerId.HasValue
+                                && payment.CustomerId.Value != Guid.Empty
+                                && payment.CustomerId.Value == requestingUserId);
+        if (!isCustomerOwner)
+        {
+            // Không phải chủ đơn -> Gọi gRPC Identity kiểm tra Staff
+            bool isStaffAllowed = false;
+            try
+            {
+                var permission = await identity.CheckAccessAsync(
+                    new AccessRequest
+                    {
+                        UserId = requestingUserId.ToString(),
+                        LotId = payment.LotId.ToString(),
+                        Capability = "LOOKUP"
+                    },
+                    headers: GrpcHeaders.For(config),
+                    deadline: DateTime.UtcNow.AddSeconds(3),
+                    cancellationToken: ct
+                );
+                isStaffAllowed = permission.Allowed;
+            }
+            catch (Grpc.Core.RpcException ex)
+            {
+                // Nguyên tắc Fail-Closed: Identity lỗi thì từ chối ngay, không tự mở cửa
+                logger.LogError(ex, "Lỗi gRPC Identity khi kiểm tra quyền Staff của user {UserId} tại bãi {LotId}", requestingUserId, payment.LotId);
+                throw new ServiceException(503, "Dịch vụ xác thực phân quyền (Identity Service) tạm thời không khả dụng, vui lòng thử lại sau.");
+            }
+            if (!isStaffAllowed)
+            {
+                throw new ServiceException(403, "Cấm truy cập: Bạn không phải chủ đơn đặt chỗ này, và cũng không phải nhân viên đang hoạt động được phân công tại bãi xe này.");
+            }
+        }
+        // 4. Mọi thứ hợp lệ -> Yêu cầu Repo xuất biên lai hoàn chỉnh kèm mã hash SHA-256
+        return await paymentRepository.GetReceiptAsync(payment.PaymentId, ct);
     }
 
 

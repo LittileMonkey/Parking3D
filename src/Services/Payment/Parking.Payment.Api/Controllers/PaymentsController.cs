@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Parking.Payment.Api.Common;
 using Parking.Payment.Application.DTOs;
@@ -57,29 +58,33 @@ namespace Parking.Payment.Api.Controllers
 
         /// <summary>
         /// Nhân viên xác nhận thu tiền mặt từ khách hàng (API 4 - SCRUM-95 & S3-06)
+        /// Yêu cầu: Bắt buộc phải có Token của Nhân viên bãi xe
         /// </summary>
+        [Authorize]
         [HttpPost("cash/confirm")]
         public async Task<IActionResult> ConfirmCashPayment([FromBody] ConfirmCashPaymentRequestDto requestDto, CancellationToken cancellationToken)
         {
-            // 1. Trích xuất User ID (UUID) của nhân viên từ JWT Claims hoặc Header
-            var staffClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-                          ?? User.FindFirst("sub")?.Value
+            // 1. Trích xuất User ID của nhân viên từ Token thật
+            var staffClaim = User.FindFirst("sub")?.Value
+                          ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
                           ?? User.FindFirst("id")?.Value
                           ?? Request.Headers["X-User-Id"].FirstOrDefault();
-            // Nếu test nội bộ không có token, fallback về Staff ID mặc định trong Seed DB
-            var staffId = Guid.TryParse(staffClaim, out var parsedGuid)
-                ? parsedGuid.ToString()
-                : "22222222-2222-2222-2222-222222222222";
-            // 2. Chuyển đổi DTO thành MediatR Command mang theo ID thật của nhân viên
+            // 2. Chặn đứng nếu không có token hợp lệ (Zero Trust - Không dùng ID giả)
+            if (!Guid.TryParse(staffClaim, out var parsedStaffGuid) || parsedStaffGuid == Guid.Empty)
+            {
+                return Unauthorized(ApiResponse<ConfirmCashPaymentResultDto>.Fail(
+                    default!,
+                    "Authentication required. Invalid or missing staff token.",
+                    401));
+            }
+            // 3. Gửi Command qua MediatR với ID nhân viên thật
             var command = new ConfirmCashPaymentCommand(
                 requestDto.BookingId,
                 requestDto.StaffReason,
                 requestDto.Version,
-                staffId
+                parsedStaffGuid.ToString()
             );
-            // 3. Gửi Command qua MediatR (chạy qua Validator và Handler)
             var resultDto = await _mediator.Send(command, cancellationToken);
-            // 4. Bọc kết quả vào phong bì ApiResponse chuẩn 200 OK
             var response = ApiResponse<ConfirmCashPaymentResultDto>.Success(
                 resultDto,
                 "CASH payment confirmed. Receipt is being generated.",
@@ -87,86 +92,129 @@ namespace Parking.Payment.Api.Controllers
             return Ok(response);
         }
 
+
         /// <summary>
-        /// Ước tính hoặc tính toán tiền cước đỗ xe theo Block 15p, Giờ cao điểm 1.2x, Trần ngày và Chiết khấu Gold Star
+        /// Ước tính hoặc tính toán tiền cước đỗ xe theo Block 15p, Giờ cao điểm 1.2x, Trần ngày và Chiết khấu Gold Star.
+        /// Đã tách riêng ngày và giờ; nếu để trống ngày giờ sẽ tự động lấy HÔM NAY theo múi giờ Việt Nam (GMT+7).
         /// </summary>
         [HttpPost("calculate-fee")]
         public async Task<IActionResult> CalculateFee([FromBody] CalculateFeeRequestDto requestDto, CancellationToken cancellationToken)
         {
-            // 1. Chuyển đổi từ DTO sang CQRS Query
+            // 1. Xác định mốc thời gian hiện tại theo Múi giờ Việt Nam (GMT+7)
+            var vnOffset = TimeSpan.FromHours(7);
+            var nowVn = DateTimeOffset.UtcNow.ToOffset(vnOffset);
+
+            // 2. Xử lý giá trị mặc định nếu Client không truyền
+            var targetStartDate = requestDto.Date ?? DateOnly.FromDateTime(nowVn.DateTime);
+            var targetStartTime = requestDto.StartTime ?? TimeOnly.FromDateTime(nowVn.DateTime);
+            var targetEndTime = requestDto.EndTime ?? targetStartTime.AddHours(1);
+
+            // Nếu không truyền ngày ra: nếu giờ ra nhỏ hơn giờ vào thì tự hiểu là gửi qua đêm (cộng 1 ngày)
+            var targetEndDate = requestDto.EndDate
+                             ?? (targetEndTime < targetStartTime ? targetStartDate.AddDays(1) : targetStartDate);
+
+            // 3. Ghép ngày và giờ thành thời điểm hoàn chỉnh (Local Time GMT+7)
+            var startDateTimeLocal = targetStartDate.ToDateTime(targetStartTime);
+            var endDateTimeLocal = targetEndDate.ToDateTime(targetEndTime);
+
+            // 4. Chuyển đổi an toàn sang DateTimeOffset UTC cho lõi tính cước
+            var entryTimeUtc = new DateTimeOffset(startDateTimeLocal, vnOffset).ToUniversalTime();
+            var exitTimeUtc = new DateTimeOffset(endDateTimeLocal, vnOffset).ToUniversalTime();
+
+            // 5. Khởi tạo Query CQRS gửi qua MediatR
             var query = new CalculateFeeQuery(
                 requestDto.ParkingLotId,
-                requestDto.EntryTime,
-                requestDto.ExitTime,
+                entryTimeUtc,
+                exitTimeUtc,
                 requestDto.IsGoldStarMember,
                 requestDto.VehicleType
             );
-            // 2. Gửi qua MediatR (tự động chạy qua CalculateFeeQueryValidator để kiểm tra tính hợp lệ)
-            var resultDto = await _mediator.Send(query, cancellationToken);
 
-            // 3. Bọc kết quả vào phong bì ApiResponse chuẩn 200 OK của dự án
+            // 6. Gửi qua MediatR chạy qua ValidationBehavior và CalculateFeeQueryHandler
+            var result = await _mediator.Send(query, cancellationToken);
             var response = ApiResponse<FeeCalculationResultDto>.Success(
-                resultDto, "Calculated parking fee successfully.",200);
+                result,
+                "Fee calculation completed successfully.",
+                200
+            );
+
             return Ok(response);
-
-
         }
 
         /// <summary>
         /// Sinh mã VNPay-QR thanh toán động theo đơn đặt gửi xe (API 1 - SCRUM-72)
+        /// Yêu cầu: Bắt buộc khách hàng phải đăng nhập
         /// </summary>
+        [Authorize]
         [HttpPost("vnpay/create-qr")]
         public async Task<IActionResult> CreatePaymentQr([FromBody] CreatePaymentQrRequestDto requestDto, CancellationToken cancellationToken)
         {
-            // 1. Trích xuất UserId từ Token hoặc Header X-User-Id (fallback về customer01 mặc định: 11111111-1111-1111-1111-111111111111)
-            var userIdClaim = User.FindFirst("sub")?.Value 
-                              ?? User.FindFirst("id")?.Value 
+            // 1. Trích xuất UserId từ Token thật của khách
+            var userIdClaim = User.FindFirst("sub")?.Value
+                              ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                              ?? User.FindFirst("id")?.Value
                               ?? Request.Headers["X-User-Id"].FirstOrDefault();
-            var userId = Guid.TryParse(userIdClaim, out var parsedGuid) ? parsedGuid : Guid.Parse("11111111-1111-1111-1111-111111111111");
 
-            // 2. Lấy IP kết nối của khách hàng và Idempotency-Key từ Request Header
+            // 2. Chặn đứng nếu chưa đăng nhập
+            if (!Guid.TryParse(userIdClaim, out var userId) || userId == Guid.Empty)
+            {
+                return Unauthorized(ApiResponse<PaymentQrResultDto>.Fail(
+                    default!,
+                    "Authentication required. Please login to generate payment QR.",
+                    401));
+            }
             var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+
             var idempotencyKey = Request.Headers["Idempotency-Key"].ToString();
 
-            // 3. Khởi tạo Command gửi qua MediatR
             var command = new CreatePaymentQrCommand(
-               BookingId: requestDto.BookingId,
-               UserId: userId,
-               IpAddress: ipAddress,
-               IdempotencyKey: string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey
-            );
+                           BookingId: requestDto.BookingId,
+                           UserId: userId,
+                           IpAddress: ipAddress,
+                           IdempotencyKey: string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey
+                        );
 
-            // 4. MediatR tự động kích hoạt Validator kiểm tra dữ liệu và chuyển tới CreatePaymentQrCommandHandler
             var resultDto = await _mediator.Send(command, cancellationToken);
 
-            // 5. Bọc kết quả vào phong bì ApiResponse chuẩn 200 OK
-            var response = ApiResponse<PaymentQrResultDto>.Success(
-                resultDto,
-                "Dynamic VNPay-QR generated successfully. Valid for 5 minutes.",
+            var response = ApiResponse<PaymentQrResultDto>.Success(resultDto, "Dynamic VNPay-QR generated successfully. Valid for 5 minutes.",
                 200);
-
-
             return Ok(response);
         }
+
+
         /// <summary>
-        /// Tra cứu hóa đơn điện tử (E-Receipt) kèm mã xác thực số theo PaymentId (API 5 - SCRUM-72)
+        /// Tra cứu / in hóa đơn điện tử (E-Receipt) kèm kiểm tra quyền Customer chính chủ hoặc Staff bãi xe (API 5 - SCRUM-72 & S3-06)
         /// </summary>
+        [Authorize]
         [HttpGet("{paymentId:guid}/receipt")]
         public async Task<IActionResult> GetPaymentReceipt(Guid paymentId, CancellationToken cancellationToken)
         {
-            var query = new GetPaymentReceiptQuery(paymentId);
-            // 1. Gửi qua MediatR chạy qua ValidationBehavior và Handler
+            // 1. Trích xuất User ID từ JWT Token (sub, NameIdentifier, id) hoặc Header X-User-Id
+            var userClaim = User.FindFirst("sub")?.Value
+                         ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                         ?? User.FindFirst("id")?.Value
+                         ?? Request.Headers["X-User-Id"].FirstOrDefault();
+            // 2. Chặn đứng request không hợp lệ: Tuyệt đối KHÔNG cấp fallback ID
+            if (!Guid.TryParse(userClaim, out var requestingUserId) || requestingUserId == Guid.Empty)
+            {
+                return Unauthorized(ApiResponse<EReceiptDto>.Fail(
+                    default!,
+                    "Authentication required. Invalid or missing user token.",
+                    401));
+            }
+            // 3. Gửi sang MediatR với UserId thật của người gọi
+            var query = new GetPaymentReceiptQuery(paymentId, requestingUserId);
             var resultDto = await _mediator.Send(query, cancellationToken);
-            // 2. Nếu không tìm thấy bản ghi thanh toán hoặc đơn chưa thanh toán thành công
+            // 4. Nếu không tìm thấy
             if (resultDto == null)
             {
                 var notFoundResponse = ApiResponse<EReceiptDto>.Fail(
                     default!,
-                    "Payment receipt not found or payment is not completed yet.",
+                    "Payment receipt not found.",
                     404);
                 return NotFound(notFoundResponse);
             }
-            // 3. Bọc kết quả vào phong bì ApiResponse chuẩn 200 OK
+            // 5. Trả về kết quả đóng gói chuẩn ApiResponse 200 OK
             var response = ApiResponse<EReceiptDto>.Success(
                 resultDto,
                 "Electronic receipt retrieved successfully.",
