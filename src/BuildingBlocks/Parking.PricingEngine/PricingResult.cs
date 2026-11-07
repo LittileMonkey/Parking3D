@@ -1,11 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Parking.Payment.Domain.Pricing
-{
+namespace Parking.Pricing;
     /// <summary>
     /// Value Object đại diện cho kết quả tính cước tổng thể của một phiên gửi xe
     /// Đóng gói tổng tiền cước thô, các khoản giảm trừ (Daily Cap, Gold Star) và số tiền thực thu cuối cùng
@@ -33,10 +32,8 @@ namespace Parking.Payment.Domain.Pricing
         /// Tổng số tiền được miễn giảm từ chính sách trần giá ngày (Daily Cap) của tất cả các ngày
         public long TotalDailyCapDiscountVnd => DailyBreakdowns.Sum(d => d.DailyCapDiscountVnd);
 
-
         /// Tổng tiền cước sau khi đã trừ trần Daily Cap (nhưng chưa trừ giảm giá Gold Star)
         public long SubtotalAfterDailyCapVnd => DailyBreakdowns.Sum(d => d.NetAmountVnd);
-
 
         /// Số tiền được giảm giá dành riêng cho hội viên Gold Star (10% trên số tiền sau Daily Cap)
         public long GoldStarDiscountAmountVnd
@@ -53,6 +50,4 @@ namespace Parking.Payment.Domain.Pricing
 
         /// Số tiền thực thu cuối cùng mà khách hàng phải thanh toán.
         public long FinalNetAmountVnd => SubtotalAfterDailyCapVnd - GoldStarDiscountAmountVnd;
-
     }
-}

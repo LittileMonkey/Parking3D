@@ -1,11 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Parking.Payment.Domain.Pricing
-{
+namespace Parking.Pricing;
     /// <summary>
     /// Value Object biểu diễn một khoảng thời gian nửa đóng nửa mở [Start, End).
     /// </summary>
@@ -22,10 +21,13 @@ namespace Parking.Payment.Domain.Pricing
             Start = start;
             End = end;
         }
+
         /// Tổng khoảng thời gian (TimeSpan) của dải thời gian này.
         public TimeSpan Duration => End - Start;
+
         /// Tổng số phút trôi qua trong khoảng thời gian.
         public double TotalMinutes => Duration.TotalMinutes;
+
         /// Kiểm tra xem một thời điểm có nằm trọn trong khoảng [Start, End) hay không.
         public bool Contains(DateTimeOffset time) => time >= Start && time < End;
 
@@ -39,16 +41,11 @@ namespace Parking.Payment.Domain.Pricing
         {
             var maxStart = Start > other.Start ? Start : other.Start;
             var minEnd = End < other.End ? End : other.End;
-            if(maxStart < minEnd)
+            if (maxStart < minEnd)
             {
                 return new TimeRange(maxStart, minEnd);
             }
 
             return null;
         }
-
-
-
-
     }
-}
