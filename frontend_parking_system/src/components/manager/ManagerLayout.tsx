@@ -18,10 +18,12 @@ import {
   X,
 } from "lucide-react";
 import { managerApi } from "../../services/manager/managerApi";
+import { useAuth } from "../../context/AuthContext";
 import type { ManagerFacilitySummary, ReportingPeriod } from "../../types/manager";
 import "./ManagerDashboard.css";
 
 export default function ManagerLayout() {
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -273,10 +275,12 @@ export default function ManagerLayout() {
               role="button"
               tabIndex={0}
             >
-              <div className="pm-avatar-img">QL</div>
+              <div className="pm-avatar-img">
+                {(user?.fullName || user?.userName || "QL").substring(0, 2).toUpperCase()}
+              </div>
               <div className="pm-profile-meta">
-                <span className="pm-profile-name">Lionel Messi</span>
-                <span className="pm-profile-role">PARKING MANAGER</span>
+                <span className="pm-profile-name">{user?.fullName || "Manager"}</span>
+                <span className="pm-profile-role">{user?.roles?.[0] || user?.role || "PARKING MANAGER"}</span>
               </div>
             </div>
 
@@ -298,7 +302,7 @@ export default function ManagerLayout() {
                 }}
               >
                 <div style={{ padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.08)", color: "var(--pm-text-muted)", fontSize: "11px" }}>
-                  Tài khoản Quản lý cơ sở (@manager)
+                  {user?.email || "Tài khoản Điều Hành"}
                 </div>
                 <button
                   type="button"
@@ -317,7 +321,11 @@ export default function ManagerLayout() {
                 <button
                   type="button"
                   style={{ width: "100%", background: "none", border: "none", color: "#f43f5e", textAlign: "left", padding: "10px 12px", borderRadius: "10px", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", fontSize: "12px", fontWeight: 600 }}
-                  onClick={() => { setShowProfileMenu(false); navigate("/login"); }}
+                  onClick={async () => {
+                    setShowProfileMenu(false);
+                    await logout();
+                    navigate("/login");
+                  }}
                 >
                   <LogOut size={14} style={{ color: "#f43f5e" }} /> Đăng Xuất Quản Lý
                 </button>

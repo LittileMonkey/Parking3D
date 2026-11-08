@@ -607,6 +607,13 @@ export const api = {
   },
 
   /**
+   * [REAL API IDENTITY] Lấy thông tin tài khoản hiện tại từ token (GET /api/v1/account/information)
+   */
+  async getAccountInformation(): Promise<AccountUserDto> {
+    return request<AccountUserDto>("/api/v1/account/information");
+  },
+
+  /**
    * [REAL API IDENTITY] Lấy danh sách tất cả tài khoản người dùng hệ thống (Admin/Manager)
    */
   async getAllAccounts(): Promise<AccountUserDto[]> {

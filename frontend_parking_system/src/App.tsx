@@ -62,7 +62,7 @@ export default function App() {
         <Route path="shifts" element={<ShiftManagement />} />
       </Route>
 
-      {/* Manager Operations Portal Routes */}
+      {/* Manager & Admin Operations Portal Routes */}
       <Route path="/manager" element={<ManagerLayout />}>
         <Route index element={<Navigate to="/manager/dashboard" replace />} />
         <Route path="dashboard" element={<ManagerDashboard />} />
@@ -72,6 +72,11 @@ export default function App() {
         <Route path="incidents-approvals" element={<IncidentsApprovalsPage />} />
         <Route path="reports-audit" element={<ReportsAuditPage />} />
       </Route>
+
+      {/* Admin Portal Route Aliases */}
+      <Route path="/admin" element={<Navigate to="/manager/dashboard" replace />} />
+      <Route path="/admin/dashboard" element={<Navigate to="/manager/dashboard" replace />} />
+      <Route path="/admin/*" element={<Navigate to="/manager/dashboard" replace />} />
 
       <Route path="*" element={<Home />} />
     </Routes>

@@ -32,6 +32,12 @@ export default function CustomerLayout({
   const [bookingMenuOpen, setBookingMenuOpen] = useState(false);
   const bookingMenuRef = useRef<HTMLDivElement>(null);
 
+  const userRoles = (user?.roles ?? (user?.role ? [user.role] : [])).map((r) => r.toUpperCase());
+  const isStaff = userRoles.some((r) => r.includes("STAFF"));
+  const isAdminOrManager = userRoles.some((r) => r.includes("ADMIN") || r.includes("MANAGER"));
+  const portalPath = isStaff ? "/staff/dashboard" : isAdminOrManager ? "/manager/dashboard" : null;
+  const roleLabel = isStaff ? "Staff" : isAdminOrManager ? (userRoles.some((r) => r.includes("ADMIN")) ? "Admin" : "Manager") : t("nav.vip");
+
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
       if (bookingMenuRef.current && !bookingMenuRef.current.contains(event.target as Node)) {
@@ -121,7 +127,12 @@ export default function CustomerLayout({
           <div className="mobile-nav-account">
             {isAuthenticated ? (
               <>
-                <span className="customer-nav-user">{user?.fullName || user?.userName}</span>
+                <span className="customer-nav-user">{user?.fullName || user?.userName} ({roleLabel})</span>
+                {portalPath && (
+                  <Link to={portalPath} onClick={closeMenus} className="nav-item-pill mobile-nav-portal-link" style={{ color: "#38bdf8", fontWeight: 700 }}>
+                    {portalPath.includes("staff") ? "→ Vào Staff Portal" : "→ Vào Admin Dashboard"}
+                  </Link>
+                )}
                 <button type="button" className="nav-item-pill mobile-nav-account-action" onClick={requestLogout}>{t("nav.logout")}</button>
               </>
             ) : (
@@ -147,8 +158,27 @@ export default function CustomerLayout({
               <span className="avatar-circle-pill"><User size={15} /></span>
               <span className="user-info-pill">
                 <span className="user-name-pill">{user?.fullName || user?.userName}</span>
-                <span className="user-role-pill">{t("nav.vip")}</span>
+                <span className="user-role-pill">{roleLabel}</span>
               </span>
+              {portalPath && (
+                <Link
+                  to={portalPath}
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    padding: "4px 9px",
+                    borderRadius: "9999px",
+                    background: "rgba(56, 189, 248, 0.15)",
+                    color: "#38bdf8",
+                    border: "1px solid rgba(56, 189, 248, 0.3)",
+                    textDecoration: "none",
+                    whiteSpace: "nowrap",
+                  }}
+                  title={portalPath.includes("staff") ? "Vào trang Staff Operations" : "Vào trang Admin Dashboard"}
+                >
+                  {portalPath.includes("staff") ? "Staff" : "Admin"}
+                </Link>
+              )}
               <button type="button" className="logout-btn-pill" title={t("nav.logout")} aria-label={t("nav.logout")} onClick={requestLogout}>
                 <LogOut size={14} />
               </button>

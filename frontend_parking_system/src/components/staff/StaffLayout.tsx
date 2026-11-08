@@ -16,10 +16,12 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { staffApi } from "../../services/staff/staffApi";
+import { useAuth } from "../../context/AuthContext";
 import type { ParkingLotSummary, Incident } from "../../types/staff";
 import "./StaffPortal.css";
 
 export default function StaffLayout() {
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -209,9 +211,11 @@ export default function StaffLayout() {
 
           {/* Staff Profile Chip */}
           <div className="pm-profile-chip">
-            <div className="pm-profile-avatar">ST</div>
+            <div className="pm-profile-avatar">
+              {(user?.fullName || user?.userName || "ST").substring(0, 2).toUpperCase()}
+            </div>
             <div className="pm-profile-name">
-              <span>ST Nguyễn Văn Hùng</span>
+              <span>{user?.fullName || "Staff Officer"}</span>
               <ChevronDown size={14} className="pm-profile-chevron" />
             </div>
           </div>
@@ -220,7 +224,10 @@ export default function StaffLayout() {
           <button
             type="button"
             className="pm-logout-btn"
-            onClick={() => navigate("/login")}
+            onClick={async () => {
+              await logout();
+              navigate("/login");
+            }}
             title="Đăng xuất nhanh"
           >
             <LogOut size={16} />
