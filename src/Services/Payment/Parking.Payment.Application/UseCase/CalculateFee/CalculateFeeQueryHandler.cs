@@ -4,7 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Caching.Memory;  
 using Parking.Contracts.Catalog.V1;        
 using Parking.Payment.Application.DTOs;
-using Parking.Payment.Domain.Pricing;
+using Parking.Pricing;
 using Parking.ServiceDefaults;              
 using System;
 using System.Collections.Generic;

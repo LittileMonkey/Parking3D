@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/" />
   <Folder Name="/src/BuildingBlocks/">
+    <Project Path="src/BuildingBlocks/Parking.PricingEngine/Parking.PricingEngine.csproj" />
     <Project Path="src/BuildingBlocks/Parking.ServiceDefaults/Parking.ServiceDefaults.csproj" />
   </Folder>
   <Folder Name="/src/Contracts/">

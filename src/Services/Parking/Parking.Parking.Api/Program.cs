@@ -11,6 +11,7 @@ using Parking.Parking.Api.Middleware;
 using Parking.Parking.Infrastructure.BackgroundServices;
 using Parking.Parking.Infrastructure.Repositories;
 using Parking.Parking.Infrastructure.Services;
+using Parking.Parking.Infrastructure.Cache;
 using Parking.ServiceDefaults;
 
 
@@ -30,8 +31,9 @@ builder.Services.AddScoped<IRecognitionClient, RecognitionClient>();
 builder.Services.AddParkingPersistence();
 builder.Services.AddHostedService<OccupancyWorker>();
 builder.Services.AddHostedService<HoldExpiryWorker>();
-// 1. Thêm bộ nhớ đệm Memory Cache (hỗ trợ cho EstimatedPriceService)
+// 1. Thêm bộ nhớ đệm Memory Cache (hỗ trợ cho EstimatedPriceService và SCRUM-80 Spatial Cache)
 builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<IParkingCacheService, ParkingCacheService>();
 // 2. Đăng ký Repository và Service tính giá THẬT (thay thế Fake)
 builder.Services.AddScoped<IParkingLotRepository, ParkingLotRepository>();
 builder.Services.AddScoped<IEstimatedPriceService, EstimatedPriceService>();

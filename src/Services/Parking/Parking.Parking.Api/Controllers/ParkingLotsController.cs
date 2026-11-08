@@ -58,5 +58,21 @@ namespace Parking.Parking.Api.Controllers
             var result = await _mediator.Send(query, cancellationToken);
             return Ok(new ApiResponse<LotAvailabilityDto>(result, "Lot availability retrieved successfully."));
         }
+
+        /// <summary>Lấy chi tiết thông tin bãi đỗ xe theo ID.</summary>
+        [HttpGet("{lotId:guid}")]
+        public async Task<IActionResult> GetById([FromRoute] Guid lotId, CancellationToken cancellationToken)
+        {
+            var result = await _mediator.Send(new GetParkingLotDetailQuery(lotId), cancellationToken);
+            return Ok(new ApiResponse<ParkingLotDetailDto>(result, "Lấy thông tin bãi đỗ xe thành công."));
+        }
+
+        /// <summary>Lấy toàn bộ cây cấu trúc không gian 3D của bãi xe (Level -> Zone -> Slot kèm tọa độ 3D) có hỗ trợ Cache.</summary>
+        [HttpGet("{lotId:guid}/layout")]
+        public async Task<IActionResult> GetLayout([FromRoute] Guid lotId, CancellationToken cancellationToken)
+        {
+            var result = await _mediator.Send(new GetLotLayout3DQuery(lotId), cancellationToken);
+            return Ok(new ApiResponse<LotLayout3DDto>(result, "Lấy sơ đồ cấu trúc không gian 3D thành công."));
+        }
     }
 }

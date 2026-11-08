@@ -1,4 +1,4 @@
-﻿using Parking.Payment.Domain.Pricing;
+using Parking.Pricing;
 using System;
 using System.Collections.Generic;
 using System.Linq;

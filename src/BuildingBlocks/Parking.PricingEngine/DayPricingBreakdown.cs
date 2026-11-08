@@ -1,12 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Parking.Payment.Domain.Pricing
-{
-
+namespace Parking.Pricing;
     /// <summary>
     /// Value Object chứa chi tiết tính cước bóc tách của một ngày lịch cụ thể (sau khi chia theo ranh giới nửa đêm)
     /// Đảm bảo tính minh bạch tuyệt đối khi in hóa đơn và lưu vết kiểm toán tài chính (Audit)
@@ -37,6 +35,4 @@ namespace Parking.Payment.Domain.Pricing
 
         /// Số tiền thực thu cuối cùng của ngày này (sau khi đã chặn trần Daily Cap)
         public long NetAmountVnd => GrossAmountVnd - DailyCapDiscountVnd;
-
     }
-}
