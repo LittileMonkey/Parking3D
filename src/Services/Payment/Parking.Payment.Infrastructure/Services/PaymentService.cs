@@ -147,9 +147,12 @@ public sealed class PaymentService(
         await using (var existing = new NpgsqlCommand("SELECT id FROM billing_accounts WHERE booking_id=@id", conn, tx))
         { existing.Parameters.AddWithValue("id", request.BookingId); var old = await existing.ExecuteScalarAsync(ct); if (old is Guid previous) account = previous; }
         await using (var write = new NpgsqlCommand("""
-            INSERT INTO billing_accounts(id, lot_id, vehicle_id, booking_id, customer_id, currency, created_at)
-            VALUES(@account, @lot, @vehicle, @booking, @customer, @currency, now()) 
-            ON CONFLICT(booking_id) DO UPDATE SET customer_id = COALESCE(billing_accounts.customer_id, EXCLUDED.customer_id);
+            INSERT INTO billing_accounts(id, lot_id, vehicle_id, booking_id, customer_id, currency, lot_name, plate_number, created_at)
+            VALUES(@account, @lot, @vehicle, @booking, @customer, @currency, @lotName, @plateNumber, now()) 
+            ON CONFLICT(booking_id) DO UPDATE SET
+                    customer_id = COALESCE(billing_accounts.customer_id, EXCLUDED.customer_id),
+                    lot_name = COALESCE(billing_accounts.lot_name, EXCLUDED.lot_name),
+                    plate_number = COALESCE(billing_accounts.plate_number, EXCLUDED.plate_number);
 
             INSERT INTO payments(id, account_id, amount, method, status, idempotency_key, created_at)
             VALUES(@id, @account, @amount, @method::public.payment_method, 'PENDING', @key, now());
@@ -170,6 +173,8 @@ public sealed class PaymentService(
             write.Parameters.AddWithValue("key", scopedKey); 
             write.Parameters.AddWithValue("user", user); 
             write.Parameters.AddWithValue("entity", id.ToString());
+            write.Parameters.AddWithValue("lotName", quote.LotName ?? "");
+            write.Parameters.AddWithValue("plateNumber", quote.PlateNumber ?? "");
             await write.ExecuteNonQueryAsync(ct);
         }
 
@@ -365,9 +370,13 @@ public sealed class PaymentService(
                 Guid? customerId = Guid.TryParse(quote.CustomerId, out var parsedCust) ? parsedCust : null;
                 // 3. Khởi tạo tài khoản thanh toán và bản ghi 'CASH' vào bảng payments (lưu kèm customer_id)
                 const string insertSql = """
-                    INSERT INTO billing_accounts(id, lot_id, vehicle_id, booking_id, customer_id, currency, created_at)
-                    VALUES(@account, @lot, @vehicle, @booking, @customer, @currency, now())
-                    ON CONFLICT(booking_id) DO UPDATE SET customer_id = COALESCE(billing_accounts.customer_id, EXCLUDED.customer_id);
+                    INSERT INTO billing_accounts(id, lot_id, vehicle_id, booking_id, customer_id, currency, lot_name, plate_number, created_at)
+                    VALUES(@account, @lot, @vehicle, @booking, @customer, @currency, @lotname, @plateNumber, now())
+                    ON CONFLICT(booking_id) DO UPDATE SET 
+                                            customer_id = COALESCE(billing_accounts.customer_id, EXCLUDED.customer_id),
+                                            lot_name = COALESCE(billing_accounts.lot_name, EXCLUDED.lot_name),
+                                            plate_number = COALESCE(billing_accounts.plate_number, EXCLUDED.plate_number);
+
                     INSERT INTO payments(id, account_id, amount, method, status, idempotency_key, created_at)
                     VALUES(@id, @account, @amount, 'CASH'::public.payment_method, 'PENDING', @key, now());
                     """;
@@ -382,6 +391,8 @@ public sealed class PaymentService(
                     insertCmd.Parameters.AddWithValue("id", paymentId);
                     insertCmd.Parameters.AddWithValue("amount", amount);
                     insertCmd.Parameters.AddWithValue("key", "cash:" + command.BookingId.ToString("N"));
+                    insertCmd.Parameters.AddWithValue("lotname", quote.LotName ?? "");
+                    insertCmd.Parameters.AddWithValue("plateNumber", quote.PlateNumber ?? "");
                     await insertCmd.ExecuteNonQueryAsync(ct);
                 }
             }
