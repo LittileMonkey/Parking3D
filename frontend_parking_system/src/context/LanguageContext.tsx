@@ -36,7 +36,7 @@ const translations: Record<Language, Record<string, string>> = {
     "nav.logout": "Đăng xuất",
 
     // Hero
-    "hero.badge": "MẠNG LƯỚI HẠ TẦNG GIÁM SÁT QUỐC GIA • LIVE TELEMETRY V4 URBAN MOBILITY ENGINE",
+    "hero.badge": "SẢN PHẨM CHỈ DÀNH CHO HỌC TẬP • KHÔNG CÓ MỤC ĐÍCH THƯƠNG MẠI",
     "hero.title_part1": "Tìm Chỗ Đỗ Xe Thông Minh,",
     "hero.title_part2": "Nhanh",
     "hero.title_part3": "Chóng & Chuẩn Xác",
@@ -174,7 +174,7 @@ const translations: Record<Language, Record<string, string>> = {
     "nav.logout": "Log Out",
 
     // Hero
-    "hero.badge": "NATIONAL SURVEILLANCE INFRASTRUCTURE • LIVE TELEMETRY V4 URBAN MOBILITY ENGINE",
+    "hero.badge": "SẢN PHẨM CHỈ DÀNH CHO HỌC TẬP • KHÔNG CÓ MỤC ĐÍCH THƯƠNG MẠI",
     "hero.title_part1": "Find Smart Parking Spots,",
     "hero.title_part2": "Fast",
     "hero.title_part3": "& Accurate",

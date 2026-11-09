@@ -32,6 +32,12 @@ export default function CustomerLayout({
   const [bookingMenuOpen, setBookingMenuOpen] = useState(false);
   const bookingMenuRef = useRef<HTMLDivElement>(null);
 
+  const userRoles = (user?.roles ?? (user?.role ? [user.role] : [])).map((r) => r.toUpperCase());
+  const isStaff = userRoles.some((r) => r.includes("STAFF"));
+  const isAdminOrManager = userRoles.some((r) => r.includes("ADMIN") || r.includes("MANAGER"));
+  const portalPath = isStaff ? "/staff/dashboard" : isAdminOrManager ? "/manager/dashboard" : null;
+  const roleLabel = isStaff ? "Staff" : isAdminOrManager ? (userRoles.some((r) => r.includes("ADMIN")) ? "Admin" : "Manager") : t("nav.vip");
+
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
       if (bookingMenuRef.current && !bookingMenuRef.current.contains(event.target as Node)) {
@@ -121,7 +127,12 @@ export default function CustomerLayout({
           <div className="mobile-nav-account">
             {isAuthenticated ? (
               <>
-                <span className="customer-nav-user">{user?.fullName || user?.userName}</span>
+                <span className="customer-nav-user">{user?.fullName || user?.userName} ({roleLabel})</span>
+                {portalPath && (
+                  <Link to={portalPath} onClick={closeMenus} className="nav-item-pill mobile-nav-portal-link" style={{ color: "#38bdf8", fontWeight: 700 }}>
+                    {portalPath.includes("staff") ? "→ Vào Staff Portal" : "→ Vào Admin Dashboard"}
+                  </Link>
+                )}
                 <button type="button" className="nav-item-pill mobile-nav-account-action" onClick={requestLogout}>{t("nav.logout")}</button>
               </>
             ) : (
@@ -147,8 +158,27 @@ export default function CustomerLayout({
               <span className="avatar-circle-pill"><User size={15} /></span>
               <span className="user-info-pill">
                 <span className="user-name-pill">{user?.fullName || user?.userName}</span>
-                <span className="user-role-pill">{t("nav.vip")}</span>
+                <span className="user-role-pill">{roleLabel}</span>
               </span>
+              {portalPath && (
+                <Link
+                  to={portalPath}
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    padding: "4px 9px",
+                    borderRadius: "9999px",
+                    background: "rgba(56, 189, 248, 0.15)",
+                    color: "#38bdf8",
+                    border: "1px solid rgba(56, 189, 248, 0.3)",
+                    textDecoration: "none",
+                    whiteSpace: "nowrap",
+                  }}
+                  title={portalPath.includes("staff") ? "Vào trang Staff Operations" : "Vào trang Admin Dashboard"}
+                >
+                  {portalPath.includes("staff") ? "Staff" : "Admin"}
+                </Link>
+              )}
               <button type="button" className="logout-btn-pill" title={t("nav.logout")} aria-label={t("nav.logout")} onClick={requestLogout}>
                 <LogOut size={14} />
               </button>
@@ -198,7 +228,7 @@ export default function CustomerLayout({
             <h4 className="footer-col-title">{t("footer.support")}</h4>
             <ul className="footer-links">
               <li><a href="/#gis-section">{lang === "en" ? "Booking Guide" : "Hướng dẫn đặt chỗ"}</a></li>
-              <li><a href="/#solutions">{lang === "en" ? "Parking Rules" : "Quy định bãi đỗ"}</a></li>
+              <li><Link to="/terms">{lang === "en" ? "Parking Rules" : "Quy định bãi đỗ"}</Link></li>
               <li><a href="/#solutions">{lang === "en" ? "EV Charging Station" : "Trạm sạc EV"}</a></li>
               <li><a href="mailto:support@parkmatrix.vn">{lang === "en" ? "Report Incident 24/7" : "Báo sự cố 24/7"}</a></li>
               <li><a href="/#gis-section">API Integration Docs</a></li>
@@ -227,8 +257,8 @@ export default function CustomerLayout({
         <div className="page-width footer-bottom-dark">
           <span>{t("footer.rights")}</span>
           <div className="footer-bottom-links">
-            <a href="/#privacy">{t("footer.privacy")}</a><span>•</span>
-            <a href="/#terms">{t("footer.terms")}</a><span>•</span>
+            <Link to="/privacy">{t("footer.privacy")}</Link><span>•</span>
+            <Link to="/terms">{t("footer.terms")}</Link><span>•</span>
             <a href="mailto:support@parkmatrix.vn">Support: support@parkmatrix.vn</a>
           </div>
         </div>

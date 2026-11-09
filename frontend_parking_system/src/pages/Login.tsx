@@ -1,11 +1,11 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError } from "../services/api";
-import { useAuth } from "../context/AuthContext";
+import { useAuth, getRedirectPathForUser } from "../context/AuthContext";
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -14,14 +14,29 @@ export default function Login() {
   const [googleNotice, setGoogleNotice] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Nếu tài khoản nội bộ (Staff / Admin / Manager) đã có phiên hợp lệ, tự động điều hướng vào dashboard
+  useEffect(() => {
+    if (user) {
+      const targetPath = getRedirectPathForUser(user);
+      if (targetPath !== "/") {
+        navigate(targetPath, { replace: true });
+      }
+    }
+  }, [user, navigate]);
+
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
     setGoogleNotice("");
     setLoading(true);
     try {
-      await login(email.trim().toLowerCase(), password);
-      navigate("/");
+      const authUser = await login(email.trim().toLowerCase(), password);
+      // Điều hướng chính xác theo vai trò tài khoản:
+      // - PARKING_STAFF -> /staff/dashboard
+      // - ADMIN / PARKING_MANAGER -> /manager/dashboard (Admin Dashboard)
+      // - Khách hàng -> /
+      const targetPath = getRedirectPathForUser(authUser);
+      navigate(targetPath, { replace: true });
     } catch (cause) {
       if (cause instanceof ApiError && (cause.status === 404 || cause.status === 405)) {
         setError("Backend hiện chưa có API đăng nhập. Màn hình đã sẵn sàng tích hợp tại POST /api/v1/auth/login.");

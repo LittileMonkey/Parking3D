@@ -1,4 +1,4 @@
-import { Route, Routes, Navigate } from "react-router-dom";
+import { Route, Routes, Navigate, useLocation } from "react-router-dom";
 import Home from "./pages/Home";
 import { lazy, Suspense } from "react";
 import Login from "./pages/Login";
@@ -8,6 +8,8 @@ import VerifyEmail from "./pages/VerifyEmail";
 import EmailVerified from "./pages/EmailVerified";
 import BookingStatusPage from "./pages/BookingStatusPage";
 import FaqPage from "./pages/FaqPage";
+import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
+import TermsOfServicePage from "./pages/TermsOfServicePage";
 
 // Staff Operations Portal Components
 import StaffLayout from "./components/staff/StaffLayout";
@@ -28,6 +30,11 @@ import ReportsAuditPage from "./pages/manager/ReportsAuditPage";
 
 const Booking = lazy(() => import("./pages/Booking"));
 
+function SearchRedirect() {
+  const location = useLocation();
+  return <Navigate to={`/booking${location.search}`} replace />;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -37,9 +44,11 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/register" element={<Register />} />
-      <Route path="/search" element={<Navigate to="/booking" replace />} />
+      <Route path="/search" element={<SearchRedirect />} />
       <Route path="/bookings/:bookingId" element={<BookingStatusPage />} />
       <Route path="/faq" element={<FaqPage />} />
+      <Route path="/privacy" element={<PrivacyPolicyPage />} />
+      <Route path="/terms" element={<TermsOfServicePage />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/email-verified" element={<EmailVerified />} />
 
@@ -53,7 +62,7 @@ export default function App() {
         <Route path="shifts" element={<ShiftManagement />} />
       </Route>
 
-      {/* Manager Operations Portal Routes */}
+      {/* Manager & Admin Operations Portal Routes */}
       <Route path="/manager" element={<ManagerLayout />}>
         <Route index element={<Navigate to="/manager/dashboard" replace />} />
         <Route path="dashboard" element={<ManagerDashboard />} />
@@ -63,6 +72,11 @@ export default function App() {
         <Route path="incidents-approvals" element={<IncidentsApprovalsPage />} />
         <Route path="reports-audit" element={<ReportsAuditPage />} />
       </Route>
+
+      {/* Admin Portal Route Aliases */}
+      <Route path="/admin" element={<Navigate to="/manager/dashboard" replace />} />
+      <Route path="/admin/dashboard" element={<Navigate to="/manager/dashboard" replace />} />
+      <Route path="/admin/*" element={<Navigate to="/manager/dashboard" replace />} />
 
       <Route path="*" element={<Home />} />
     </Routes>

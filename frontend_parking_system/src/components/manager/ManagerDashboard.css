@@ -210,13 +210,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  background: rgba(10, 28, 38, 0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 20px;
-  padding: 12px 20px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  background: var(--pm-card-bg);
+  backdrop-filter: blur(32px) saturate(190%);
+  -webkit-backdrop-filter: blur(32px) saturate(190%);
+  border: 1px solid var(--pm-card-border);
+  border-radius: 24px;
+  padding: 12px 24px;
+  box-shadow: var(--pm-card-shadow);
+  transition: all 0.3s ease;
 }
 
 .pm-header-left {
@@ -1895,57 +1896,61 @@
    - Floating Bottom Dock Pill Selector [ Dashboard 1 (Admin) ] [ Dashboard 2 (Deep Views) ]
    ═════════════════════════════════════════════════════════════════════════════ */
 
-/* ── A. Master Shell Theme Variables ── */
+/* ── A. Master Shell Theme Variables: Liquid Frosted Glass ── */
 .pm-manager-shell.pm-theme-dark {
-  --pm-bg-color: #0b0f17;
-  --pm-bg-gradient: radial-gradient(circle at 75% 20%, rgba(20, 175, 190, 0.12) 0%, transparent 40%),
-                    radial-gradient(circle at 20% 80%, rgba(255, 107, 43, 0.08) 0%, transparent 40%),
-                    linear-gradient(135deg, #090d15 0%, #111723 50%, #080c14 100%);
-  --pm-card-bg: rgba(23, 27, 36, 0.88);
-  --pm-card-border: rgba(255, 255, 255, 0.08);
-  --pm-card-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  --pm-dock-bg: rgba(18, 22, 30, 0.90);
-  --pm-dock-border: rgba(255, 255, 255, 0.10);
-  --pm-strip-bg: #ffffff;
-  --pm-strip-text: #0f172a;
-  --pm-strip-sub: #475569;
-  --pm-strip-border: rgba(255, 255, 255, 0.8);
-  --pm-strip-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  --pm-bg-color: #070d18;
+  --pm-bg-gradient:
+    radial-gradient(circle at 14% 18%, rgba(20, 175, 190, 0.22) 0%, transparent 48%),
+    radial-gradient(circle at 86% 22%, rgba(99, 102, 241, 0.16) 0%, transparent 45%),
+    radial-gradient(circle at 50% 88%, rgba(255, 120, 40, 0.12) 0%, transparent 48%),
+    linear-gradient(135deg, #060a12 0%, #0c1424 50%, #070c17 100%);
+  --pm-card-bg: rgba(15, 23, 42, 0.64);
+  --pm-card-border: rgba(255, 255, 255, 0.13);
+  --pm-card-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.20);
+  --pm-dock-bg: rgba(13, 20, 36, 0.68);
+  --pm-dock-border: rgba(255, 255, 255, 0.15);
+  --pm-strip-bg: rgba(255, 255, 255, 0.05);
+  --pm-strip-text: #f8fafc;
+  --pm-strip-sub: #94a3b8;
+  --pm-strip-border: rgba(255, 255, 255, 0.10);
+  --pm-strip-shadow: 0 8px 24px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   --pm-text-heading: #ffffff;
   --pm-text-muted: #94a3b8;
-  --pm-input-bg: rgba(13, 17, 24, 0.85);
-  --pm-input-border: rgba(255, 255, 255, 0.12);
+  --pm-input-bg: rgba(255, 255, 255, 0.06);
+  --pm-input-border: rgba(255, 255, 255, 0.14);
   --pm-input-text: #ffffff;
-  --pm-calendar-cell: #1a202c;
+  --pm-calendar-cell: rgba(255, 255, 255, 0.05);
   --pm-calendar-text: #e2e8f0;
-  --pm-subcard-bg: rgba(30, 35, 47, 0.7);
-  --pm-subcard-border: rgba(255, 255, 255, 0.06);
+  --pm-subcard-bg: rgba(255, 255, 255, 0.04);
+  --pm-subcard-border: rgba(255, 255, 255, 0.08);
 }
 
 .pm-manager-shell.pm-theme-light {
-  --pm-bg-color: #f1f5f9;
-  --pm-bg-gradient: radial-gradient(circle at 80% 20%, rgba(20, 175, 190, 0.12) 0%, transparent 45%),
-                    radial-gradient(circle at 15% 85%, rgba(255, 107, 43, 0.10) 0%, transparent 45%),
-                    linear-gradient(135deg, #eef2f6 0%, #f8fafc 50%, #e2e8f0 100%);
-  --pm-card-bg: rgba(255, 255, 255, 0.88);
-  --pm-card-border: rgba(0, 0, 0, 0.08);
-  --pm-card-shadow: 0 20px 45px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  --pm-dock-bg: rgba(255, 255, 255, 0.92);
-  --pm-dock-border: rgba(0, 0, 0, 0.09);
-  --pm-strip-bg: #ffffff;
+  --pm-bg-color: #e8eef5;
+  --pm-bg-gradient:
+    radial-gradient(circle at 12% 16%, rgba(20, 175, 190, 0.25) 0%, transparent 45%),
+    radial-gradient(circle at 88% 20%, rgba(99, 102, 241, 0.16) 0%, transparent 45%),
+    radial-gradient(circle at 50% 85%, rgba(255, 120, 40, 0.14) 0%, transparent 50%),
+    linear-gradient(135deg, #e4edf4 0%, #f0f6fa 50%, #d8e5f0 100%);
+  --pm-card-bg: rgba(255, 255, 255, 0.62);
+  --pm-card-border: rgba(255, 255, 255, 0.85);
+  --pm-card-shadow: 0 24px 50px -10px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.9), inset 0 1px 2px rgba(255, 255, 255, 0.95);
+  --pm-dock-bg: rgba(255, 255, 255, 0.68);
+  --pm-dock-border: rgba(255, 255, 255, 0.85);
+  --pm-strip-bg: rgba(255, 255, 255, 0.72);
   --pm-strip-text: #0f172a;
-  --pm-strip-sub: #64748b;
-  --pm-strip-border: rgba(0, 0, 0, 0.08);
-  --pm-strip-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+  --pm-strip-sub: #475569;
+  --pm-strip-border: rgba(255, 255, 255, 0.80);
+  --pm-strip-shadow: 0 8px 24px rgba(15, 23, 42, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.9);
   --pm-text-heading: #0f172a;
-  --pm-text-muted: #64748b;
-  --pm-input-bg: #ffffff;
-  --pm-input-border: rgba(0, 0, 0, 0.12);
+  --pm-text-muted: #475569;
+  --pm-input-bg: rgba(255, 255, 255, 0.70);
+  --pm-input-border: rgba(255, 255, 255, 0.80);
   --pm-input-text: #0f172a;
-  --pm-calendar-cell: #f8fafc;
+  --pm-calendar-cell: rgba(255, 255, 255, 0.55);
   --pm-calendar-text: #1e293b;
-  --pm-subcard-bg: rgba(241, 245, 249, 0.9);
-  --pm-subcard-border: rgba(0, 0, 0, 0.06);
+  --pm-subcard-bg: rgba(255, 255, 255, 0.55);
+  --pm-subcard-border: rgba(255, 255, 255, 0.70);
 }
 
 .pm-manager-shell {
@@ -2169,8 +2174,8 @@
   flex: 1;
   min-width: 0;
   background: var(--pm-card-bg);
-  backdrop-filter: blur(28px);
-  -webkit-backdrop-filter: blur(28px);
+  backdrop-filter: blur(32px) saturate(190%);
+  -webkit-backdrop-filter: blur(32px) saturate(190%);
   border: 1px solid var(--pm-card-border);
   border-radius: 34px;
   padding: 30px 34px;
@@ -2372,6 +2377,8 @@
 
 .pm-v8-strip-card {
   background: var(--pm-strip-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid var(--pm-strip-border);
   border-radius: 22px;
   padding: 18px 24px;
@@ -2380,16 +2387,17 @@
   justify-content: space-between;
   gap: 18px;
   box-shadow: var(--pm-strip-shadow);
-  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
   position: relative;
   overflow: hidden;
 }
 
 .pm-v8-strip-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
-  border-color: rgba(20, 175, 190, 0.5);
+  transform: translateY(-2px) scale(1.004);
+  background: rgba(20, 175, 190, 0.08);
+  border-color: rgba(20, 175, 190, 0.45);
+  box-shadow: 0 16px 36px rgba(20, 175, 190, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .pm-v8-strip-left {
@@ -2503,8 +2511,8 @@
   width: 370px;
   flex-shrink: 0;
   background: var(--pm-card-bg);
-  backdrop-filter: blur(28px);
-  -webkit-backdrop-filter: blur(28px);
+  backdrop-filter: blur(32px) saturate(190%);
+  -webkit-backdrop-filter: blur(32px) saturate(190%);
   border: 1px solid var(--pm-card-border);
   border-radius: 34px;
   padding: 24px;
