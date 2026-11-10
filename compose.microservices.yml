@@ -137,6 +137,25 @@ services:
       retries: 5
       start_period: 10s
     restart: unless-stopped
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama-data:/root/.ollama
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ollama serve &
+        SERVER_PID=$$!
+        sleep 3
+        ollama pull ${OLLAMA_MODEL:-qwen2.5:3b}
+        wait $$SERVER_PID
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
   ai:
     build:
       context: .
@@ -159,14 +178,16 @@ services:
       Gemini__ApiKey: ${GEMINI_API_KEY:-}
       AI__GeminiApiKey: ${GEMINI_API_KEY:-}
       Gemini__Model: ${GEMINI_MODEL:-gemini-2.5-flash}
-      Ollama__Endpoint: ${OLLAMA_ENDPOINT:-http://host.docker.internal:11434}
-      AI__OllamaEndpoint: ${OLLAMA_ENDPOINT:-http://host.docker.internal:11434}
+      Ollama__Endpoint: ${DOCKER_OLLAMA_ENDPOINT:-http://ollama:11434}
+      AI__OllamaEndpoint: ${DOCKER_OLLAMA_ENDPOINT:-http://ollama:11434}
       Ollama__Model: ${OLLAMA_MODEL:-qwen2.5:3b}
       AI__OllamaModel: ${OLLAMA_MODEL:-qwen2.5:3b}
     depends_on:
       ai-db:
         condition: service_healthy
       ai-vision:
+        condition: service_started
+      ollama:
         condition: service_started
     restart: unless-stopped
   gateway:
@@ -196,3 +217,4 @@ volumes:
   parking-data:
   payment-data:
   ai-data:
+  ollama-data:
