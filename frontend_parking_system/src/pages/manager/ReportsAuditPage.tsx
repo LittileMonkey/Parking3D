@@ -136,12 +136,12 @@ export default function ReportsAuditPage() {
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
           {/* Card 1: Daily Revenue */}
-          <div style={{ background: "rgba(17, 24, 39, 0.6)", borderRadius: 14, padding: 16, border: "1px solid rgba(255,255,255,0.08)", display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ background: "rgba(255, 255, 255, 0.06)", backdropFilter: "blur(18px)", borderRadius: 18, padding: 18, border: "1px solid rgba(255,255,255,0.14)", display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <FileSpreadsheet size={20} style={{ color: "#34d399" }} />
               <div>
                 <strong style={{ color: "#ffffff", fontSize: 14 }}>Báo Cáo Doanh Thu Ngày</strong>
-                <div style={{ fontSize: 11, color: "#94a3b8" }}>Phân tách tiền mặt vs VietQR, block 15m</div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.65)" }}>Phân tách tiền mặt vs VietQR, block 15m</div>
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: "auto" }}>
@@ -167,12 +167,12 @@ export default function ReportsAuditPage() {
           </div>
 
           {/* Card 2: Traffic & Occupancy */}
-          <div style={{ background: "rgba(17, 24, 39, 0.6)", borderRadius: 14, padding: 16, border: "1px solid rgba(255,255,255,0.08)", display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ background: "rgba(255, 255, 255, 0.06)", backdropFilter: "blur(18px)", borderRadius: 18, padding: 18, border: "1px solid rgba(255,255,255,0.14)", display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <FileSpreadsheet size={20} style={{ color: "#38bdf8" }} />
               <div>
                 <strong style={{ color: "#ffffff", fontSize: 14 }}>Lưu Lượng & Tỷ Lệ Lấp Đầy</strong>
-                <div style={{ fontSize: 11, color: "#94a3b8" }}>Phân tích giờ cao điểm, xe ra vào tuần</div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.65)" }}>Phân tích giờ cao điểm, xe ra vào tuần</div>
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: "auto" }}>
@@ -198,7 +198,7 @@ export default function ReportsAuditPage() {
           </div>
 
           {/* Card 3: Cash Reconciliation */}
-          <div style={{ background: "rgba(17, 24, 39, 0.6)", borderRadius: 14, padding: 16, border: "1px solid rgba(255,255,255,0.08)", display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ background: "rgba(255, 255, 255, 0.06)", backdropFilter: "blur(18px)", borderRadius: 18, padding: 18, border: "1px solid rgba(255,255,255,0.14)", display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <FileSpreadsheet size={20} style={{ color: "#fbbf24" }} />
               <div>

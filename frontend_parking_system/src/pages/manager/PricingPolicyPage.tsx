@@ -156,28 +156,28 @@ export default function PricingPolicyPage() {
             <div style={{ color: "#94a3b8", padding: 20 }}>Đang tải dữ liệu biểu phí…</div>
           ) : activePlan ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div style={{ background: "rgba(17, 24, 39, 0.6)", borderRadius: 12, padding: 14, border: "1px solid rgba(255,255,255,0.06)" }}>
-                <div style={{ fontSize: 13, color: "#94a3b8" }}>Tên chính sách & Phiên bản:</div>
+              <div style={{ background: "rgba(255, 255, 255, 0.06)", backdropFilter: "blur(16px)", borderRadius: 14, padding: 16, border: "1px solid rgba(255,255,255,0.12)" }}>
+                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }}>Tên chính sách & Phiên bản:</div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: "#fff", marginTop: 4 }}>
-                  {activePlan.name} <span style={{ color: "#00f2fe", fontSize: 12 }}>({activePlan.version})</span>
+                  {activePlan.name} <span style={{ color: "#38bdf8", fontSize: 12 }}>({activePlan.version})</span>
                 </div>
-                <div style={{ fontSize: 11, color: "#a8cdd0", marginTop: 6 }}>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.75)", marginTop: 6 }}>
                   Loại xe: <strong>{activePlan.vehicleCategory === "Car" ? "Ô tô (Dưới 9 chỗ)" : activePlan.vehicleCategory}</strong> • Hiệu lực từ: <strong>01/03/2026</strong>
                 </div>
               </div>
 
               {/* Key Highlights */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
-                <div style={{ background: "rgba(17, 24, 39, 0.6)", padding: 12, borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)" }}>
-                  <div style={{ fontSize: 11, color: "#94a3b8" }}>Đơn giá mỗi giờ:</div>
+                <div style={{ background: "rgba(255, 255, 255, 0.06)", backdropFilter: "blur(16px)", padding: 14, borderRadius: 14, border: "1px solid rgba(255,255,255,0.12)" }}>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.65)" }}>Đơn giá mỗi giờ:</div>
                   <div style={{ fontSize: 18, fontWeight: 800, color: "#34d399", marginTop: 2 }}>
                     {activePlan.rules.hourlyRate.toLocaleString("vi-VN")} đ
                   </div>
-                  <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 2 }}>Block: {activePlan.rules.billingUnitMinutes} phút</div>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.65)", marginTop: 2 }}>Block: {activePlan.rules.billingUnitMinutes} phút</div>
                 </div>
 
-                <div style={{ background: "rgba(17, 24, 39, 0.6)", padding: 12, borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)" }}>
-                  <div style={{ fontSize: 11, color: "#94a3b8" }}>Trần tối đa ngày:</div>
+                <div style={{ background: "rgba(255, 255, 255, 0.06)", backdropFilter: "blur(16px)", padding: 14, borderRadius: 14, border: "1px solid rgba(255,255,255,0.12)" }}>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.65)" }}>Trần tối đa ngày:</div>
                   <div style={{ fontSize: 18, fontWeight: 800, color: "#22d3ee", marginTop: 2 }}>
                     {activePlan.rules.dailyCap.toLocaleString("vi-VN")} đ
                   </div>
