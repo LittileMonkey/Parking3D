@@ -78,54 +78,70 @@ namespace Parking.Payment.Infrastructure.Repositories
         public async Task<EReceiptDto?> GetReceiptAsync(Guid paymentId, CancellationToken cancellationToken = default)
         {
             const string sql = """
-                SELECT 
-                    p.id,
-                    a.booking_id,
-                    a.lot_id,
-                    a.vehicle_id,
-                    p.amount,
-                    a.currency,
-                    p.method::text,
-                    p.status::text,
-                    COALESCE(p.succeeded_at, p.created_at) AS paid_at,
-                    p.collected_by,
-                    pa.provider_transaction_id
-                FROM payments p
-                JOIN billing_accounts a ON a.id = p.account_id
-                LEFT JOIN payment_attempts pa ON pa.payment_id = p.id AND pa.status = 'SUCCESS'
-                WHERE (p.id = @paymentId OR a.booking_id = @paymentId)
-                ORDER BY pa.completed_at DESC NULLS LAST
-                LIMIT 1;
-                """;
+                                SELECT 
+                                    p.id,
+                                    a.booking_id,
+                                    a.session_id,
+                                    a.lot_id,
+                                    a.vehicle_id,
+                                    a.lot_name,
+                                    a.plate_number,
+                                    p.amount,
+                                    a.currency,
+                                    p.method::text,
+                                    p.status::text,
+                                    COALESCE(p.succeeded_at, p.created_at) AS paid_at,
+                                    p.collected_by,
+                                    pa.provider_transaction_id
+                                FROM payments p
+                                JOIN billing_accounts a ON a.id = p.account_id
+                                LEFT JOIN payment_attempts pa ON pa.payment_id = p.id AND pa.status = 'SUCCESS'
+                                WHERE (p.id = @paymentId OR a.booking_id = @paymentId OR a.session_id = @paymentId)
+                                ORDER BY pa.completed_at DESC NULLS LAST
+                                LIMIT 1;
+                                """;
             await using var cmd = _db.CreateCommand(sql);
             cmd.Parameters.AddWithValue("paymentId", paymentId);
             await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+
             if (!await reader.ReadAsync(cancellationToken))
             {
                 return null;
             }
+
             var id = reader.GetGuid(0);
-            var bookingId = reader.GetGuid(1);
-            var lotId = reader.GetGuid(2);
-            var vehicleId = reader.GetGuid(3);
-            var amount = reader.GetDecimal(4);
-            var currency = reader.GetString(5);
-            var method = reader.GetString(6);
-            var status = reader.GetString(7);
-            var paidAt = new DateTimeOffset(reader.GetDateTime(8), TimeSpan.Zero);
-            var collectedBy = reader.IsDBNull(9) ? (Guid?)null : reader.GetGuid(9);
-            var bankTransactionNo = reader.IsDBNull(10) ? null : reader.GetString(10);
-            
+            var bookingId = reader.IsDBNull(1) ? (Guid?)null : reader.GetGuid(1);
+            var sessionId = reader.IsDBNull(2) ? (Guid?)null : reader.GetGuid(2);
+            var lotId = reader.GetGuid(3);
+            var vehicleId = reader.GetGuid(4);
+
+            // Đọc Snapshot: Nếu bản ghi cũ chưa có snapshot thì fallback về mã dễ nhìn
+            var lotNameSnapshot = reader.IsDBNull(5) ? null : reader.GetString(5);
+            var lotName = !string.IsNullOrWhiteSpace(lotNameSnapshot) ? lotNameSnapshot : $"Bãi đỗ xe #{lotId.ToString()[..8].ToUpper()}";
+            var plateSnapshot = reader.IsDBNull(6) ? null : reader.GetString(6);
+            var plateNumber = !string.IsNullOrWhiteSpace(plateSnapshot) ? plateSnapshot : (vehicleId != Guid.Empty ? $"Xe #{vehicleId.ToString()[..6].ToUpper()}" : "Xe vãng lai");
+
+            var amount = reader.GetDecimal(7);
+            var currency = reader.GetString(8);
+            var method = reader.GetString(9);
+            var status = reader.GetString(10);
+            var paidAt = new DateTimeOffset(reader.GetDateTime(11), TimeSpan.Zero);
+            var collectedBy = reader.IsDBNull(12) ? (Guid?)null : reader.GetGuid(12);
+            var bankTransactionNo = reader.IsDBNull(13) ? null : reader.GetString(13);
+
+            // Tạo mã biên lai chuẩn REC-YYYYMMDD-XXXXXX
             var receiptNumber = $"REC-{paidAt:yyyyMMdd}-{id.ToString("N")[..6].ToUpper()}";
-            var lotName = $"Bãi đỗ xe #{lotId.ToString()[..8].ToUpper()}";
-            var plateNumber = vehicleId != Guid.Empty ? $"30H-{vehicleId.ToString()[..4].ToUpper()}" : "Xe khách hàng";
-            var rawHashInput = $"{receiptNumber}|{id}|{bookingId}|{amount}|{currency}|{paidAt:O}";
+
+            // Chuẩn hóa chuỗi raw hash: lấy bookingId hoặc sessionId hoặc id thanh toán
+            var referenceId = bookingId ?? sessionId ?? id;
+            var rawHashInput = $"{receiptNumber}|{id}|{referenceId}|{amount:0}|{currency}|{paidAt:O}";
             var verificationHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(rawHashInput)));
 
             return new EReceiptDto(
                 ReceiptNumber: receiptNumber,
                 PaymentId: id,
                 BookingId: bookingId,
+                SessionId: sessionId,
                 LotName: lotName,
                 PlateNumber: plateNumber,
                 PaymentMethod: method,

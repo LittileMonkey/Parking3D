@@ -166,12 +166,16 @@ namespace Parking.Payment.Api.Controllers
             var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
 
             var idempotencyKey = Request.Headers["Idempotency-Key"].ToString();
-
+            // Nếu Client không truyền Header Idempotency-Key -> Fallback an toàn gắn chặt với BookingId
+            if (string.IsNullOrWhiteSpace(idempotencyKey))
+            {
+                idempotencyKey = $"vnpay-qr:{requestDto.BookingId}";
+            }
             var command = new CreatePaymentQrCommand(
                            BookingId: requestDto.BookingId,
                            UserId: userId,
                            IpAddress: ipAddress,
-                           IdempotencyKey: string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey
+                           IdempotencyKey: idempotencyKey
                         );
 
             var resultDto = await _mediator.Send(command, cancellationToken);

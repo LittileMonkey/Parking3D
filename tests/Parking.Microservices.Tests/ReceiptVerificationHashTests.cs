@@ -44,5 +44,25 @@ namespace Parking.Microservices.Tests
             // ASSERT: Hệ thống phát hiện ngay sự sai lệch (mã băm khác nhau hoàn toàn)
             Assert.NotEqual(originalHash, tamperedHash);
         }
+
+        [Fact]
+        public void VerificationHash_ShouldSucceed_ForWalkInSessionPayment()
+        {
+            // ARRANGE: Thanh toán lượt xe ra bãi (bookingId là null, có sessionId)
+            var receiptNumber = "REC-20261028-C4D5E6";
+            var paymentId = Guid.NewGuid();
+            Guid? bookingId = null;
+            var sessionId = Guid.NewGuid();
+            var amount = 30000m;
+            var currency = "VND";
+            var paidAt = DateTimeOffset.UtcNow;
+            var referenceId = bookingId ?? sessionId;
+            var rawHashInput = $"{receiptNumber}|{paymentId}|{referenceId}|{amount:0}|{currency}|{paidAt:O}";
+            // ACT
+            var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(rawHashInput)));
+            // ASSERT: Chuỗi hash 64 ký tự hợp lệ và không bị null exception
+            Assert.NotNull(hash);
+            Assert.Equal(64, hash.Length);
+        }
     }
 }

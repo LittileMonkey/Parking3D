@@ -12,7 +12,8 @@ namespace Parking.Payment.Application.DTOs
     public record EReceiptDto(
         string ReceiptNumber,
         Guid PaymentId,
-        Guid BookingId,
+        Guid? BookingId,
+        Guid? SessionId,
         string LotName,
         string PlateNumber,
         string PaymentMethod,

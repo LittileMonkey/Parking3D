@@ -16,24 +16,70 @@ public sealed class BookingPaymentQueryGrpc(NpgsqlDataSource db,IFacilityAccess 
     {
         if(!Guid.TryParse(request.BookingId,out var booking)||!Guid.TryParse(request.UserId,out var user))
             throw new RpcException(new Status(StatusCode.InvalidArgument,"Valid IDs required"));
-        await using var command=db.CreateCommand("SELECT b.id,b.lot_id,b.vehicle_id,b.customer_id,b.estimated_amount,s.currency,b.status::text,b.hold_expires_at FROM bookings b JOIN pricing_snapshots s ON s.id=b.pricing_snapshot_id WHERE b.id=@id");
+
+        await using var command = db.CreateCommand("""
+            SELECT b.id, b.lot_id, b.vehicle_id, b.customer_id, b.estimated_amount, 
+                   s.currency, b.status::text, b.hold_expires_at,
+                   COALESCE(l.name, 'Bãi đỗ xe') AS lot_name,
+                   COALESCE(v.plate_normalized, 'Xe khách') AS plate_number
+            FROM bookings b 
+            JOIN pricing_snapshots s ON s.id = b.pricing_snapshot_id
+            LEFT JOIN parking_lots l ON l.id = b.lot_id
+            LEFT JOIN vehicles v ON v.id = b.vehicle_id
+            WHERE b.id = @id
+            """);
+
         command.Parameters.AddWithValue("id",booking);
-        Guid lot;Guid vehicle;Guid? owner;long amount;string currency;string state;DateTime? expiry;
-        await using(var r=await command.ExecuteReaderAsync(context.CancellationToken))
+
+        Guid lot; 
+        Guid vehicle; 
+        Guid? owner; 
+        long amount; 
+        string currency; 
+        string state; 
+        DateTime? expiry;
+        string lotName = ""; 
+        string plateNumber = "";
+
+        await using (var r = await command.ExecuteReaderAsync(context.CancellationToken))
         {
-            if(!await r.ReadAsync(context.CancellationToken))throw new RpcException(new Status(StatusCode.NotFound,"Booking not found"));
-            lot=r.GetGuid(1);vehicle=r.GetGuid(2);owner=r.IsDBNull(3)?null:r.GetGuid(3);amount=checked((long)r.GetDecimal(4));currency=r.GetString(5);state=r.GetString(6);expiry=r.IsDBNull(7)?null:r.GetDateTime(7);
+            if (!await r.ReadAsync(context.CancellationToken)) 
+                throw new RpcException(new Status(StatusCode.NotFound, "Booking not found"));
+
+            lot = r.GetGuid(1);
+            vehicle = r.GetGuid(2);
+            owner = r.IsDBNull(3) ? null : r.GetGuid(3);
+            amount = checked((long)r.GetDecimal(4));
+            currency = r.GetString(5);
+            state = r.GetString(6);
+            expiry = r.IsDBNull(7) ? null : r.GetDateTime(7);
+            lotName = r.GetString(8);
+            plateNumber = r.GetString(9);
+
         }
-        if(state!="PENDING_PAYMENT" || expiry is null || expiry<=clock.GetUtcNow().UtcDateTime)throw new RpcException(new Status(StatusCode.FailedPrecondition,"Booking no longer payable"));
+
+        if (state!="PENDING_PAYMENT" || expiry is null || expiry <= clock.GetUtcNow().UtcDateTime)
+            throw new RpcException(new Status(StatusCode.FailedPrecondition,"Booking no longer payable"));
+
         if(owner!=user)
         {
-            try{await access.RequireAsync(user,lot,"CASH",context.CancellationToken);}
-            catch(global::Parking.ServiceDefaults.ServiceException){throw new RpcException(new Status(StatusCode.PermissionDenied,"Booking owner or assigned Staff required"));}
+            try{
+
+                await access.RequireAsync(user,lot,"CASH",context.CancellationToken);
+
+            } 
+            catch(global::Parking.ServiceDefaults.ServiceException)
+            {
+
+                throw new RpcException(new Status(StatusCode.PermissionDenied,"Booking owner or assigned Staff required"));
+
+            }
             catch(Grpc.Core.RpcException ex) when (ex.StatusCode == Grpc.Core.StatusCode.DeadlineExceeded || ex.StatusCode == Grpc.Core.StatusCode.Unavailable)
             {
                 // Fallback nếu Identity gRPC bận hoặc timeout khi test nội bộ
             }
         }
+
         return new BookingQuoteReply
         {
             BookingId = booking.ToString(),
@@ -42,7 +88,9 @@ public sealed class BookingPaymentQueryGrpc(NpgsqlDataSource db,IFacilityAccess 
             AmountMinor = amount,
             Currency = currency,
             Status = state,
-            CustomerId = owner?.ToString() ?? string.Empty
+            CustomerId = owner?.ToString() ?? string.Empty,
+            LotName = lotName,
+            PlateNumber = plateNumber
         };
     }
 }
