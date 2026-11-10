@@ -68,9 +68,9 @@ public sealed partial class ParkingRepository
     }
 
     private static decimal CalculateCheckOutFee(bool hasBooking, DateTimeOffset entry, DateTimeOffset expected,
-        DateTimeOffset at, string rules, string timezone, DateTimeOffset? bookedStart=null)
+        DateTimeOffset at, string rules, string timezone, DateTimeOffset? bookedStart=null, bool isGoldStarMember=false)
     {
-        try { return CheckOutFee.Calculate(hasBooking,entry,expected,at,rules,timezone,bookedStart); }
+        try { return CheckOutFee.Calculate(hasBooking,entry,expected,at,rules,timezone,bookedStart,isGoldStarMember); }
         catch (Exception error) when (error is ArgumentException or JsonException or TimeZoneNotFoundException or InvalidTimeZoneException)
         { throw new ServiceException(503,"Pricing snapshot unavailable. Checkout is blocked."); }
     }
