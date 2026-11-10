@@ -5,6 +5,7 @@ import { ApiError, api, type BookingDetail, type Payment } from "../services/api
 import { remainingHoldSeconds } from "../services/bookingHold";
 import { useAuth } from "../context/AuthContext";
 import CustomerLayout from "../components/customer/CustomerLayout";
+import { useIdempotencyKey } from "../hooks/useIdempotencyKey";
 
 function statusText(status: string) {
   const labels: Record<string, string> = {
@@ -48,6 +49,7 @@ function holdTimeText(expiresAt: string | null | undefined, now: number) {
 export default function BookingStatusPage() {
   const { bookingId = "" } = useParams();
   const { isAuthenticated } = useAuth();
+  const { key: paymentKey } = useIdempotencyKey(`pay-${bookingId}`);
   const [booking, setBooking] = useState<BookingDetail | null>(null);
   const [payment, setPayment] = useState<Payment | null>(null);
   const [loading, setLoading] = useState(true);
@@ -100,13 +102,7 @@ export default function BookingStatusPage() {
     setPaymentError("");
     setPaymentLoading(true);
     try {
-      const keyName = `parking.cash-payment-key.${bookingId}`;
-      let key = sessionStorage.getItem(keyName);
-      if (!key) {
-        key = crypto.randomUUID();
-        sessionStorage.setItem(keyName, key);
-      }
-      const result = await api.createCashPayment(bookingId, key);
+      const result = await api.createCashPayment(bookingId, paymentKey);
       setPayment(result);
       void loadBooking(false);
     } catch (cause) {
