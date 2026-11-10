@@ -108,3 +108,4 @@ docs/*Giai_Thich*.md
 # Local demo scripts (not for repo)
 DEMO_SCRIPT.md
 docs/DEMO_SQL_QUERIES.sql
+FE_IDEMPOTENCY_HANDOVER.md

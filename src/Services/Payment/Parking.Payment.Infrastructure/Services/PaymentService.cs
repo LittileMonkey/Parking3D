@@ -1,4 +1,5 @@
 ﻿using Google.Protobuf;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -355,11 +356,16 @@ public sealed class PaymentService(
     {
         if (command.BookingId == Guid.Empty || string.IsNullOrWhiteSpace(command.StaffReason))
             throw new ServiceException(400, "Booking ID and confirmation reason are required.");
-        var actorId = Guid.TryParse(command.ConfirmedBy, out var parsedActor)
-            ? parsedActor
-            : Guid.Parse("22222222-2222-2222-2222-222222222222");
+
+        // Zero Trust: Bắt buộc thông tin nhân viên xác nhận phải là Guid hợp lệ, KHÔNG fallback ID giả
+        if (!Guid.TryParse(command.ConfirmedBy, out var actorId) || actorId == Guid.Empty)
+        {
+            throw new ServiceException(401, "Thông tin nhân viên xác nhận không hợp lệ hoặc thiếu token.");
+        }
+
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
+
         // 1. Khóa dòng bản ghi payment theo booking_id để bảo vệ giao dịch độc quyền
         const string querySql = """
             SELECT p.id, a.lot_id, p.amount, a.currency, p.method::text, p.status::text, p.version, p.succeeded_at
@@ -615,21 +621,42 @@ public sealed class PaymentService(
         if (string.IsNullOrWhiteSpace(txnRef))
             return new VnPayIpnResult("01", "Order Not Found");
 
+        // ═════════════════════════════════════════════════════════════════════════
+        // [CẢI TIẾN MỚI]: Mở kết nối & Khóa Advisory Lock độc quyền theo txnRef
+        // Ngăn chặn hoàn toàn 2 request IPN song song gây lỗi Race Condition
+        // ═════════════════════════════════════════════════════════════════════════
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await using var tx = await conn.BeginTransactionAsync(ct);
+
+        await using ( var guard = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended(@key, 0))", conn, tx))
+        {
+            guard.Parameters.AddWithValue("key", "ipn:" + txnRef);
+            await guard.ExecuteNonQueryAsync(ct);
+        }
+
+        // ════════════════════════════════════════════════════
+        // LỚP 3: Tra cứu attempt và payment bên trong phạm vi Khóa
+        // ════════════════════════════════════════════════════
         Guid attemptId, paymentId;
         long dbAmount;
         string attemptStatus;
 
-        await using (var lookupCmd = db.CreateCommand(
-            "SELECT a.id, a.payment_id, a.status, p.amount " +
-            "FROM payment_attempts a " +
-            "JOIN payments p ON p.id = a.payment_id " +
-            "WHERE a.merchant_reference = @txnRef AND a.provider = 'VNPAY'"))
+        await using (var lookupCmd = new NpgsqlCommand("""
+                SELECT a.id, a.payment_id, a.status, p.amount 
+                FROM payment_attempts a 
+                JOIN payments p ON p.id = a.payment_id 
+                WHERE a.merchant_reference = @txnRef AND a.provider = 'VNPAY'
+                FOR UPDATE OF a;
+                """, conn, tx))
         {
             lookupCmd.Parameters.AddWithValue("txnRef", txnRef);
             await using var r = await lookupCmd.ExecuteReaderAsync(ct);
             if (!await r.ReadAsync(ct))
+            {
+                await tx.RollbackAsync(ct);
                 return new VnPayIpnResult("01", "Order Not Found");
-
+            }    
+                
             attemptId    = r.GetGuid(0);
             paymentId    = r.GetGuid(1);
             attemptStatus = r.GetString(2);
@@ -637,35 +664,47 @@ public sealed class PaymentService(
         }
 
         // ════════════════════════════════════════════════════
-        // LỚP 3: Kiểm tra số tiền
+        // LỚP 4: Kiểm tra số tiền
         // VNPay gửi amountMinor * 100 (ví dụ 50000 VND => gửi 5000000)
         // ════════════════════════════════════════════════════
         if (!long.TryParse(Get(queryParams, "vnp_Amount", "0"), out var rawAmount))
+        {
+            await tx.RollbackAsync(ct);
             return new VnPayIpnResult("04", "Invalid Amount");
+
+        }
 
         var vnpAmount = rawAmount / 100; // Quy đổi về đơn vị tiền thực
         if (vnpAmount != dbAmount)
+        {
+            await tx.RollbackAsync(ct);
             return new VnPayIpnResult("04", "Invalid Amount");
+        }    
+            
 
         // ════════════════════════════════════════════════════
-        // LỚP 4: Idempotency Guard
+        // LỚP 5: Idempotency Guard
         // Nếu đã xử lý rồi (SUCCESS/FAILED) => không ghi lại, trả về ngay
         // ════════════════════════════════════════════════════
         if (attemptStatus == "SUCCESS")
+        {
+            await tx.RollbackAsync(ct);
             return new VnPayIpnResult("02", "Order Already Confirmed");
+        }
 
         if (attemptStatus == "FAILED")
-            return new VnPayIpnResult("00", "Confirm Success"); // VNPay yêu cầu luôn trả "00"
+        {
+            await tx.RollbackAsync(ct);
+            return new VnPayIpnResult("00", "Confirm Success");  // VNPay spec: đã ghi nhận thất bại thì trả "00"
+
+        }
 
         // ════════════════════════════════════════════════════
-        // LỚP 5: Xử lý kết quả thực tế từ VNPay
+        // LỚP 6: Xử lý kết quả thực tế từ VNPay
         // vnp_ResponseCode = "00" => thành công; khác => thất bại
         // ════════════════════════════════════════════════════
         var responseCode = Get(queryParams, "vnp_ResponseCode");
         var vnpTxnNo     = Get(queryParams, "vnp_TransactionNo");
-
-        await using var conn = await db.OpenConnectionAsync(ct);
-        await using var tx   = await conn.BeginTransactionAsync(ct);
 
         if (responseCode == "00")
         {
@@ -678,29 +717,30 @@ public sealed class PaymentService(
             Guid bookingId; 
             string currency;
 
-            await using (var infoCmd = new NpgsqlCommand(
-                "SELECT a.lot_id, a.booking_id, a.currency " +
-                "FROM billing_accounts a " +
-                "JOIN payments p ON p.account_id = a.id " +
-                "WHERE p.id = @paymentId", conn, tx))
+            await using (var infoCmd = new NpgsqlCommand("""
+            SELECT a.lot_id, a.booking_id, a.currency 
+            FROM billing_accounts a 
+            JOIN payments p ON p.account_id = a.id 
+            WHERE p.id = @paymentId
+            """, conn, tx))
             {
                 infoCmd.Parameters.AddWithValue("paymentId", paymentId);
                 await using var ri = await infoCmd.ExecuteReaderAsync(ct);
                 await ri.ReadAsync(ct);
-                lotId     = ri.GetGuid(0);
+                lotId = ri.GetGuid(0);
                 bookingId = ri.GetGuid(1);
-                currency  = ri.GetString(2);
+                currency = ri.GetString(2);
             }
 
             var message = new PaymentSucceeded
             {
-                EventId             = eventId.ToString(),
-                PaymentId           = paymentId.ToString(),
-                BookingId           = bookingId.ToString(),
-                LotId               = lotId.ToString(),
-                AmountMinor         = dbAmount,
-                Currency            = currency,
-                PaidAtUnixSeconds   = now.ToUnixTimeSeconds()
+                EventId = eventId.ToString(),
+                PaymentId = paymentId.ToString(),
+                BookingId = bookingId.ToString(),
+                LotId = lotId.ToString(),
+                AmountMinor = dbAmount,
+                Currency = currency,
+                PaidAtUnixSeconds = now.ToUnixTimeSeconds()
             };
 
             await using (var updateCmd = new NpgsqlCommand("""
@@ -720,14 +760,14 @@ public sealed class PaymentService(
                        'SYSTEM', 'VNPAY_IPN_SUCCESS', 'PAYMENT', @entity, @now);
                 """, conn, tx))
             {
-                updateCmd.Parameters.AddWithValue("attemptId",  attemptId);
-                updateCmd.Parameters.AddWithValue("paymentId",  paymentId);
-                updateCmd.Parameters.AddWithValue("vnpTxnNo",   vnpTxnNo);
-                updateCmd.Parameters.AddWithValue("now",        now.UtcDateTime);
-                updateCmd.Parameters.AddWithValue("event",      eventId);
-                updateCmd.Parameters.AddWithValue("payload",    Google.Protobuf.JsonFormatter.Default.Format(message));
-                updateCmd.Parameters.AddWithValue("lotId",      lotId);
-                updateCmd.Parameters.AddWithValue("entity",     paymentId.ToString());
+                updateCmd.Parameters.AddWithValue("attemptId", attemptId);
+                updateCmd.Parameters.AddWithValue("paymentId", paymentId);
+                updateCmd.Parameters.AddWithValue("vnpTxnNo", vnpTxnNo);
+                updateCmd.Parameters.AddWithValue("now", now.UtcDateTime);
+                updateCmd.Parameters.AddWithValue("event", eventId);
+                updateCmd.Parameters.AddWithValue("payload", Google.Protobuf.JsonFormatter.Default.Format(message));
+                updateCmd.Parameters.AddWithValue("lotId", lotId);
+                updateCmd.Parameters.AddWithValue("entity", paymentId.ToString());
                 await updateCmd.ExecuteNonQueryAsync(ct);
             }
 
@@ -739,7 +779,7 @@ public sealed class PaymentService(
             // ── Thất bại: đánh dấu attempt FAILED, không thay đổi payment (vẫn PENDING để retry) ──
             await using (var failCmd = new NpgsqlCommand("""
                 UPDATE payment_attempts
-                   SET status = 'FAILED', response_code = @responseCode, responded_at = @now
+                   SET status = 'FAILED', response_code = @responseCode, completed_at = @now
                  WHERE id = @attemptId;
                 """, conn, tx))
             {

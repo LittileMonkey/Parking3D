@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Grpc.Core;
 
 
 namespace Parking.Payment.Api.Middleware
@@ -148,7 +149,23 @@ namespace Parking.Payment.Api.Middleware
                 var (status, errorMessage) = exceptionHandle.HandleException(ex);
                 context.Response.ContentType = "application/json";
                 context.Response.StatusCode = status;
-                await context.Response.WriteAsync(JsonSerializer.Serialize(errorMessage));
+
+                var response = new
+                {
+                    isSuccess = false,
+                    statusCode = status,
+                    message = errorMessage.Message,
+                    result = errorMessage.ErrorDetails
+                };
+                // Cấu hình NamingPolicy chuẩn camelCase (isSuccess, statusCode, message, result)
+
+                var serializerOptions = new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    WriteIndented = false
+                };
+
+                await context.Response.WriteAsync(JsonSerializer.Serialize(response, serializerOptions));
             }
         }
     }
