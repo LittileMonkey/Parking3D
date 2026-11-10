@@ -119,6 +119,68 @@ public sealed class PaymentService(
         // 5. Khóa giao dịch theo BookingId để tránh thanh toán đồng thời (Concurrency lock)
         await using (var guard = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended(@booking,0))", conn, tx))
         { guard.Parameters.AddWithValue("booking", "billing:" + request.BookingId); await guard.ExecuteNonQueryAsync(ct); }
+
+        //CHỐNG THANH TOÁN 2 LẦN: Nếu đơn này ĐÃ CÓ thanh toán SUCCESS
+
+        await using (var checkSuccess = new NpgsqlCommand("""
+            SELECT p.id, a.lot_id, a.booking_id, p.amount, a.currency, 
+                   p.method::text, p.status::text, p.version 
+            FROM payments p 
+            JOIN billing_accounts a ON a.id = p.account_id
+            WHERE a.booking_id = @booking AND p.status = 'SUCCESS'
+            LIMIT 1;
+            """, conn, tx))
+        {
+            checkSuccess.Parameters.AddWithValue("booking", request.BookingId);
+            await using var rSuccess = await checkSuccess.ExecuteReaderAsync(ct);
+
+            if (await rSuccess.ReadAsync(ct))
+            {
+                // Trả về ngay hóa đơn đã thanh toán thành công, TUYỆT ĐỐI không chèn thêm dòng mới
+                return Read(rSuccess);
+            }
+        }
+
+        //CHỐNG TẠO NHIỀU QR PENDING TRÙNG LẶP CHO CÙNG ĐƠN ĐẶT CHỖ:
+        // Nếu đã có 1 Payment PENDING cùng phương thức -> Tái sử dụng phiên đó
+        await using (var checkPending = new NpgsqlCommand("""
+            SELECT p.id, a.lot_id, a.booking_id, p.amount, a.currency, 
+                   p.method::text, p.status::text, p.version, pa.merchant_reference
+            FROM payments p 
+            JOIN billing_accounts a ON a.id = p.account_id
+            LEFT JOIN payment_attempts pa ON pa.payment_id = p.id AND pa.status = 'INITIATED'
+            WHERE a.booking_id = @booking 
+              AND p.method = @method::public.payment_method 
+              AND p.status = 'PENDING'
+            ORDER BY p.created_at DESC LIMIT 1;
+            """, conn, tx))
+
+        {
+            checkPending.Parameters.AddWithValue("booking", request.BookingId);
+            checkPending.Parameters.AddWithValue("method", request.Method);
+            await using var rPending = await checkPending.ExecuteReaderAsync(ct);
+            if (await rPending.ReadAsync(ct))
+            {
+                var pendingView = Read(rPending);
+                string? existingUrl = null;
+                // Nếu là VNPay: Tái tạo URL QR dựa trên mã giao dịch (merchant_reference) cũ còn hiệu lực
+                if (request.Method == "VNPAY" && !rPending.IsDBNull(8))
+                {
+                    var existingTxnRef = rPending.GetString(8);
+                    existingUrl = vnPayService.CreatePaymentUrl(
+                        existingTxnRef,
+                        pendingView.Amount,
+                        $"Thanh toan giu cho {request.BookingId}",
+                        ipAddress ?? "127.0.0.1");
+                }
+                await tx.CommitAsync(ct);
+                return pendingView with { PaymentUrl = existingUrl };
+            }
+
+        }    
+
+
+
         await using (var old = new NpgsqlCommand("SELECT " +
                                                     "p.id," +
                                                     "a.lot_id," +
@@ -136,9 +198,9 @@ public sealed class PaymentService(
         {
             old.Parameters.AddWithValue("key", scopedKey); await using var r = await old.ExecuteReaderAsync(ct);
             if (await r.ReadAsync(ct))
-            { 
-                var view = Read(r); 
-                if (view.BookingId != request.BookingId || view.Amount != quote.AmountMinor || view.Method != request.Method) 
+            {
+                var view = Read(r);
+                if (view.BookingId != request.BookingId || view.Amount != quote.AmountMinor || view.Method != request.Method)
                     throw new ServiceException(409, "Idempotency key reused"); return view; }
 
         }
