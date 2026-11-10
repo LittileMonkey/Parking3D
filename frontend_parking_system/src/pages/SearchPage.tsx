@@ -6,6 +6,7 @@ import { applySlotStatusChanges, type SlotStatusChange } from "../components/par
 import { useParkingHub } from "../components/parking/useParkingHub";
 import { useAuth } from "../context/AuthContext";
 import CustomerLayout from "../components/customer/CustomerLayout";
+import { useIdempotencyKey } from "../hooks/useIdempotencyKey";
 import "./Booking.css";
 
 type VehicleType = "Car" | "Motorbike";
@@ -52,27 +53,11 @@ function formatMoney(amount: number, currency = "VND") {
   return new Intl.NumberFormat("vi-VN", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
 }
 
-function getBookingIdempotencyKey(signature: string) {
-  const storageKey = "parking.booking-attempt";
-  const cached = sessionStorage.getItem(storageKey);
-  if (cached) {
-    try {
-      const attempt = JSON.parse(cached) as { signature?: string; key?: string };
-      if (attempt.signature === signature && attempt.key) return attempt.key;
-    } catch {
-      sessionStorage.removeItem(storageKey);
-    }
-  }
-
-  const key = crypto.randomUUID();
-  sessionStorage.setItem(storageKey, JSON.stringify({ signature, key }));
-  return key;
-}
-
 export default function SearchPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { isAuthenticated } = useAuth();
+  const { key: bookingKey, renewKey: renewBookingKey } = useIdempotencyKey("book");
 
   const paramVehicle = searchParams.get("vehicle") || searchParams.get("vehicleType");
   const initialVehicle: VehicleType = (paramVehicle && (paramVehicle.toLowerCase().includes("bike") || paramVehicle.toLowerCase().includes("motor")))
@@ -384,13 +369,13 @@ export default function SearchPage() {
         startsAt: start.toISOString(),
         endsAt: new Date(start.getTime() + duration * 60_000).toISOString(),
       };
-      const signature = JSON.stringify(payload);
-      const booking = await api.createBooking(payload, getBookingIdempotencyKey(signature));
+      const booking = await api.createBooking(payload, bookingKey);
       navigate(`/bookings/${encodeURIComponent(booking.id)}`);
     } catch (cause) {
       setBookingError(getErrorMessage(cause));
       if (cause instanceof ApiError && cause.status === 409 && selectedLot) {
         setSelectedSlotId("");
+        renewBookingKey();
         void loadAvailability(selectedLot);
       }
     } finally {
