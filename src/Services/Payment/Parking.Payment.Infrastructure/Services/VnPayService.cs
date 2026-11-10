@@ -90,29 +90,35 @@ namespace Parking.Payment.Infrastructure.Services
         }
 
 
-
         /// <summary>
         /// Kiểm tra tính hợp lệ của chữ ký HMAC-SHA512 từ callback của VNPay.
+        /// Sử dụng CryptographicOperations.FixedTimeEquals để chống tấn công Timing Attack.
         /// </summary>
         public bool ValidateSignature(IDictionary<string, string> queryParameters, string inputHash)
         {
+            // 1. Nếu không có mã hash truyền vào -> Từ chối ngay
+            if (string.IsNullOrWhiteSpace(inputHash))
+                return false;
+
             var rawData = new StringBuilder();
-
-            // Lọc các param vnp_ và bỏ qua chữ ký cũ   
+            // 2. Lọc các param vnp_ và bỏ qua chữ ký cũ   
             var validParams = queryParameters
-                .Where(kv => kv.Key.StartsWith("vnp_", StringComparison.OrdinalIgnoreCase)
-                             && !kv.Key.Equals("vnp_SecureHash", StringComparison.OrdinalIgnoreCase)
-                             && !kv.Key.Equals("vnp_SecureHashType", StringComparison.OrdinalIgnoreCase))
-                .OrderBy(kv => kv.Key, new VnPayCompare());
-
+                                .Where(kv => kv.Key.StartsWith("vnp_", StringComparison.OrdinalIgnoreCase)
+                                && !kv.Key.Equals("vnp_SecureHash", StringComparison.OrdinalIgnoreCase)
+                                && !kv.Key.Equals("vnp_SecureHashType", StringComparison.OrdinalIgnoreCase))
+                                .OrderBy(kv => kv.Key, new VnPayCompare());
             foreach (var (key, value) in validParams)
             {
                 if (string.IsNullOrEmpty(value)) continue;
                 if (rawData.Length > 0) rawData.Append('&');
                 rawData.Append(WebUtility.UrlEncode(key)).Append('=').Append(WebUtility.UrlEncode(value));
             }
+
+            // 3. Tính toán mã hash thực tế dựa trên Secret Key của hệ thống
             var checkHash = HmacSha512(_settings.HashSecret, rawData.ToString());
-            return string.Equals(checkHash, inputHash, StringComparison.OrdinalIgnoreCase);
+
+            // 4. [CHỐNG TIMING ATTACK]: So sánh mảng byte với thời gian cố định
+            return CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(checkHash.ToLowerInvariant()), Encoding.UTF8.GetBytes(inputHash.ToLowerInvariant()));
 
         }
 

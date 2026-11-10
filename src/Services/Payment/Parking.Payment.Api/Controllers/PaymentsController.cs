@@ -28,7 +28,7 @@ namespace Parking.Payment.Api.Controllers
         }
 
         /// Tra cứu trạng thái thanh toán theo BookingId (API 1 - S2-06)
-
+        [Authorize]
         [HttpGet("{bookingId:guid}/status")]
         public async Task<IActionResult> GetPaymentStatus(Guid bookingId, CancellationToken cancellationToken)
         {
@@ -67,8 +67,8 @@ namespace Parking.Payment.Api.Controllers
             // 1. Trích xuất User ID của nhân viên từ Token thật
             var staffClaim = User.FindFirst("sub")?.Value
                           ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-                          ?? User.FindFirst("id")?.Value
-                          ?? Request.Headers["X-User-Id"].FirstOrDefault();
+                          ?? User.FindFirst("id")?.Value;
+                          
             // 2. Chặn đứng nếu không có token hợp lệ (Zero Trust - Không dùng ID giả)
             if (!Guid.TryParse(staffClaim, out var parsedStaffGuid) || parsedStaffGuid == Guid.Empty)
             {
@@ -152,8 +152,8 @@ namespace Parking.Payment.Api.Controllers
             // 1. Trích xuất UserId từ Token thật của khách
             var userIdClaim = User.FindFirst("sub")?.Value
                               ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-                              ?? User.FindFirst("id")?.Value
-                              ?? Request.Headers["X-User-Id"].FirstOrDefault();
+                              ?? User.FindFirst("id")?.Value;
+                              
 
             // 2. Chặn đứng nếu chưa đăng nhập
             if (!Guid.TryParse(userIdClaim, out var userId) || userId == Guid.Empty)
@@ -196,8 +196,8 @@ namespace Parking.Payment.Api.Controllers
             // 1. Trích xuất User ID từ JWT Token (sub, NameIdentifier, id) hoặc Header X-User-Id
             var userClaim = User.FindFirst("sub")?.Value
                          ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-                         ?? User.FindFirst("id")?.Value
-                         ?? Request.Headers["X-User-Id"].FirstOrDefault();
+                         ?? User.FindFirst("id")?.Value;
+                         
             // 2. Chặn đứng request không hợp lệ: Tuyệt đối KHÔNG cấp fallback ID
             if (!Guid.TryParse(userClaim, out var requestingUserId) || requestingUserId == Guid.Empty)
             {
