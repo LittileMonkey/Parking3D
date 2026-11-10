@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Parking3D | Three-floor Building</title>
+    <style>
+        * {
+            box-sizing: border-box
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial,sans-serif;
+            background: #dce9f3;
+            overflow: hidden
+        }
+
+        #viewer {
+            position: fixed;
+            inset: 0
+        }
+
+        .panel {
+            position: fixed;
+            z-index: 2;
+            background: #ffffffed;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 4px 18px #0002
+        }
+
+        .top {
+            left: 20px;
+            top: 20px
+        }
+
+            .top h2 {
+                margin: 0 0 7px;
+                font-size: 20px
+            }
+
+            .top p {
+                margin: 0;
+                color: #526274
+            }
+
+        .actions {
+            right: 20px;
+            top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            width: 180px
+        }
+
+        button, a.nav {
+            cursor: pointer;
+            padding: 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: white;
+            color: #17243a;
+            text-align: center;
+            text-decoration: none;
+            font-size: 14px
+        }
+
+            button.active {
+                background: #2563eb;
+                color: white;
+                border-color: #2563eb
+            }
+
+            button:hover {
+                border-color: #2563eb
+            }
+
+        .info {
+            left: 20px;
+            bottom: 20px;
+            min-width: 220px;
+            display: none
+        }
+
+            .info h3 {
+                margin: 0 0 10px
+            }
+
+            .info p {
+                margin: 6px 0
+            }
+
+        @media(max-width:600px) {
+            .top {
+                top: 10px;
+                left: 10px;
+                padding: 10px
+            }
+
+                .top h2 {
+                    font-size: 15px
+                }
+
+            .actions {
+                top: 80px;
+                right: 10px;
+                width: 130px;
+                padding: 8px
+            }
+
+            button, a.nav {
+                padding: 8px;
+                font-size: 12px
+            }
+        }
+    </style>
+    <script type="importmap">
+        {"imports":{"three":"./libs/three/build/three.module.js","three/addons/":"./libs/three/examples/jsm/"}}
+    </script>
+</head>
+<body>
+    <div id="viewer"></div>
+    <div class="panel top">
+        <h2>Parking Building 3D</h2>
+        <p id="building-summary">3 tầng · Tầng 1: Xe máy · Tầng 2 &amp; 3: 100 ô tô/tầng</p>
+        <p id="moto-counter" style="margin-top:6px; font-weight:bold; color:#0f766e;">🏍️ Bãi xe máy (Tầng 1): Trống 350 / 500 slots (Đang gửi: 150 xe)</p>
+    </div>
+    <div class="panel actions">
+        <button class="active" data-floor="0">Toàn cảnh 3 tầng</button>
+        <button data-floor="1">Tầng 1 (Xe máy)</button>
+        <button data-floor="2">Tầng 2 (100 ô tô)</button>
+        <button data-floor="3">Tầng 3 (100 ô tô)</button>
+        <a class="nav" href="./index.html">← Bãi xe ngoài trời</a>
+    </div>
+    <div class="panel info" id="info"><h3 id="slot-id"></h3><p id="slot-floor"></p><p id="slot-status"></p><button id="close-info">Đóng</button></div>
+    <script type="module" src="./js/building.js?v=6"></script>
+</body>
+</html>
