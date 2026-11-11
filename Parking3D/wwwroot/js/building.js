@@ -22,7 +22,7 @@ document.getElementById('viewer').appendChild(renderer.domElement);
 
 // Thiết lập điều khiển xoay, thu phóng, kéo chuột (OrbitControls)
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 8, 0);
+controls.target.set(-5, 8, 0);
 controls.enableDamping = true;
 controls.maxPolarAngle = Math.PI / 2.02; // Giới hạn không cho camera lật xuống dưới mặt đất
 controls.update();
@@ -52,30 +52,15 @@ scene.add(sun);
 // Hàm tiện ích tạo vật liệu tiêu chuẩn (MeshStandardMaterial)
 const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.82, ...extra });
 
-const concrete = mat(0xaab5c0);     // Màu bê tông sàn và tường
+const concrete = mat(0xaab5c0);     // Màu bê tông sàn
 const columnMat = mat(0x6f7c89);    // Màu cột trụ chịu lực
-const white = mat(0xf8fafc);        // Màu vạch kẻ trắng
+const white = mat(0xf8fafc);        // Màu vạch kẻ trắng & tường lan can trắng theo mẫu
+const wallWhite = mat(0xeef2f6, { roughness: 0.65 }); // Màu tường chắn màu trắng sáng giống hình mẫu
 const yellow = mat(0xfacc15);       // Màu vạch kẻ vàng
 const asphalt = mat(0x48515c);      // Màu mặt đường nhựa
-const rampPadMat = mat(0x334155);   // Màu nền khu vực cửa lên/xuống tầng (Ramp)
-const stairStepMat = mat(0x64748b); // Màu bậc cầu thang / khối đường dốc nối tầng
-const railMat = mat(0xcbd5e1);      // Màu lan can bảo vệ cầu thang
+const rampRoadMat = mat(0x434c56);  // Màu mặt đường dốc lên/xuống
 const signBoardMat = mat(0x0f172a); // Màu khung bảng thông tin trước cổng
 const signPoleMat = mat(0x475569);  // Màu trụ đỡ bảng thông tin
-
-// Vật liệu dùng cho Bốt bảo vệ (giống hệt file parking.js)
-const boothBlue = mat(0x2878b8, { roughness: 0.75 });
-const boothDark = mat(0x303942, { roughness: 0.75 });
-const boothGlass = new THREE.MeshStandardMaterial({
-    color: 0x8dc8e8,
-    transparent: true,
-    opacity: 0.6,
-    metalness: 0.1,
-    roughness: 0.15,
-    side: THREE.DoubleSide,
-    depthWrite: false
-});
-
 const arrowMat = new THREE.MeshBasicMaterial({ color: 0xfacc15, side: THREE.DoubleSide, depthWrite: false });
 
 // Bảng màu trạng thái của các ô đỗ xe
@@ -92,14 +77,23 @@ const interactables = [];          // Danh sách các mesh có thể click (ô �
 const floorColumnGroups = [];      // Nhóm cột của từng tầng (để ẩn khi xem riêng từng tầng)
 let selected = null;               // Đối tượng đang được người dùng click chọn
 let motoFloor1CenterSprite = null; // Bảng chữ nổi ở giữa Tầng 1 (chỉ hiện khi chọn xem riêng Tầng 1)
-let stairStructureGroup = null;    // Nhóm cấu trúc khối mô phỏng cầu thang nối các tầng
 const floorHeight = 5.2;           // Chiều cao mỗi tầng (5.2m)
 
-// Kích thước mặt sàn tòa nhà (áp dụng chung cho cả 3 tầng)
-const BW = 72;        // Chiều rộng tòa nhà theo trục X (72m)
-const BD = 60;        // Chiều sâu tòa nhà theo trục Z (60m)
+// Kích thước khu vực đỗ xe chính (áp dụng chung cho cả 3 tầng)
+const BW = 72;        // Chiều rộng khu đỗ xe chính theo trục X (72m: từ -36 đến +36)
+const BD = 60;        // Chiều sâu tòa nhà theo trục Z (60m: từ -30 đến +30)
 const HBW = BW / 2;   // Nửa chiều rộng = 36m
 const HBD = BD / 2;   // Nửa chiều sâu = 30m
+
+// Kích thước khu vực Đường dốc lên/xuống (Ramp Wing) bên hông trái (-X) theo đúng hình mẫu:
+// - Gồm hành lang dẫn bên trong (rộng 6.5m) + Ô giếng trời chứa dốc nghiêng bên ngoài (rộng 8.5m)
+const RAMP_INNER_W = 6.5;                           // Bề rộng hành lang phẳng bên trong khu dốc
+const RAMP_WELL_W = 8.5;                            // Bề rộng bản dốc (chia 2 làn: Lối lên & Lối xuống)
+const RAMP_TOTAL_W = RAMP_INNER_W + RAMP_WELL_W;    // Tổng bề rộng khối đường dốc = 15m
+const X_RAMP_SPLIT = -HBW - RAMP_INNER_W;           // Tọa độ X ngăn cách hành lang trong và bản dốc (-42.5m)
+const X_RAMP_OUTER = -HBW - RAMP_TOTAL_W;           // Tọa độ X mép ngoài cùng bên trái (-51.0m)
+const Z_RAMP_START = -11;                           // Tọa độ Z chân dốc (-11m)
+const Z_RAMP_END = 11;                              // Tọa độ Z đỉnh dốc (+11m)
 
 // Thông số số lượng xe máy tại Tầng 1 (Tầng trệt)
 const MOTO_CURRENT = 150;                            // Số lượng xe máy hiện đang có trong bãi
@@ -202,7 +196,7 @@ function createBillboardSprite(lines, options = {}) {
         ctx.fillText(lines[0], canvas.width / 2, canvas.height / 2, maxTextWidth);
     } else {
         ctx.fillStyle = textColor;
-        ctx.font = 'bold 42px Arial';
+        ctx.font = 'bold 44px Arial';
         ctx.fillText(lines[0], canvas.width / 2, canvas.height / 2 - 44, maxTextWidth);
 
         ctx.fillStyle = subTextColor;
@@ -256,267 +250,193 @@ function arrow(parent, x, y, z, yaw = 0, material = arrowMat, scale = 1) {
 }
 
 /**
- * Tạo Bốt bảo vệ (Security Booth) tại Tầng 1
- * Thiết kế, kích thước và màu sắc giống hệt với bốt bảo vệ trong file parking.js
+ * Dựng kết cấu mặt sàn + Khu vực đường dốc nghiêng (Sloped Ramp Wing) đúng theo hình mẫu:
+ * - Mặt sàn khu đỗ xe chính (X từ -36 đến +36)
+ * - Khu vực đường dốc bên trái (X từ -36 đến -51):
+ *   + Dải hành lang trong (X từ -36 đến -42.5): Phẳng suốt từ sau ra trước để xe lưu thông vòng quanh ô giếng trời
+ *   + Dải bản dốc ngoài (X từ -42.5 đến -51):
+ *     * Đoạn sau (Z từ -30 đến -11): Sàn chiếu nghỉ phẳng chân dốc
+ *     * Đoạn giữa (Z từ -11 đến +11): Ở Tầng 1 & 2 có bản dốc nghiêng đi lên tầng trên; ở Tầng 2 & 3 khoét lỗ thông tầng (Cutout Well)
+ *       kèm tường lan can trắng chữ U bao quanh lỗ thông tầng giống hệt ảnh mẫu
+ *     * Đoạn trước (Z từ +11 đến +30): Sàn chiếu nghỉ phẳng đỉnh dốc
+ *   + Lan can trắng bên ngoài chạy ngang ở chiếu nghỉ sau -> uốn nghiêng dọc theo bản dốc -> chạy ngang ở chiếu nghỉ trước tầng trên
  */
-function createSecurityBooth(parent, x, y, z) {
-    const booth = new THREE.Group();
-    booth.name = 'Security Booth';
-    booth.position.set(x, y, z);
-    parent.add(booth);
+function buildFloorBase(group, y, floorNumber) {
+    const slabH = 0.42;
+    const asphaltH = 0.045;
+    const wallH = 1.05;
+    const wallT = 0.35;
+    const wallY = y + 0.68;
 
-    // Nền bốt bảo vệ
-    box(booth, 3.8, 0.2, 3.5, 0, 0.1, 0, concrete);
+    // ── 1. MẶT SÀN KHU ĐỖ XE CHÍNH + HÀNH LANG TRONG CỦA KHU DỐC ─────────────
+    // Sàn liền khối cho khu đỗ xe chính (-36..+36) và dải hành lang trong (-42.5..-36)
+    const mainPlusInnerW = BW + RAMP_INNER_W;
+    const mainPlusInnerX = -RAMP_INNER_W / 2;
+    box(group, mainPlusInnerW, slabH, BD, mainPlusInnerX, y, 0, concrete);
+    box(group, mainPlusInnerW - 0.2, asphaltH, BD - 0.2, mainPlusInnerX, y + 0.23, 0, asphalt);
 
-    // Tường phía sau
-    box(booth, 3.2, 2.8, 0.15, 0, 1.6, -1.4, boothBlue);
+    // ── 2. SÀN CHIẾU NGHỈ SAU (-30..-11) & CHIẾU NGHỈ TRƯỚC (+11..+30) CỦA DẢI DỐC NGOÀI ──
+    const wellCenterX = (X_RAMP_SPLIT + X_RAMP_OUTER) / 2; // -46.75m
+    const backLandLen = Z_RAMP_START - (-HBD);             // 19m (từ -30 đến -11)
+    const backLandZ = (-HBD + Z_RAMP_START) / 2;           // -20.5m
+    const frontLandLen = HBD - Z_RAMP_END;                 // 19m (từ +11 đến +30)
+    const frontLandZ = (Z_RAMP_END + HBD) / 2;             // +20.5m
 
-    // Tường bên trái
-    box(booth, 0.15, 2.8, 2.8, -1.6, 1.6, 0, boothBlue);
+    // Chiếu nghỉ phẳng phía sau (-Z)
+    box(group, RAMP_WELL_W, slabH, backLandLen, wellCenterX, y, backLandZ, concrete);
+    box(group, RAMP_WELL_W - 0.1, asphaltH, backLandLen - 0.1, wellCenterX, y + 0.23, backLandZ, asphalt);
 
-    // Tường bên phải
-    box(booth, 0.15, 2.8, 2.8, 1.6, 1.6, 0, boothBlue);
+    // Chiếu nghỉ phẳng phía trước (+Z)
+    box(group, RAMP_WELL_W, slabH, frontLandLen, wellCenterX, y, frontLandZ, concrete);
+    box(group, RAMP_WELL_W - 0.1, asphaltH, frontLandLen - 0.1, wellCenterX, y + 0.23, frontLandZ, asphalt);
 
-    // Tường mặt trước (chừa lối cửa ở giữa)
-    box(booth, 0.8, 2.8, 0.15, -1.2, 1.6, 1.4, boothBlue);
-    box(booth, 0.8, 2.8, 0.15, 1.2, 1.6, 1.4, boothBlue);
-    box(booth, 1.6, 0.5, 0.15, 0, 2.75, 1.4, boothBlue);
+    // Ở Tầng 1, lót thêm nền đất dưới gầm bản dốc (-11..+11) để mặt đất tầng trệt liền lạc
+    if (floorNumber === 1) {
+        const midLen = Z_RAMP_END - Z_RAMP_START;
+        box(group, RAMP_WELL_W, slabH, midLen, wellCenterX, y, 0, concrete);
+        box(group, RAMP_WELL_W - 0.1, asphaltH, midLen, wellCenterX, y + 0.23, 0, asphalt);
 
-    // Cửa kính mặt trước
-    box(booth, 1.5, 2.25, 0.04, 0, 1.35, 1.48, boothGlass);
+        // Vạch gờ trắng phân tách 2 làn ở chân dốc tầng trệt (giống hình mẫu)
+        box(group, 0.25, 0.32, 8.0, wellCenterX, y + 0.35, Z_RAMP_END + 4.5, wallWhite);
+    }
 
-    // Cửa sổ kính hai bên hông
-    box(booth, 0.04, 1.2, 1.6, -1.7, 1.9, 0, boothGlass);
-    box(booth, 0.04, 1.2, 1.6, 1.7, 1.9, 0, boothGlass);
-
-    // Mái phẳng bốt bảo vệ
-    box(booth, 4.0, 0.3, 3.7, 0, 3.2, 0, boothDark);
-
-    return booth;
-}
-
-/**
- * Dựng kết cấu cơ bản của một tầng:
- * - Mặt sàn bê tông + lớp thảm nhựa
- * - Hệ thống cột chịu lực
- * - Tường chắn bảo vệ xung quanh
- * - Khu vực cổng chờ Lối lên/xuống tầng (Ramp / Driveway) kèm chữ 3D luôn hướng về Camera
- */
-function buildFloorBase(group, y, wallGapZ, floorNumber) {
-    // 1. Mặt sàn bê tông và lớp nhựa trải sàn
-    box(group, BW + 4, 0.45, BD + 4, 0, y, 0, concrete);
-    box(group, BW, 0.045, BD, 0, y + 0.25, 0, asphalt);
-
-    // 2. Các cột trụ chịu lực (đặt vào nhóm riêng để tự động ẩn khi xem từng tầng lẻ)
+    // ── 3. HỆ THỐNG CỘT TRỤ CHỊU LỰC TRONG KHU ĐỖ XE CHÍNH ──────────────────
     const colGroup = new THREE.Group();
     colGroup.name = 'columns';
     for (const cx of [-HBW + 2, -HBW / 2, 0, HBW / 2, HBW - 2]) {
         for (const cz of [-HBD + 2, HBD - 2]) {
-            // Ở Tầng 1, bỏ cột giữa mặt trước (cx = 0, cz = HBD - 2) để không chắn ngay giữa cổng vào
             if (floorNumber === 1 && cx === 0 && cz === HBD - 2) continue;
-            box(colGroup, 0.75, 4.7, 0.75, cx, y + 2.55, cz, columnMat);
+            box(colGroup, 0.75, floorHeight - 0.4, 0.75, cx, y + floorHeight / 2, cz, columnMat);
         }
     }
     group.add(colGroup);
     floorColumnGroups.push(colGroup);
 
-    // 3. Tường chắn an toàn bao quanh mặt sàn
-    const wallY = y + 0.83;
-    const wallH = 1.15;
-    const wallT = 0.25;
+    // ── 4. TƯỜNG LAN CAN TRẮNG BAO QUANH SÀN & Ô GIẾNG TRỜI (THEO HÌNH MẪU) ─
+    const totalW = BW + RAMP_TOTAL_W;         // 87m (từ -51 đến +36)
+    const totalCenterX = (X_RAMP_OUTER + HBW) / 2; // -7.5m
 
-    // Tường phía sau (-Z, liền mạch)
-    box(group, BW + 5, wallH, wallT, 0, wallY, -HBD - 2, concrete);
-    // Tường bên phải (+X, liền mạch)
-    box(group, wallT, wallH, BD + 5, HBW + 2, wallY, 0, concrete);
+    // Tường phía sau (-Z, chạy liền suốt từ -51 đến +36)
+    box(group, totalW + wallT, wallH, wallT, totalCenterX, wallY, -HBD, wallWhite);
 
-    // Tường bên trái (-X) có chừa khoảng trống (wallGapZ) làm lối lên/xuống tầng (Ramp / Driveway)
-    const g = 4.0; // Nửa độ rộng cổng lên/xuống (tổng rộng 8m)
-    const s1 = (wallGapZ - g) - (-HBD - 2);
-    if (s1 > 0.1) {
-        box(group, wallT, wallH, s1, -HBW - 2, wallY, (-HBD - 2 + wallGapZ - g) / 2, concrete);
-    }
-    const s2 = (HBD + 2) - (wallGapZ + g);
-    if (s2 > 0.1) {
-        box(group, wallT, wallH, s2, -HBW - 2, wallY, (wallGapZ + g + HBD + 2) / 2, concrete);
-    }
+    // Tường bên phải (+X, chạy liền suốt từ -30 đến +30)
+    box(group, wallT, wallH, BD + wallT, HBW, wallY, 0, wallWhite);
 
-    // Tường phía trước (+Z): Tầng 1 chừa cổng chính rộng 10m ở giữa; Tầng 2 & 3 đóng kín tường trước để an toàn
+    // Tường phía trước (+Z): Tầng 1 chừa cổng chính rộng 10m tại x = 0; Tầng 2 & 3 đóng kín
     if (floorNumber === 1) {
-        box(group, HBW - 3, wallH, wallT, -(HBW / 2 + 3.5), wallY, HBD + 2, concrete);
-        box(group, HBW - 3, wallH, wallT, (HBW / 2 + 3.5), wallY, HBD + 2, concrete);
+        // Đoạn trước bên trái cổng (từ X_RAMP_OUTER = -51 đến -5)
+        const leftFrontLen = -5 - X_RAMP_OUTER;
+        box(group, leftFrontLen, wallH, wallT, (X_RAMP_OUTER - 5) / 2, wallY, HBD, wallWhite);
+        // Đoạn trước bên phải cổng (từ +5 đến HBW = +36)
+        const rightFrontLen = HBW - 5;
+        box(group, rightFrontLen, wallH, wallT, (5 + HBW) / 2, wallY, HBD, wallWhite);
     } else {
-        box(group, BW + 5, wallH, wallT, 0, wallY, HBD + 2, concrete);
+        box(group, totalW + wallT, wallH, wallT, totalCenterX, wallY, HBD, wallWhite);
     }
 
-    // 4. Đánh dấu khu vực lối chuyển tầng (Ramp / Driveway) tại vị trí cổng bên trái (-X)
-    const rampPadX = -HBW + 1.5;
-    box(group, 6.5, 0.05, g * 2 - 0.4, rampPadX, y + 0.29, wallGapZ, rampPadMat);
+    // Tường mép ngoài bên trái (x = X_RAMP_OUTER = -51):
+    // - Đoạn sau (-30 đến -11): Luôn nằm ngang ở cả 3 tầng
+    box(group, wallT, wallH, backLandLen + 0.3, X_RAMP_OUTER, wallY, backLandZ, wallWhite);
 
-    // Vạch vàng cảnh báo hai bên mép lối lên/xuống
-    box(group, 6.5, 0.06, 0.18, rampPadX, y + 0.31, wallGapZ - g + 0.3, yellow);
-    box(group, 6.5, 0.06, 0.18, rampPadX, y + 0.31, wallGapZ + g - 0.3, yellow);
+    // - Đoạn trước (+11 đến +30): Ở Tầng 1 là lan can tầng trệt, ở Tầng 2 & 3 nối tiếp đỉnh dốc đi lên từ tầng dưới
+    box(group, wallT, wallH, frontLandLen + 0.3, X_RAMP_OUTER, wallY, frontLandZ, wallWhite);
 
-    // Mũi tên chỉ hướng ra/vào lối lên xuống tầng
-    arrow(group, rampPadX, y + 0.34, wallGapZ - 1.5, -Math.PI / 2, arrowMat, 0.75);
-    arrow(group, rampPadX, y + 0.34, wallGapZ + 1.5, Math.PI / 2, arrowMat, 0.75);
+    // Tường lan can chữ U bao quanh lỗ thông tầng (Cutout Well) ở Tầng 2 & Tầng 3 (giống hệt tầng trên cùng trong ảnh mẫu)
+    if (floorNumber >= 2) {
+        // Cạnh ngang chắn mép sau lỗ thông tầng (tại z = Z_RAMP_START = -11, từ X_RAMP_OUTER đến X_RAMP_SPLIT)
+        box(group, RAMP_WELL_W + wallT, wallH, wallT, wellCenterX, wallY, Z_RAMP_START, wallWhite);
 
-    // 5. Gắn bảng chữ 3D (Sprite luôn hướng về Camera ở mọi góc nhìn) tại lối lên/xuống
-    const rampSubtitle = floorNumber === 1
-        ? 'Lối lên Tầng 2 ↑'
-        : (floorNumber === 2 ? 'Lên Tầng 3 ↑ · Xuống Tầng 1 ↓' : 'Lối xuống Tầng 2 ↓');
+        // Cạnh dọc chắn mép trong lỗ thông tầng (tại x = X_RAMP_SPLIT = -42.5, từ -11 đến +11)
+        const wellLen = Z_RAMP_END - Z_RAMP_START;
+        box(group, wallT, wallH, wellLen + wallT, X_RAMP_SPLIT, wallY, 0, wallWhite);
+    }
 
-    const rampSprite = createBillboardSprite(
-        ['Ramp ↑↓ (Driveway)', rampSubtitle],
-        {
-            bgColor: 'rgba(30, 41, 59, 0.92)',
-            borderColor: '#facc15',
-            textColor: '#ffffff',
-            subTextColor: '#fde047',
-            scaleX: 11.5,
-            scaleY: 3.6,
-            alwaysOnTop: true
-        }
-    );
-    // Đặt bảng chữ nổi phía trên khu vực khối cầu thang / lối lên xuống của tầng
-    rampSprite.position.set(-HBW - 6.0, y + 3.0, wallGapZ);
-    group.add(rampSprite);
+    // ── 5. DỰNG BẢN DỐC NGHIÊNG NỐI LÊN TẦNG TRÊN (CHO TẦNG 1->2 VÀ TẦNG 2->3) ─
+    if (floorNumber <= 2) {
+        buildInclinedRampFlight(group, y, y + floorHeight, floorNumber);
+    }
 }
 
 /**
- * Xây dựng cấu trúc khối mô phỏng cầu thang / đường dốc nối 3 tầng bên hông trái (-X)
- * Thiết kế dạng cầu thang đổi chiều (U-turn) kết nối liền mạch vào cửa (z = 0) của Tầng 1, 2, 3:
- * - Cụm chiếu nghỉ trung tâm (z từ -4 đến +4) tại cả 3 tầng nối thẳng vào cổng tầng
- * - Phía trước (+Z): Vế lên từ Tầng 1 -> Chiếu nghỉ giữa (+Z) -> Vế lên nối về cửa Tầng 2
- * - Phía sau (-Z): Vế lên từ Tầng 2 -> Chiếu nghỉ giữa (-Z) -> Vế lên nối về cửa Tầng 3
+ * Dựng Bản dốc nghiêng (Inclined Ramp Flight) nối từ tầng hiện tại (y0) lên tầng kế tiếp (y1):
+ * - Nghiêng từ (z = Z_RAMP_START = -11, y = y0) lên đến (z = Z_RAMP_END = +11, y = y1)
+ * - Có 2 tường lan can trắng chạy dọc hai mép bản dốc khớp liền mạch với lan can ngang của 2 tầng
+ * - Chia làm 2 làn xe rõ ràng: 1 bên Lối đi lên ↑ và 1 bên Lối đi xuống ↓ kèm chữ 3D
  */
-function buildSimulatedStairBlock() {
-    const group = new THREE.Group();
-    group.name = 'Simulated Staircase Block';
+function buildInclinedRampFlight(parentGroup, y0, y1, fromFloor) {
+    const dZ = Z_RAMP_END - Z_RAMP_START;      // Chiều dài hình chiếu bằng = 22m
+    const dY = y1 - y0;                        // Chiều cao nâng tầng = 5.2m
+    const rampLen = Math.hypot(dZ, dY);        // Chiều dài thực của bản dốc (~22.61m)
+    const slopeAngle = Math.atan2(dY, dZ);     // Góc nghiêng của dốc (~13.3 độ)
 
-    const laneW = 3.8;                     // Bề rộng mỗi vế thang (3.8m)
-    const gapW = 0.4;                      // Khoảng hở khe giữa 2 vế thang (0.4m)
-    const totalW = laneW * 2 + gapW;       // Tổng bề rộng khối cầu thang = 8.0m
-    const wallEdgeX = -HBW - 2;            // Tọa độ X mép ngoài tường bên trái tòa nhà (-38m)
-    const blockCenterX = wallEdgeX - totalW / 2; // Tâm X của toàn khối cầu thang (-42m)
+    const wellCenterX = (X_RAMP_SPLIT + X_RAMP_OUTER) / 2; // -46.75m
+    const midY = (y0 + y1) / 2;
+    const midZ = (Z_RAMP_START + Z_RAMP_END) / 2;          // 0m
 
-    // Tâm X của vế trong (sát tường tòa nhà) và vế ngoài
-    const xInner = wallEdgeX - laneW / 2;            // -39.9m
-    const xOuter = wallEdgeX - laneW - gapW - laneW / 2; // -44.1m
+    // Nhóm nghiêng theo góc dốc (-slopeAngle để đầu +Z cao hơn đầu -Z)
+    const rampPivot = new THREE.Group();
+    rampPivot.position.set(wellCenterX, midY, midZ);
+    rampPivot.rotation.x = -slopeAngle;
+    parentGroup.add(rampPivot);
 
-    const centerLandD = 8.0;  // Chiều sâu chiếu nghỉ trung tâm tại z = 0 (khớp cổng 8m: từ -4 đến +4)
-    const flightLen = 10.0;   // Chiều dài mỗi vế bậc thang theo trục Z (10m)
-    const midLandD = 4.2;     // Chiều sâu chiếu nghỉ đổi chiều ở hai đầu (4.2m)
+    // 1. Bản sàn bê tông nghiêng và mặt nhựa đường dốc
+    box(rampPivot, RAMP_WELL_W, 0.38, rampLen + 0.35, 0, 0, 0, concrete);
+    box(rampPivot, RAMP_WELL_W - 0.15, 0.05, rampLen + 0.3, 0, 0.21, 0, rampRoadMat);
 
-    // 1. Ba sàn chiếu nghỉ trung tâm tại cửa Tầng 1, Tầng 2, Tầng 3 (z = 0)
-    for (let f = 1; f <= 3; f++) {
-        const y = (f - 1) * floorHeight;
+    // 2. Hai dải tường lan can trắng nghiêng dọc theo hai bên mép dốc (khớp liền với lan can ngang 2 đầu)
+    const halfW = RAMP_WELL_W / 2;
+    box(rampPivot, 0.35, 1.05, rampLen + 0.45, -halfW, 0.68, 0, wallWhite); // Lan can mép ngoài (-X)
+    box(rampPivot, 0.35, 1.05, rampLen + 0.45, +halfW, 0.68, 0, wallWhite); // Lan can mép trong (+X)
 
-        // Sàn bê tông chiếu nghỉ nối liền vào cổng tầng
-        box(group, totalW + 0.4, 0.45, centerLandD, blockCenterX + 0.2, y, 0, concrete);
-        box(group, totalW - 0.2, 0.05, centerLandD - 0.2, blockCenterX, y + 0.25, 0, rampPadMat);
+    // 3. Gờ phân làn màu trắng ở chính giữa bản dốc (chia đôi Làn đi lên và Làn đi xuống)
+    box(rampPivot, 0.18, 0.12, rampLen - 0.6, 0, 0.26, 0, wallWhite);
 
-        // Lan can bảo vệ mép ngoài (-X) của chiếu nghỉ trung tâm
-        box(group, 0.25, 1.15, centerLandD, blockCenterX - totalW / 2 + 0.12, y + 0.83, 0, concrete);
+    // 4. Mũi tên 3D chỉ hướng trên mặt dốc:
+    // - Làn bên ngoài (xLocal = -RAMP_WELL_W / 4): LỐI ĐI LÊN ↑ (hướng về +Z, yaw = Math.PI)
+    // - Làn bên trong (xLocal = +RAMP_WELL_W / 4): LỐI ĐI XUỐNG ↓ (hướng về -Z, yaw = 0)
+    const xUpLane = -RAMP_WELL_W / 4;
+    const xDownLane = +RAMP_WELL_W / 4;
+    for (const zLocal of [-6, 0, 6]) {
+        arrow(rampPivot, xUpLane, 0.26, zLocal, Math.PI, arrowMat, 0.72);
+        arrow(rampPivot, xDownLane, 0.26, zLocal, 0, arrowMat, 0.72);
     }
 
-    // 2. Hàm dựng 1 vế bậc thang đặc (Stepped Block) từ (zStart, yStart) đến (zEnd, yEnd)
-    function buildSteppedLane(laneX, zStart, zEnd, yStart, yEnd) {
-        const N_STEPS = 12;
-        const dZ = (zEnd - zStart) / N_STEPS;
-        const dY = (yEnd - yStart) / N_STEPS;
-        const stepDepth = Math.abs(dZ);
-
-        for (let i = 0; i < N_STEPS; i++) {
-            const zC = zStart + (i + 0.5) * dZ;
-            const topY = yStart + (i + 1) * dY;
-            const botY = yStart + i * dY - 0.35;
-            const h = topY - botY;
-            const yC = (topY + botY) / 2;
-
-            // Khối bậc thang bê tông
-            box(group, laneW - 0.15, h, stepDepth + 0.04, laneX, yC, zC, stairStepMat);
-            // Vạch vàng đánh dấu bậc
-            box(group, laneW - 0.5, 0.03, 0.1, laneX, topY + 0.015, zC, yellow);
-
-            // Lan can hai bên vế thang
-            for (const side of [-1, 1]) {
-                box(
-                    group,
-                    0.16, 0.9, stepDepth + 0.02,
-                    laneX + side * (laneW / 2 - 0.08),
-                    topY + 0.45,
-                    zC,
-                    railMat
-                );
-            }
+    // 5. Bảng chữ nổi 3D (THREE.Sprite luôn hướng về Camera) hiển thị "Lối đi lên" và "Lối đi xuống"
+    const toFloor = fromFloor + 1;
+    const upSprite = createBillboardSprite(
+        [`Lối đi lên ↑ (Tầng ${fromFloor} → ${toFloor})`],
+        {
+            bgColor: 'rgba(22, 101, 52, 0.92)',
+            borderColor: '#4ade80',
+            textColor: '#ffffff',
+            scaleX: 9.5,
+            scaleY: 2.5,
+            alwaysOnTop: true
         }
-    }
+    );
+    upSprite.position.set(wellCenterX + xUpLane, midY + 1.9, midZ - 2.5);
+    parentGroup.add(upSprite);
 
-    // 3. Cụm thang nối TẦNG 1 (y = 0) -> TẦNG 2 (y = floorHeight) ở phía trước (+Z)
-    const zEdgePos = centerLandD / 2;               // +4.0m
-    const zTurnPos = zEdgePos + flightLen;          // +14.0m
-    const midY12 = floorHeight / 2;                 // +2.6m
-
-    // Vế 1A (Vế trong): Đi từ chiếu nghỉ Tầng 1 (+4m, y=0) ra chiếu nghỉ giữa (+14m, y=2.6m)
-    buildSteppedLane(xInner, zEdgePos, zTurnPos, 0, midY12);
-
-    // Chiếu nghỉ đổi chiều giữa Tầng 1 & Tầng 2 (tại z = +14m đến +18.2m, cao y = 2.6m)
-    const midLandPosZ = zTurnPos + midLandD / 2;
-    box(group, totalW, 0.45, midLandD, blockCenterX, midY12 - 0.2, midLandPosZ, concrete);
-    box(group, totalW - 0.3, 0.05, midLandD - 0.3, blockCenterX, midY12 + 0.05, midLandPosZ, rampPadMat);
-    box(group, 0.25, 1.1, midLandD, blockCenterX - totalW / 2 + 0.12, midY12 + 0.55, midLandPosZ, railMat);
-    box(group, 0.25, 1.1, midLandD, blockCenterX + totalW / 2 - 0.12, midY12 + 0.55, midLandPosZ, railMat);
-    box(group, totalW, 1.1, 0.25, blockCenterX, midY12 + 0.55, zTurnPos + midLandD - 0.12, railMat);
-
-    // Vế 1B (Vế ngoài): Đi ngược từ chiếu nghỉ giữa (+14m, y=2.6m) về chiếu nghỉ Tầng 2 (+4m, y=5.2m)
-    buildSteppedLane(xOuter, zTurnPos, zEdgePos, midY12, floorHeight);
-
-    // 4. Cụm thang nối TẦNG 2 (y = floorHeight) -> TẦNG 3 (y = 2*floorHeight) ở phía sau (-Z)
-    const zEdgeNeg = -centerLandD / 2;              // -4.0m
-    const zTurnNeg = zEdgeNeg - flightLen;          // -14.0m
-    const midY23 = floorHeight * 1.5;               // +7.8m
-
-    // Vế 2A (Vế trong): Đi từ chiếu nghỉ Tầng 2 (-4m, y=5.2m) ra chiếu nghỉ giữa (-14m, y=7.8m)
-    buildSteppedLane(xInner, zEdgeNeg, zTurnNeg, floorHeight, midY23);
-
-    // Chiếu nghỉ đổi chiều giữa Tầng 2 & Tầng 3 (tại z = -14m đến -18.2m, cao y = 7.8m)
-    const midLandNegZ = zTurnNeg - midLandD / 2;
-    box(group, totalW, 0.45, midLandD, blockCenterX, midY23 - 0.2, midLandNegZ, concrete);
-    box(group, totalW - 0.3, 0.05, midLandD - 0.3, blockCenterX, midY23 + 0.05, midLandNegZ, rampPadMat);
-    box(group, 0.25, 1.1, midLandD, blockCenterX - totalW / 2 + 0.12, midY23 + 0.55, midLandNegZ, railMat);
-    box(group, 0.25, 1.1, midLandD, blockCenterX + totalW / 2 - 0.12, midY23 + 0.55, midLandNegZ, railMat);
-    box(group, totalW, 1.1, 0.25, blockCenterX, midY23 + 0.55, zTurnNeg - midLandD + 0.12, railMat);
-
-    // Vế 2B (Vế ngoài): Đi ngược từ chiếu nghỉ giữa (-14m, y=7.8m) về chiếu nghỉ Tầng 3 (-4m, y=10.4m)
-    buildSteppedLane(xOuter, zTurnNeg, zEdgeNeg, midY23, 2 * floorHeight);
-
-    // 5. Hệ thống cột trụ đỡ khối cầu thang từ mặt đất
-    const supportConfigs = [
-        { z: -(zTurnPos + midLandD - 0.5), h: midY23 },
-        { z: -zEdgePos, h: 2 * floorHeight },
-        { z: zEdgePos, h: 2 * floorHeight },
-        { z: zTurnPos + midLandD - 0.5, h: midY12 }
-    ];
-    for (const cfg of supportConfigs) {
-        for (const px of [blockCenterX - totalW / 2 + 0.4, blockCenterX + totalW / 2 - 0.4]) {
-            box(group, 0.6, cfg.h + 0.4, 0.6, px, cfg.h / 2 - 0.2, cfg.z, columnMat);
+    const downSprite = createBillboardSprite(
+        [`Lối đi xuống ↓ (Tầng ${toFloor} → ${fromFloor})`],
+        {
+            bgColor: 'rgba(30, 58, 138, 0.92)',
+            borderColor: '#60a5fa',
+            textColor: '#ffffff',
+            scaleX: 9.5,
+            scaleY: 2.5,
+            alwaysOnTop: true
         }
-    }
-
-    scene.add(group);
-    return group;
+    );
+    downSprite.position.set(wellCenterX + xDownLane, midY + 1.9, midZ + 2.5);
+    parentGroup.add(downSprite);
 }
 
-// Khởi tạo khối cầu thang mô phỏng bên hông trái tòa nhà
-stairStructureGroup = buildSimulatedStairBlock();
-
 // ═══════════════════════════════════════════════════════════════════════════
-//  5. TẦNG 1 (TẦNG TRỆT) – KHU VỰC BÃI ĐỖ XE MÁY + BỐT BẢO VỆ + BẢNG THÔNG TIN
+//  5. TẦNG 1 (TẦNG TRỆT) – KHU VỰC BÃI ĐỖ XE MÁY + BẢNG THÔNG TIN TRƯỚC CỔNG
 //  Yêu cầu:
 //  - Để trống mặt sàn bên trong Tầng 1 (không vẽ các slot lẻ bên trong)
 //  - Tạo 1 bảng thông tin đặt ở trước cổng vào, hiển thị số lượng slots trống
-//  - Thêm Bốt bảo vệ ngay Tầng 1 (giống với bãi xe 1 tầng trong file parking.js)
 //  - Nếu người dùng chọn chỉ xem Tầng 1 (f === 1) thì hiển thị bảng chữ nổi ở giữa sàn
 // ═══════════════════════════════════════════════════════════════════════════
 {
@@ -525,15 +445,11 @@ stairStructureGroup = buildSimulatedStairBlock();
     const group = new THREE.Group();
     group.name = 'Floor 1';
 
-    // Xây dựng mặt sàn Tầng 1 (bên trong để trống hoàn toàn) với cổng Ramp ở tường bên trái (z = 0)
-    buildFloorBase(group, y, 0, f);
+    // Xây dựng mặt sàn Tầng 1 + Bản dốc nghiêng từ Tầng 1 lên Tầng 2
+    buildFloorBase(group, y, f);
 
-    // ── A. BỐT BẢO VỆ NGAY CỔNG TẦNG 1 (Giống file parking.js) ─────────────
-    // Đặt ngay bên trái lối vào cổng chính Tầng 1 (x = -8.5, z = HBD + 5.2)
-    createSecurityBooth(group, -8.5, -0.35, HBD + 5.2);
-
-    // ── B. BẢNG THÔNG TIN ĐẶT Ở TRƯỚC CỔNG VÀO TẦNG TRỆT ───────────────────
-    // Đặt ngay bên phải lối vào cổng chính (x = 9.5, z = HBD + 5.5), đối xứng với Bốt bảo vệ
+    // ── A. BẢNG THÔNG TIN ĐẶT Ở TRƯỚC CỔNG VÀO TẦNG TRỆT ───────────────────
+    // Đặt ngay bên phải lối vào cổng chính (x = 9.5, z = HBD + 5.5)
     const signX = 9.5;
     const signZ = HBD + 5.5;
     const entranceSignGroup = new THREE.Group();
@@ -615,8 +531,8 @@ for (let f = 2; f <= 3; f++) {
     const group = new THREE.Group();
     group.name = `Floor ${f}`;
 
-    // Xây dựng mặt sàn Tầng 2 & 3 với cổng Ramp nằm ở giữa tường bên trái (z = 0)
-    buildFloorBase(group, y, 0, f);
+    // Xây dựng mặt sàn Tầng 2 & 3 + Khu vực đường dốc & lỗ thông tầng (Cutout Well)
+    buildFloorBase(group, y, f);
 
     // Kích thước tiêu chuẩn của 1 ô đỗ ô tô: rộng 2.5m × sâu 5.0m
     const slotW = 2.5;
@@ -702,15 +618,12 @@ for (let f = 2; f <= 3; f++) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  7. MẶT ĐẤT BÊN NGOÀI & ĐƯỜNG DẪN VÀO CỔNG TẦNG TRỆT
-//  (Đã xóa mũi tên chỉ đường màu trắng phía trước bãi xe theo yêu cầu)
+//  7. MẶT ĐẤT BÊN NGOÀI BAO QUANH TÒA NHÀ
+//  (Đã xóa bốt bảo vệ và phần đường dẫn phía trước bãi xe theo yêu cầu)
 // ═══════════════════════════════════════════════════════════════════════════
 
 // Thảm cỏ / mặt đất bao quanh tòa nhà
-box(scene, 180, 0.35, 150, 0, -0.55, 0, mat(0x7e9b81));
-
-// Đoạn đường nhựa dẫn vào cổng chính ở mặt trước (+Z) của Tầng 1 (không vẽ mũi tên)
-// box(scene, 10, 0.06, 14, 0, -0.30, HBD + 9, asphalt);
+box(scene, 200, 0.35, 150, -10, -0.55, 0, mat(0x7e9b81));
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  8. XỬ LÝ TƯƠNG TÁC NGƯỜI DÙNG (CHỌN Ô, ĐỔI TẦNG, RESIZE)
@@ -744,7 +657,7 @@ function clearSelection() {
 
 /**
  * Chuyển đổi chế độ hiển thị theo tầng:
- * - f = 0: Hiển thị toàn cảnh cả 3 tầng + khối cầu thang nối tầng (ẩn bảng chữ nổi ở giữa Tầng 1)
+ * - f = 0: Hiển thị toàn cảnh cả 3 tầng
  * - f = 1: Chỉ xem Tầng 1 -> Hiển thị bảng chữ nổi ở giữa Tầng 1
  * - f = 2, 3: Chỉ hiển thị tầng ô tô tương ứng và ẩn các cột trụ để dễ quan sát
  */
@@ -755,11 +668,6 @@ function showFloor(f) {
     floors.forEach((g, i) => {
         g.visible = (f === 0 || f === i + 1);
     });
-
-    // Hiển thị khối cầu thang nối tầng khi xem toàn cảnh 3 tầng
-    if (stairStructureGroup) {
-        stairStructureGroup.visible = (f === 0);
-    }
 
     // Chỉ hiện bảng chữ nổi giữa sàn Tầng 1 khi người dùng chọn chỉ xem riêng Tầng 1 (f === 1)
     if (motoFloor1CenterSprite) {
@@ -778,9 +686,9 @@ function showFloor(f) {
 
     // Di chuyển góc nhìn Camera phù hợp với tầng đang chọn
     const targetY = f === 0 ? 9 : (f - 1) * floorHeight + 1.5;
-    controls.target.set(0, targetY, 0);
+    controls.target.set(-5, targetY, 0);
     camera.position.set(
-        f === 0 ? 70 : 0,
+        f === 0 ? 70 : -5,
         f === 0 ? 55 : (f - 1) * floorHeight + 48,
         f === 0 ? 80 : 48
     );

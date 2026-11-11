@@ -25,13 +25,14 @@ Dự án trực quan hóa mô hình 3D bãi đỗ xe thông minh sử dụng **T
 ---
 
 ### 2. Mô hình Tòa nhà đỗ xe 3 tầng (`building.html`, `building.js`)
-- **Kết cấu kiến trúc 3 tầng (`72m × 60m`)**:
-  - Sàn bê tông, thảm nhựa đường, tường chắn an toàn bao quanh, hệ thống cột trụ chịu lực (tự động ẩn cột khi chuyển sang chế độ xem từng tầng lẻ để dễ quan sát).
-  - **Cấu trúc khối cầu thang / lối chuyển tầng (Simulated Staircase & Ramp Block)**: Thiết kế dạng khối bậc thang đổi chiều (U-turn) bên hông trái tòa nhà kết nối liền mạch từ Tầng 1 → Tầng 2 → Tầng 3.
-  - **Bảng chỉ dẫn 3D luôn hướng về Camera (`THREE.Sprite` Billboard)**: Các bảng chỉ dẫn **`Ramp ↑↓ (Driveway)`** tại lối lên/xuống của mỗi tầng luôn tự động xoay hướng thẳng về phía người nhìn ở mọi góc xoay 3D (360°).
-- **Tầng 1 (Tầng trệt) – Khu vực đỗ xe máy & Cổng kiểm soát**:
-  - **Bốt bảo vệ (Security Booth)**: Đặt ngay bên trái cổng vào Tầng 1, đồng bộ thiết kế với bãi xe ngoài trời.
-  - **Bảng thông tin điện tử trước cổng (Entrance Info Board)**: Đặt bên phải cổng chính Tầng 1, hiển thị chữ nổi 3D báo **số lượng slots trống** của bãi xe máy (`Slots trống: 350 / 500`) và cho phép click để xem chi tiết.
+- **Kết cấu kiến trúc 3 tầng (`72m × 60m` + Khu đường dốc nối tầng)**:
+  - Sàn bê tông, thảm nhựa đường, tường lan can trắng bao quanh, hệ thống cột trụ chịu lực (tự động ẩn cột khi chuyển sang chế độ xem từng tầng lẻ để dễ quan sát).
+  - **Hệ thống đường dốc nghiêng nối tầng (Sloped Ramp Wing & Cutout Well)**:
+    - Thiết kế liền khối bên hông trái tòa nhà gồm dải hành lang phẳng lưu thông bên trong (`6.5m`) và dải bản dốc nghiêng bên ngoài (`8.5m`) kết nối từ Tầng 1 → Tầng 2 và Tầng 2 → Tầng 3.
+    - Tường lan can màu trắng chạy dọc chiếu nghỉ, uốn nghiêng theo độ dốc của bản dốc và bao quanh lỗ thông tầng (Cutout Well) theo hình chữ U tại Tầng 2 và Tầng 3.
+    - Bản dốc được chia làm **2 làn xe (Lối đi lên ↑ & Lối đi xuống ↓)** ngăn cách bởi gờ trắng ở giữa, có mũi tên 3D chỉ hướng trên mặt dốc kèm bảng chữ nổi 3D (`THREE.Sprite` Billboard) luôn xoay hướng về phía Camera ở mọi góc nhìn 3D (360°).
+- **Tầng 1 (Tầng trệt) – Khu vực đỗ xe máy**:
+  - **Bảng thông tin điện tử trước cổng (Entrance Info Board)**: Đặt trước cổng chính Tầng 1, hiển thị chữ nổi 3D báo **số lượng slots trống** của bãi xe máy (`Slots trống: 350 / 500`) và cho phép click để xem chi tiết.
   - **Không gian bên trong Tầng 1**: Để trống hoàn toàn, không chia các ô lẻ; khi chọn chế độ xem riêng **Tầng 1**, hệ thống sẽ hiển thị bảng chữ nổi 3D ở giữa sàn thống kê số lượng xe máy đang có trong bãi và số chỗ trống.
 - **Tầng 2 & Tầng 3 – Khu vực đỗ xe ô tô (`100 slots / tầng`)**:
   - Mỗi tầng được phân bố chuẩn xác **100 ô đỗ ô tô** theo bố cục **5 hàng (`A`, `B`, `C`, `D`, `E`) × 20 cột** (`F2-A01`..`F2-E20` và `F3-A01`..`F3-E20`).
