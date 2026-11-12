@@ -46,6 +46,13 @@ public sealed partial class ParkingWorkflowTests
                 """, identity);
             command.Parameters.AddWithValue("hash", hash); command.Parameters.AddWithValue("customer", Customer);
             await command.ExecuteNonQueryAsync();
+            await using var registeredVehicle = new NpgsqlCommand("""
+                INSERT INTO user_vehicles(id,user_id,license_plate,vehicle_type,is_default)
+                VALUES(@vehicle,@customer,'51A12345','Car',true)
+                """, identity);
+            registeredVehicle.Parameters.AddWithValue("vehicle", Vehicle);
+            registeredVehicle.Parameters.AddWithValue("customer", Customer);
+            await registeredVehicle.ExecuteNonQueryAsync();
         }
         // Allocate all ports together so their numbers cannot overlap.
         var listeners = Enumerable.Range(0, 4).Select(_ => new TcpListener(IPAddress.Loopback, 0)).ToArray();
@@ -142,7 +149,10 @@ public sealed partial class ParkingWorkflowTests
         var entry = new CheckInRequestDto(Lot, Gate, ticket, "51A-123.45");
         Assert.Equal(HttpStatusCode.Forbidden, (await Post("/api/v1/check-in", entry, ownerToken, "customer-scan")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await Post("/api/v1/check-in", entry with { LotId = Guid.NewGuid() }, staffToken, "wrong-lot")).StatusCode);
-        Assert.Equal(HttpStatusCode.Conflict, (await Post("/api/v1/check-in", entry with { DetectedPlate = "WRONG" }, staffToken, "wrong-plate")).StatusCode);
+        using var mismatch = await Post("/api/v1/check-in", entry with { DetectedPlate = "WRONG" }, staffToken, "wrong-plate");
+        Assert.Equal(HttpStatusCode.Conflict, mismatch.StatusCode);
+        using var mismatchBody = JsonDocument.Parse(await mismatch.Content.ReadAsStringAsync());
+        Assert.Equal("PLATE_MISMATCH", mismatchBody.RootElement.GetProperty("errorCode").GetString());
         Assert.Equal(HttpStatusCode.BadRequest, (await Post("/api/v1/check-in", entry, staffToken)).StatusCode);
         using var success = await Post("/api/v1/check-in", entry, staffToken, "entry-once");
         Assert.Equal(HttpStatusCode.OK, success.StatusCode);

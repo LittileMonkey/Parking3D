@@ -49,6 +49,33 @@ public sealed record BlockPrice(int BlockMinutes, long RateVnd, long DailyCapVnd
         }
         return checked((long)decimal.Ceiling(total));
     }
+
+    public long EstimateOvertime(DateTimeOffset bookedStart, DateTimeOffset expectedExit,
+        DateTimeOffset actualExit, TimeZoneInfo timezone)
+    {
+        Validate();
+        long total = 0;
+        var cursor = expectedExit;
+        while (cursor < actualExit)
+        {
+            var localDate = TimeZoneInfo.ConvertTime(cursor, timezone).Date;
+            var midnight = DateTime.SpecifyKind(localDate, DateTimeKind.Unspecified);
+            var nextMidnight = midnight.AddDays(1);
+            if (timezone.IsInvalidTime(midnight) || timezone.IsAmbiguousTime(midnight) ||
+                timezone.IsInvalidTime(nextMidnight) || timezone.IsAmbiguousTime(nextMidnight))
+                throw new ArgumentException("Unsupported local midnight; pricing timezone requires review");
+
+            var dayStart = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(midnight, timezone));
+            var dayEnd = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(nextMidnight, timezone));
+            var stop = actualExit < dayEnd ? actualExit : dayEnd;
+            var prepaidStart = bookedStart > dayStart ? bookedStart : dayStart;
+            var prepaid = prepaidStart < expectedExit ? Estimate(prepaidStart, expectedExit, timezone) : 0;
+            var remainingCap = Math.Max(0, DailyCapVnd - prepaid);
+            total = checked(total + Math.Min(remainingCap, Estimate(cursor, stop, timezone)));
+            cursor = stop;
+        }
+        return total;
+    }
 }
 
 public static class SearchMath

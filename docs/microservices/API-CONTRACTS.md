@@ -962,6 +962,77 @@ sequenceDiagram
     Gateway-->>Client: HTTP response
 ```
 
+## SCRUM-111 — Staff plate mismatch override
+
+Upload/read evidence endpoints, required idempotency headers for incident/handover writes and the `PLATE_MISMATCH` error code are specified in [EVIDENCE-API.md](EVIDENCE-API.md).
+
+`POST /api/v1/check-in` requires an authenticated Staff account with current `CHECK_IN` access at the requested lot and an `Idempotency-Key` header. A normal QR check-in retains its existing request fields. To confirm a plate mismatch, send the override fields and a private camera image reference.
+
+```json
+{
+  "lotId": "11111111-1111-4111-8111-111111111111",
+  "gateId": "12345678-1234-4234-8234-123456789003",
+  "qrPayload": "<issued-booking-qr>",
+  "detectedPlate": "51B54321",
+  "vehicleType": "CAR",
+  "allowMismatchOverride": true,
+  "overrideReason": "Staff verified the physical registration document",
+  "evidence": [
+    { "kind": "CAMERA_SNAPSHOT", "reference": "private/entry-camera.jpg", "capturedAt": null }
+  ]
+}
+```
+
+`overrideReason` must contain at least 10 characters after trimming and at most 500 characters. Evidence must contain a safe camera reference using `CAMERA`, `CAMERA_SNAPSHOT` or `GATE_CAMERA`. The existing evidence validation rejects inline base64 and unsafe reference schemes. Invalid override input returns HTTP 400 in the standard envelope. Reusing the same key with changed evidence or other request content returns 409. Requests recorded before the evidence field was introduced retain their replay fingerprint.
+
+Successful responses retain the check-in DTO and envelope.
+
+```json
+{
+  "result": {
+    "sessionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "bookingId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "lotId": "11111111-1111-4111-8111-111111111111",
+    "slotId": "77777777-7777-4777-8777-777777777777",
+    "status": "ACTIVE",
+    "entryAt": "2026-11-12T12:00:00Z",
+    "slotCode": "A01",
+    "vehicleType": "CAR",
+    "entryMethod": "QR"
+  },
+  "isSuccess": true,
+  "statusCode": 200,
+  "message": "Check-in successful."
+}
+```
+
+The transaction records `INCIDENT_0482_PLATE_MISMATCH`, the image reference, observed/booked plates, the acting Staff account, audit/history and `parking.checkin.mismatch_override` in `outbox_events`. QR consumption, session/occupancy creation and the inbox outcome commit with these records.
+
+```mermaid
+flowchart TD
+    A[Receive Staff request] --> B[Validate reason, evidence and lot permission]
+    B --> C[Begin transaction and check idempotency key]
+    C --> D[Validate QR, booking, gate, plate and slot]
+    D --> E[Record mismatch incident, evidence and outbox event]
+    E --> F[Consume QR and create session, audit and inbox outcome]
+    F --> G[Commit and return envelope]
+```
+
+```mermaid
+sequenceDiagram
+    actor Staff
+    participant API
+    participant Identity
+    participant PostgreSQL
+    Staff->>API: Check-in with override reason and image reference
+    API->>Identity: Check current lot CHECK_IN permission
+    Identity-->>API: Allowed
+    API->>PostgreSQL: BEGIN, advisory locks, replay check and booking validation
+    API->>PostgreSQL: Incident, evidence, audit, mismatch outbox, session and inbox
+    API->>PostgreSQL: COMMIT
+    API-->>Staff: 200 DTO envelope
+```
+
 ## Internal gRPC v1
 
 | RPC | Caller → owner | Deadline / semantics |

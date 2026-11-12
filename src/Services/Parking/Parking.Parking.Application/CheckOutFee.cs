@@ -1,12 +1,13 @@
 using System;
 using System.Text.Json;
 using Parking.Pricing;
+using Parking.Parking.Domain;
 
 namespace Parking.Parking.Application;
 
 /// <summary>
-/// Adapts Parking pricing snapshots and session times to the shared PricingEngine.
-/// All billing calculations belong to the Building Block used by Payment.
+/// Adapts Parking snapshots and session times to the shared PricingEngine
+/// and the legacy flat-block pricing rules stored in older snapshots.
 /// </summary>
 public static class CheckOutFee
 {
@@ -42,9 +43,8 @@ public static class CheckOutFee
             var tz = ResolveTimeZone(timezone);
             if (!hasBooking) return flat.Estimate(entryAt, pricedAt, tz);
             var beginning = bookedStart ?? entryAt;
-            if (entryAt < beginning) beginning = entryAt;
             if (beginning >= expectedExitAt) beginning = expectedExitAt.AddMinutes(-flat.BlockMinutes);
-            return Math.Max(0, flat.Estimate(beginning, pricedAt, tz) - flat.Estimate(beginning, expectedExitAt, tz));
+            return flat.EstimateOvertime(beginning, expectedExitAt, pricedAt, tz);
         }
 
         var policy = ParsePolicy(rulesJson);

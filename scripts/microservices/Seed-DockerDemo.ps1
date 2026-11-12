@@ -1,6 +1,11 @@
 ﻿$ErrorActionPreference='Stop'
 $OutputEncoding=[System.Text.UTF8Encoding]::new($false)
 Set-Location (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+foreach($migration in @('009_handover_integrity.sql','010_incident_evidence.sql')){
+    Get-Content -Raw -Encoding UTF8 (Join-Path 'database/services/parking/migrations' $migration) |
+        docker compose -f compose.microservices.yml exec -T parking-db psql -X -v ON_ERROR_STOP=1 -U parking -d parking_parking
+    if($LASTEXITCODE -ne 0){throw "Parking migration failed: $migration"}
+}
 $settings=@{}
 foreach($line in Get-Content -Encoding UTF8 '.env'){if($line -match '^([A-Z0-9_]+)=(.*)$'){$settings[$Matches[1]]=$Matches[2].Trim().Trim('"').Trim("'")}}
 function Invoke-Api([string]$Path,[string]$Method='GET',$Body=$null,[string]$Token=''){
@@ -51,12 +56,20 @@ COMMIT;
 $identitySql | docker compose -f compose.microservices.yml exec -T identity-db psql -X -v ON_ERROR_STOP=1 -U identity -d parking_identity -v "customer_id=$customerId"
 if($LASTEXITCODE -ne 0){throw 'Không khởi tạo được xe demo của customer.'}
 $assignments=@(Invoke-Api '/api/v1/staff-assignments/me' 'GET' $null $staffAuth.accessToken)
+$managerAssignments=@(Invoke-Api '/api/v1/staff-assignments/me' 'GET' $null $auth.accessToken)
 $lots=@(Invoke-Api '/api/v1/parking-lots' 'GET' $null $auth.accessToken)
 foreach($lot in $lots | Where-Object code -in @('DEMO-Q1','DEMO-BT','DEMO-Q7','DEMO-A','DEMO-B')){
     if(-not($assignments | Where-Object lotId -eq $lot.id)){
         $null=Invoke-Api '/api/v1/staff-assignments' 'POST' @{userId=$staff.id;lotId=$lot.id;roleCode='PARKING_STAFF';validFrom=[DateTime]::UtcNow.ToString('o')} $auth.accessToken
     }
+    if(-not($managerAssignments | Where-Object { $_.lotId -eq $lot.id -and $_.roleCode -eq 'PARKING_MANAGER' })){
+        $null=Invoke-Api '/api/v1/staff-assignments' 'POST' @{userId=$admin.id;lotId=$lot.id;roleCode='PARKING_MANAGER';validFrom=[DateTime]::UtcNow.ToString('o')} $auth.accessToken
+    }
+    $null=Invoke-Api "/api/v1/parking-lots/$($lot.id)/staff-shifts" 'POST' $null $staffAuth.accessToken
+    $null=Invoke-Api "/api/v1/parking-lots/$($lot.id)/staff-shifts" 'POST' $null $auth.accessToken
+    docker compose -f compose.microservices.yml exec -T redis redis-cli DEL "parking:lot_layout_$($lot.id)" | Out-Null
+    if($LASTEXITCODE -ne 0){throw 'Could not refresh Redis layout cache after demo seed.'}
 }
-Write-Host 'DEMO READY: đã bổ sung bãi, slot, cổng, biểu giá, xe customer và assignment Staff (DB mới: 3 bãi/120 slot/6 cổng).'
+Write-Host 'DEMO READY: đã bổ sung bãi, slot, cổng, biểu giá, bản đồ PUBLISHED, xe customer và hai ca Staff/Manager để bàn giao.'
 Write-Host 'Tài khoản: BOOTSTRAP_EMAIL/PASSWORD; DEMO_STAFF_EMAIL/PASSWORD; DEMO_CUSTOMER_EMAIL/PASSWORD trong .env. Không chia sẻ secrets.'
 Write-Host 'Đây là fixture Development; không phải xác minh quyền sở hữu xe thực tế.'

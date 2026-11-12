@@ -148,7 +148,8 @@ public class CheckInValidatorAndHandlerTests
                 QrPayload: "PARK1.qr",
                 DetectedPlate: "51A-123.45",
                 AllowMismatchOverride: true,
-                OverrideReason: "Staff verified physical vehicle registration documents"),
+                OverrideReason: "Staff verified physical vehicle registration documents",
+                Evidence: [new IncidentEvidenceDto("CAMERA", "private/check-in.jpg", null)]),
             IdempotencyKey: "key-override-with-reason");
 
         var result = _validator.TestValidate(command);

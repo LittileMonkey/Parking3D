@@ -8,7 +8,8 @@ public sealed record CheckInRequestDto(
     string DetectedPlate,
     string? VehicleType = "CAR",
     bool AllowMismatchOverride = false,
-    string? OverrideReason = null);
+    string? OverrideReason = null,
+    IReadOnlyList<IncidentEvidenceDto>? Evidence = null);
 
 public sealed record CheckInResponseDto(
     Guid SessionId,
