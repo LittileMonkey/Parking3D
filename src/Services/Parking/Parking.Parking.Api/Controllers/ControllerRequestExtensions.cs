@@ -4,6 +4,10 @@ namespace Parking.Parking.Api.Controllers;
 
 internal static class ControllerRequestExtensions
 {
+    public static string ReadRequiredIdempotencyKey(this HttpRequest request) =>
+        request.ReadOptionalIdempotencyKey() ??
+        throw new ServiceException(400, "Idempotency-Key is required.", "IDEMPOTENCY_KEY_REQUIRED");
+
     /// <summary>
     /// Reads a single Idempotency-Key header value, rejecting duplicate headers with HTTP 400.
     /// Returns an empty string when absent so request validators can enforce presence uniformly.

@@ -19,17 +19,20 @@ SELECT md5('demo-level:'||id)::uuid,id,CASE code WHEN 'DEMO-Q1' THEN 'B1' WHEN '
  CASE code WHEN 'DEMO-BT' THEN 'OUTDOOR' ELSE 'INDOOR' END,CASE code WHEN 'DEMO-Q1' THEN -3 WHEN 'DEMO-BT' THEN 0 ELSE 3 END,1
 FROM parking_lots WHERE code IN ('DEMO-Q1','DEMO-BT','DEMO-Q7','DEMO-A','DEMO-B') ON CONFLICT DO NOTHING;
 INSERT INTO zones(id,lot_id,level_id,code,name)
-SELECT md5('demo-zone:'||l.id||':'||t.code)::uuid,l.id,md5('demo-level:'||l.id)::uuid,t.code,
+SELECT md5('demo-zone:'||l.id||':'||t.code)::uuid,l.id,
+ (SELECT level.id FROM parking_levels level WHERE level.lot_id=l.id ORDER BY level.display_order,level.id LIMIT 1),t.code,
  CASE t.code WHEN 'CAR' THEN 'Khu ô tô' ELSE 'Khu xe máy' END FROM parking_lots l CROSS JOIN vehicle_types t
 WHERE l.code IN ('DEMO-Q1','DEMO-BT','DEMO-Q7','DEMO-A','DEMO-B') AND t.code IN ('CAR','MOTORBIKE') ON CONFLICT DO NOTHING;
 INSERT INTO parking_slots(id,lot_id,zone_id,level_id,code,operational_status,width_m,length_m)
 SELECT md5('demo-slot:'||z.id||':'||n)::uuid,z.lot_id,z.id,z.level_id,z.code||'-'||lpad(n::text,2,'0'),'ACTIVE',
  CASE z.code WHEN 'CAR' THEN 2.5 ELSE 1 END,CASE z.code WHEN 'CAR' THEN 5 ELSE 2 END
 FROM zones z JOIN parking_lots l ON l.id=z.lot_id CROSS JOIN generate_series(1,20) n
-WHERE l.code IN ('DEMO-Q1','DEMO-BT','DEMO-Q7','DEMO-A','DEMO-B') ON CONFLICT DO NOTHING;
+WHERE l.code IN ('DEMO-Q1','DEMO-BT','DEMO-Q7','DEMO-A','DEMO-B')
+AND z.code IN ('CAR','MOTORBIKE') ON CONFLICT DO NOTHING;
 INSERT INTO slot_vehicle_types(slot_id,lot_id,vehicle_type)
 SELECT s.id,s.lot_id,z.code FROM parking_slots s JOIN zones z ON z.id=s.zone_id JOIN parking_lots l ON l.id=s.lot_id
-WHERE l.code IN ('DEMO-Q1','DEMO-BT','DEMO-Q7','DEMO-A','DEMO-B') ON CONFLICT DO NOTHING;
+WHERE l.code IN ('DEMO-Q1','DEMO-BT','DEMO-Q7','DEMO-A','DEMO-B')
+AND z.code IN ('CAR','MOTORBIKE') ON CONFLICT DO NOTHING;
 INSERT INTO lot_gates(id,lot_id,code,gate_kind)
 SELECT md5('demo-gate:'||l.id||':'||kind)::uuid,l.id,kind,kind FROM parking_lots l CROSS JOIN (VALUES('ENTRY'),('EXIT')) t(kind)
 WHERE l.code IN ('DEMO-Q1','DEMO-BT','DEMO-Q7','DEMO-A','DEMO-B') ON CONFLICT DO NOTHING;
@@ -48,4 +51,34 @@ INSERT INTO vehicles(id,plate_country,plate_normalized,vehicle_type,fuel_type,is
 VALUES('99999999-9999-4999-8999-999999999999','VN','51A12345','CAR','PETROL',true,now()) ON CONFLICT DO NOTHING;
 INSERT INTO user_vehicle_access(user_id,vehicle_id,access_kind,verified_at,is_primary,created_at)
 VALUES(:'customer_id'::uuid,'99999999-9999-4999-8999-999999999999','OWNER',now(),true,now()) ON CONFLICT DO NOTHING;
+
+INSERT INTO map_versions(id,lot_id,version_no,status,coordinate_unit,created_by,published_at)
+SELECT md5('demo-map:'||l.id)::uuid,l.id,
+ (SELECT coalesce(max(v.version_no),0)+1 FROM map_versions v WHERE v.lot_id=l.id),
+ 'PUBLISHED','METERS',:'admin_id'::uuid,now()
+FROM parking_lots l
+WHERE l.code IN ('DEMO-Q1','DEMO-BT','DEMO-Q7','DEMO-A','DEMO-B')
+AND NOT EXISTS(SELECT 1 FROM map_versions v WHERE v.lot_id=l.id AND v.status='PUBLISHED')
+ON CONFLICT DO NOTHING;
+
+WITH positioned_slots AS (
+ SELECT s.*, row_number() OVER(PARTITION BY s.lot_id,s.level_id ORDER BY s.code)-1 AS ordinal
+ FROM parking_slots s JOIN parking_lots l ON l.id=s.lot_id
+ WHERE l.code IN ('DEMO-Q1','DEMO-BT','DEMO-Q7','DEMO-A','DEMO-B')
+)
+INSERT INTO map_objects(id,lot_id,map_version_id,level_id,slot_id,object_type,x,y,z,rotation_y,size_x,size_y,size_z,metadata)
+SELECT md5('demo-map-slot:'||s.id)::uuid,s.lot_id,v.id,s.level_id,s.id,'PARKING_SLOT',
+ (s.ordinal%10)*4,level.elevation_m,(s.ordinal/10)*7,0,coalesce(s.width_m,2.5),0.1,coalesce(s.length_m,5),'{}'::jsonb
+FROM positioned_slots s
+JOIN parking_levels level ON level.id=s.level_id AND level.lot_id=s.lot_id
+JOIN map_versions v ON v.id=md5('demo-map:'||s.lot_id)::uuid AND v.lot_id=s.lot_id
+ON CONFLICT DO NOTHING;
+
+INSERT INTO map_objects(id,lot_id,map_version_id,level_id,gate_id,object_type,x,y,z,rotation_y,size_x,size_y,size_z,metadata)
+SELECT md5('demo-map-gate:'||g.id)::uuid,g.lot_id,v.id,level.id,g.id,'GATE',
+ CASE WHEN g.gate_kind='EXIT' THEN 45 ELSE -5 END,level.elevation_m,-5,0,2,2,1,'{}'::jsonb
+FROM lot_gates g
+JOIN map_versions v ON v.id=md5('demo-map:'||g.lot_id)::uuid AND v.lot_id=g.lot_id
+JOIN LATERAL (SELECT id,elevation_m FROM parking_levels WHERE lot_id=g.lot_id ORDER BY display_order,id LIMIT 1) level ON true
+ON CONFLICT DO NOTHING;
 COMMIT;

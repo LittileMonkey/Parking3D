@@ -293,7 +293,7 @@ public sealed partial class ParkingRepository
     }
 
     /// <summary>
-    /// Nhân viên nhận ca xác nhận hoàn tất nhận ca (Handshake), khóa dòng FOR UPDATE, ghi audit log và idempotency.
+    /// Nhân viên nhận ca xác nhận bằng version guard, ghi audit log và idempotency.
     /// </summary>
     public async Task<ShiftHandoverDto> ConfirmShiftHandoverAsync(
         Guid lotId,
@@ -323,7 +323,6 @@ public sealed partial class ParkingRepository
             SELECT receiver_user_id, status, version, confirmed_by_user_id
             FROM shift_handovers
             WHERE lot_id = @lotId AND id = @handoverId
-            FOR UPDATE
             """, conn, tx))
         {
             lockCmd.Parameters.AddWithValue("lotId", lotId);
@@ -366,8 +365,6 @@ public sealed partial class ParkingRepository
             throw new ServiceException(409, $"Xung đột dữ liệu: Phiên bản hiện tại là {version}, mong muốn {request.ExpectedVersion}.");
         }
 
-        now = clock.GetUtcNow();
-
         // Both shifts must still be active at the handshake, not only when it was proposed.
         await using (var shifts = new NpgsqlCommand("""
             SELECT s.id FROM staff_shifts s
@@ -391,16 +388,28 @@ public sealed partial class ParkingRepository
                 confirmed_at = @now,
                 confirmed_by_user_id = @actorId,
                 version = version + 1
-            WHERE lot_id = @lotId AND id = @handoverId;
-            UPDATE staff_shifts SET ended_at=@now WHERE id=(SELECT sender_shift_id FROM shift_handovers WHERE id=@handoverId AND lot_id=@lotId)
-              AND lot_id=@lotId AND ended_at IS NULL
+            WHERE lot_id = @lotId AND id = @handoverId AND version = @expectedVersion
             """, conn, tx))
         {
             updateCmd.Parameters.AddWithValue("now", now);
             updateCmd.Parameters.AddWithValue("actorId", actorId);
             updateCmd.Parameters.AddWithValue("lotId", lotId);
             updateCmd.Parameters.AddWithValue("handoverId", handoverId);
-            await updateCmd.ExecuteNonQueryAsync(ct);
+            updateCmd.Parameters.AddWithValue("expectedVersion", request.ExpectedVersion);
+            if (await updateCmd.ExecuteNonQueryAsync(ct) != 1)
+                throw new ServiceException(409, "Handover changed. Refresh the current version and retry.");
+        }
+
+        await using (var endShift = new NpgsqlCommand("""
+            UPDATE staff_shifts SET ended_at=@now
+            WHERE id=(SELECT sender_shift_id FROM shift_handovers WHERE id=@handoverId AND lot_id=@lotId)
+              AND lot_id=@lotId AND ended_at IS NULL
+            """, conn, tx))
+        {
+            endShift.Parameters.AddWithValue("now", now);
+            endShift.Parameters.AddWithValue("handoverId", handoverId);
+            endShift.Parameters.AddWithValue("lotId", lotId);
+            await endShift.ExecuteNonQueryAsync(ct);
         }
 
         await using (var histCmd = new NpgsqlCommand("""
@@ -483,7 +492,6 @@ public sealed partial class ParkingRepository
             SELECT sender_user_id, receiver_user_id, status, version
             FROM shift_handovers
             WHERE lot_id = @lotId AND id = @handoverId
-            FOR UPDATE
             """, conn, tx))
         {
             lockCmd.Parameters.AddWithValue("lotId", lotId);
@@ -524,7 +532,7 @@ public sealed partial class ParkingRepository
             SET receiver_user_id = @newReceiver,
                 receiver_shift_id = @newShift,
                 version = version + 1
-            WHERE lot_id = @lotId AND id = @handoverId
+            WHERE lot_id = @lotId AND id = @handoverId AND version = @expectedVersion
             """, conn, tx))
         {
             await using var shiftCmd=new NpgsqlCommand("SELECT id FROM staff_shifts WHERE lot_id=@lot AND staff_user_id=@user AND ended_at IS NULL FOR UPDATE",conn,tx);
@@ -535,7 +543,9 @@ public sealed partial class ParkingRepository
             updateCmd.Parameters.AddWithValue("newReceiver", request.ReceiverUserId);
             updateCmd.Parameters.AddWithValue("lotId", lotId);
             updateCmd.Parameters.AddWithValue("handoverId", handoverId);
-            await updateCmd.ExecuteNonQueryAsync(ct);
+            updateCmd.Parameters.AddWithValue("expectedVersion", request.ExpectedVersion);
+            if (await updateCmd.ExecuteNonQueryAsync(ct) != 1)
+                throw new ServiceException(409, "Handover changed. Refresh the current version and retry.");
         }
 
         await using (var histCmd = new NpgsqlCommand("""

@@ -5,6 +5,7 @@ using Npgsql;
 using NpgsqlTypes;
 using Parking.Parking.Application.DTOs;
 using Parking.Parking.Application.Interfaces;
+using Parking.Parking.Application.Features.Incidents;
 using Parking.Parking.Domain;
 using Parking.ServiceDefaults;
 
@@ -146,27 +147,36 @@ public sealed partial class ParkingRepository
                     connection, request.LotId, token.BookingId, actorId, plate, slotCode,
                     $"Observed plate {plate} does not match booked plate {expectedPlateLabel}",
                     mismatchDescription, ct);
-                throw new ServiceException(409, "Observed plate does not match the booked vehicle. Staff override required.");
+                throw new ServiceException(409, "Observed plate does not match the booked vehicle. Staff override required.", "PLATE_MISMATCH");
             }
 
-            overrideReason = string.IsNullOrWhiteSpace(request.OverrideReason)
-                ? "Staff confirmed matching vehicle/driver"
-                : request.OverrideReason.Trim();
+            overrideReason = request.OverrideReason?.Trim();
+            if (overrideReason is null || overrideReason.Length < 10 || overrideReason.Length > 500)
+                throw new ServiceException(400, "Override reason must contain between 10 and 500 characters.");
+            if (!IncidentEvidenceRules.HasCameraEvidence(request.Evidence))
+                throw new ServiceException(400, "A safe camera image reference is required for plate mismatch override.");
+            await ValidateStoredEvidenceAsync(connection, transaction, request.LotId, request.Evidence!, ct);
+            var evidence = JsonSerializer.Serialize(request.Evidence, JsonOptions);
             var overrideIncidentId = Guid.NewGuid();
             await using var resolveInc = Command("""
                 INSERT INTO parking_issues(
                     id, lot_id, booking_id, issue_type, status, reason, resolution,
                     reported_by, approved_by, title, severity, description,
-                    detected_at, related_plate, related_slot_code, version, created_at, updated_at, resolved_at)
+                    detected_at, related_plate, related_slot_code, evidence, version, created_at, updated_at, resolved_at)
                 VALUES(
                     @incidentId, @lot, @booking, 'INCIDENT_0482_PLATE_MISMATCH', 'Resolved',
                     @reason, @overrideReason, @actor, @actor,
                     'Lệch biển số khi check-in (Staff override)', 'High',
-                    @description, clock_timestamp(), @plate, @slotCode, 1, clock_timestamp(), clock_timestamp(), clock_timestamp());
+                    @description, clock_timestamp(), @plate, @slotCode, @evidence::jsonb, 1, clock_timestamp(), clock_timestamp(), clock_timestamp());
                 INSERT INTO incident_history(
                     id, incident_id, lot_id, action, from_status, to_status, performed_by_user_id, reason, performed_at)
                 VALUES(
                     gen_random_uuid(), @incidentId, @lot, 'CREATED_AND_RESOLVED', NULL, 'Resolved', @actor, @overrideReason, clock_timestamp());
+                INSERT INTO outbox_events(id, lot_id, event_type, aggregate_id, payload, occurred_at, attempts)
+                VALUES(gen_random_uuid(), @lot, 'parking.checkin.mismatch_override', @incidentId,
+                    jsonb_build_object('incidentId', @incidentId, 'bookingId', @booking, 'lotId', @lot,
+                        'actorId', @actor, 'observedPlate', @plate, 'bookedPlate', @bookedPlate::text,
+                        'reason', @overrideReason::text, 'evidence', @evidence::jsonb), clock_timestamp(), 0);
                 """);
             resolveInc.Parameters.AddWithValue("incidentId", overrideIncidentId);
             resolveInc.Parameters.AddWithValue("reason", $"Plate mismatch override: observed {plate} vs booked {expectedPlateLabel}");
@@ -174,6 +184,8 @@ public sealed partial class ParkingRepository
             resolveInc.Parameters.AddWithValue("description", mismatchDescription);
             resolveInc.Parameters.AddWithValue("plate", plate);
             resolveInc.Parameters.AddWithValue("slotCode", slotCode);
+            resolveInc.Parameters.AddWithValue("bookedPlate", bookedPlate);
+            resolveInc.Parameters.AddWithValue("evidence", evidence);
             await resolveInc.ExecuteNonQueryAsync(ct);
         }
 
@@ -703,8 +715,9 @@ public sealed partial class ParkingRepository
         return response;
     }
 
-    private static string ComputeCheckInFingerprint(CheckInRequestDto request, string normalizedPlate, string? normalizedVehicleType) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+    private static string ComputeCheckInFingerprint(CheckInRequestDto request, string normalizedPlate, string? normalizedVehicleType)
+    {
+        var payload = JsonSerializer.SerializeToNode(new
         {
             request.LotId,
             request.GateId,
@@ -713,7 +726,12 @@ public sealed partial class ParkingRepository
             VehicleType = normalizedVehicleType,
             request.AllowMismatchOverride,
             OverrideReason = request.OverrideReason?.Trim()
-        }))));
+        })!;
+        // Keep hashes compatible with requests recorded before evidence was added.
+        if (request.Evidence is { Count: > 0 })
+            payload["Evidence"] = JsonSerializer.SerializeToNode(request.Evidence);
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(payload.ToJsonString())));
+    }
 
     private static string BuildSlotOccupiedEventPayload(Guid eventId, Guid lotId, Guid slotId, DateTimeOffset observedAt) =>
         JsonSerializer.Serialize(new

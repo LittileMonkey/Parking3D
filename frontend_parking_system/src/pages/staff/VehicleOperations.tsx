@@ -95,6 +95,7 @@ export default function VehicleOperations() {
   const [evidenceKind, setEvidenceKind] = useState("CAMERA_SNAPSHOT");
   const [evidenceReference, setEvidenceReference] = useState("");
   const [evidenceFileName, setEvidenceFileName] = useState("");
+  const [evidenceUploading, setEvidenceUploading] = useState(false);
 
   // Check-Out Form State
   const [checkOutQuery, setCheckOutQuery] = useState(initialPlate);
@@ -348,7 +349,7 @@ export default function VehicleOperations() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Không thể check-in phương tiện.";
       const lower = msg.toLowerCase();
-      if (err instanceof ApiError && err.status === 409 && (lower.includes("mismatch") || lower.includes("booked") || lower.includes("override") || lower.includes("biển"))) {
+      if (err instanceof ApiError && err.status === 409 && (err.errorCode === "PLATE_MISMATCH" || lower.includes("mismatch") || lower.includes("booked") || lower.includes("override") || lower.includes("biển"))) {
         setAllowMismatchOverride(true);
         renewCheckInKey();
         setCheckInError(`${msg} — Đã mở form xác nhận ngoại lệ bên dưới để nhập lý do (10–500 ký tự) và ảnh chứng cứ.`);
@@ -598,21 +599,58 @@ export default function VehicleOperations() {
                           </select>
                         </label>
                         <label className="pm-form-label">
-                          Ảnh chứng cứ (chọn file hoặc nhập tham chiếu):
+                          Ảnh chứng cứ PNG/JPEG (tối đa 4 MiB, tự upload lên bãi):
                           <input
                             type="file"
-                            accept="image/jpeg,image/png,image/jpg"
-                            onChange={(e) => {
+                            accept="image/png,image/jpeg,image/jpg"
+                            disabled={evidenceUploading}
+                            onChange={async (e) => {
                               const file = e.target.files?.[0];
                               if (!file) return;
-                              setEvidenceFileName(file.name);
-                              if (!evidenceReference.trim()) {
-                                setEvidenceReference(`gate-evidence://entry/${encodeURIComponent(file.name)}`);
+                              const selectedLotId = entryGates.find(gate => gate.id === checkInGate)?.lotId;
+                              if (!selectedLotId) {
+                                setCheckInError("Vui lòng chọn cổng vào trước khi tải ảnh chứng cứ.");
+                                return;
                               }
-                              renewCheckInKey();
+                              const normalizedType = file.type === "image/jpg" ? "image/jpeg" : file.type;
+                              if (normalizedType !== "image/png" && normalizedType !== "image/jpeg") {
+                                setCheckInError("Chỉ hỗ trợ ảnh định dạng PNG hoặc JPEG.");
+                                return;
+                              }
+                              if (file.size > 4 * 1024 * 1024) {
+                                setCheckInError("Ảnh chứng cứ vượt quá giới hạn 4 MiB.");
+                                return;
+                              }
+
+                              setCheckInError("");
+                              setEvidenceFileName(file.name);
+                              setEvidenceUploading(true);
+                              try {
+                                const dataUrl = await new Promise<string>((resolve, reject) => {
+                                  const reader = new FileReader();
+                                  reader.onload = () => typeof reader.result === "string"
+                                    ? resolve(reader.result)
+                                    : reject(new Error("Không đọc được nội dung file ảnh."));
+                                  reader.onerror = () => reject(new Error("Không đọc được file ảnh."));
+                                  reader.readAsDataURL(file);
+                                });
+                                const base64 = dataUrl.includes(",") ? dataUrl.split(",", 2)[1] : dataUrl;
+                                const uploaded = await api.uploadLotEvidence(
+                                  selectedLotId,
+                                  { contentType: normalizedType, imageBase64: base64 },
+                                  crypto.randomUUID(),
+                                );
+                                setEvidenceReference(uploaded.reference);
+                                renewCheckInKey();
+                              } catch (uploadErr) {
+                                setCheckInError(uploadErr instanceof Error ? uploadErr.message : "Upload ảnh chứng cứ thất bại.");
+                              } finally {
+                                setEvidenceUploading(false);
+                              }
                             }}
                           />
-                          {evidenceFileName && <small>Đã chọn ảnh: {evidenceFileName}</small>}
+                          {evidenceUploading && <small>Đang tải ảnh chứng cứ lên máy chủ...</small>}
+                          {!evidenceUploading && evidenceFileName && <small>Đã upload ảnh: {evidenceFileName}</small>}
                         </label>
                       </div>
 
@@ -635,7 +673,7 @@ export default function VehicleOperations() {
 
                   <button
                     type="submit"
-                    disabled={checkInLoading || !checkInGate}
+                    disabled={checkInLoading || evidenceUploading || !checkInGate}
                     className="pm-cta-btn pm-btn-teal"
                   >
                     <CheckCircle2 size={18} />

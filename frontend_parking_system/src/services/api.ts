@@ -224,10 +224,15 @@ interface ApiEnvelope<T> {
   result?: T | null;
   isSuccess?: boolean;
   message?: string;
+  errorCode?: string | null;
 }
 
 export class ApiError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly errorCode?: string | null,
+  ) {
     super(message);
     this.name = "ApiError";
   }
@@ -319,7 +324,8 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
       ?? (response.status >= 500
         ? "Máy chủ API đang gặp lỗi hoặc chưa sẵn sàng. Kiểm tra backend tại localhost:8080 rồi thử lại."
         : fallbackMessages[response.status] ?? `Yêu cầu thất bại (${response.status}).`);
-    throw new ApiError(message, response.status);
+    const errorCode = typeof body.errorCode === "string" ? body.errorCode : null;
+    throw new ApiError(message, response.status, errorCode);
   }
 
   return (body.result ?? body) as T;
@@ -656,6 +662,30 @@ export const api = {
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(payload),
     });
+  },
+
+  /**
+   * [REAL API PARKING] Upload ảnh chứng cứ PNG/JPEG (tối đa 4 MiB) theo bãi để lấy reference bền vững
+   */
+  async uploadLotEvidence(
+    lotId: string,
+    payload: UploadEvidencePayload,
+    idempotencyKey: string,
+  ): Promise<UploadedEvidenceMetadata> {
+    return request<UploadedEvidenceMetadata>(`/api/v1/parking-lots/${encodeURIComponent(lotId)}/evidence`, {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * [REAL API PARKING] Đọc ảnh chứng cứ theo bãi và evidenceId
+   */
+  async getLotEvidence(lotId: string, evidenceId: string): Promise<RetrievedEvidenceDto> {
+    return request<RetrievedEvidenceDto>(
+      `/api/v1/parking-lots/${encodeURIComponent(lotId)}/evidence/${encodeURIComponent(evidenceId)}`,
+    );
   },
 
   /**
@@ -1072,7 +1102,27 @@ export interface CalculateFeeResponse {
 export interface IncidentEvidenceDto {
   kind: string;
   reference: string;
-  capturedAt?: string;
+  capturedAt?: string | null;
+}
+
+export interface UploadEvidencePayload {
+  contentType: "image/png" | "image/jpeg";
+  imageBase64: string;
+}
+
+export interface UploadedEvidenceMetadata {
+  evidenceId: string;
+  lotId: string;
+  contentType: string;
+  reference: string;
+  sha256: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
+export interface RetrievedEvidenceDto {
+  metadata: UploadedEvidenceMetadata;
+  imageBase64: string;
 }
 
 export interface IncidentExitDecisionDto {

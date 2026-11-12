@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Parking.Parking.Application;
 using Parking.Parking.Persistence.Repositories;
+using Parking.Parking.Application.Interfaces;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Parking.Parking.Persistence;
@@ -13,7 +14,9 @@ public static class DependencyInjection
     {
 
         services.TryAddSingleton<TimeProvider>(TimeProvider.System);
-        services.AddScoped<IParkingRepository, ParkingRepository>();
+        services.AddScoped<ParkingRepository>();
+        services.AddScoped<IParkingRepository>(provider => provider.GetRequiredService<ParkingRepository>());
+        services.AddScoped<IIncidentEvidenceRepository>(provider => provider.GetRequiredService<ParkingRepository>());
         return services;
     }
 }

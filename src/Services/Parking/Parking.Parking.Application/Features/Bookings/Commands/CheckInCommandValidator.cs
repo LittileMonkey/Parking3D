@@ -1,5 +1,6 @@
 using FluentValidation;
 using Parking.Parking.Domain;
+using Parking.Parking.Application.Features.Incidents;
 
 namespace Parking.Parking.Application.Features.Bookings.Commands;
 
@@ -37,7 +38,12 @@ public sealed class CheckInCommandValidator : AbstractValidator<CheckInCommand>
                 RuleFor(x => x.Request.OverrideReason)
                     .NotEmpty()
                     .WithMessage("Override reason is required when plate mismatch is overridden.")
+                    .Must(reason => reason is not null && reason.Trim().Length >= 10)
+                    .WithMessage("Override reason must contain at least 10 characters.")
                     .MaximumLength(500);
+                RuleFor(x => x.Request.Evidence)
+                    .Must(IncidentEvidenceRules.HasCameraEvidence)
+                    .WithMessage("A safe camera image reference is required for plate mismatch override.");
             });
         });
     }
