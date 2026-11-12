@@ -31,9 +31,8 @@ builder.Services.AddScoped<IRecognitionClient, RecognitionClient>();
 builder.Services.AddParkingPersistence();
 builder.Services.AddHostedService<OccupancyWorker>();
 builder.Services.AddHostedService<HoldExpiryWorker>();
-// 1. Thêm bộ nhớ đệm Memory Cache (hỗ trợ cho EstimatedPriceService và SCRUM-80 Spatial Cache)
-builder.Services.AddMemoryCache();
-builder.Services.AddSingleton<IParkingCacheService, ParkingCacheService>();
+// 1. Đăng ký Distributed Cache (Redis qua ConnectionStrings:Redis, tự fallback MemoryDistributedCache khi chưa cấu hình)
+builder.Services.AddParkingCaching(builder.Configuration);
 // 2. Đăng ký Repository và Service tính giá THẬT (thay thế Fake)
 builder.Services.AddScoped<IParkingLotRepository, ParkingLotRepository>();
 builder.Services.AddScoped<IEstimatedPriceService, EstimatedPriceService>();

@@ -14,7 +14,54 @@ namespace Parking.Pricing;
     /// </summary>
     public static class PricingEngine
     {
+        /// <summary>
+        /// Calculates the additional amount for a prepaid booking. Overtime blocks start
+        /// at expectedExitTime, without a second initial block, and retain the booked
+        /// window's daily-cap consumption and Gold Star discount rounding.
+        /// </summary>
+        public static long CalculateOvertime(DateTimeOffset bookedStart, DateTimeOffset expectedExitTime,
+            DateTimeOffset exitTime, PricingPolicy policy, bool isGoldStarMember, TimeZoneInfo timeZone)
+        {
+            var bookedResult = Calculate(bookedStart, expectedExitTime, policy, isGoldStarMember, timeZone);
+            if (exitTime <= expectedExitTime)
+                return 0;
+
+            // Both flows use the same block, peak-hour and local-midnight calculation.
+            // Overtime starts a fresh sequence of subsequent blocks at the booking end.
+            var overtimeResult = CalculateCore(expectedExitTime, exitTime, policy, isGoldStarMember, timeZone,
+                chargeInitialBlock: false);
+            var dailyBreakdowns = new List<DayPricingBreakdown>(bookedResult.DailyBreakdowns);
+            foreach (var overtimeDay in overtimeResult.DailyBreakdowns)
+            {
+                var bookedDay = dailyBreakdowns[^1];
+                if (bookedDay.Date == overtimeDay.Date)
+                {
+                    dailyBreakdowns[^1] = bookedDay with
+                    {
+                        EndTime = overtimeDay.EndTime,
+                        RegularSubsequentBlocks = bookedDay.RegularSubsequentBlocks + overtimeDay.RegularSubsequentBlocks,
+                        RegularSubsequentAmountVnd = bookedDay.RegularSubsequentAmountVnd + overtimeDay.RegularSubsequentAmountVnd,
+                        PeakSubsequentBlocks = bookedDay.PeakSubsequentBlocks + overtimeDay.PeakSubsequentBlocks,
+                        PeakSubsequentAmountVnd = bookedDay.PeakSubsequentAmountVnd + overtimeDay.PeakSubsequentAmountVnd
+                    };
+                }
+                else
+                {
+                    dailyBreakdowns.Add(overtimeDay);
+                }
+            }
+
+            // Apply caps and membership rounding to the whole charge, then subtract
+            // the prepaid window's net amount so its daily cap is not charged twice.
+            var fullResult = bookedResult with { ExitTime = exitTime, DailyBreakdowns = dailyBreakdowns };
+            return Math.Max(0, fullResult.FinalNetAmountVnd - bookedResult.FinalNetAmountVnd);
+        }
+
         public static PricingResult Calculate(DateTimeOffset entryTime, DateTimeOffset exitTime, PricingPolicy policy, bool isGoldStarMember, TimeZoneInfo timeZone)
+            => CalculateCore(entryTime, exitTime, policy, isGoldStarMember, timeZone, chargeInitialBlock: true);
+
+        private static PricingResult CalculateCore(DateTimeOffset entryTime, DateTimeOffset exitTime,
+            PricingPolicy policy, bool isGoldStarMember, TimeZoneInfo timeZone, bool chargeInitialBlock)
         {
             ArgumentNullException.ThrowIfNull(policy);
             ArgumentNullException.ThrowIfNull(timeZone);
@@ -51,7 +98,7 @@ namespace Parking.Pricing;
 
                 var dayCursor = currentCursor;
                 // Block khởi đầu (Initial Block 60p) chỉ áp dụng DUY NHẤT một lần ở thời điểm xe mới vào bãi
-                if (dayCursor == entryTime)
+                if (chargeInitialBlock && dayCursor == entryTime)
                 {
                     initialBlocks = 1;
                     initialAmountVnd = policy.InitialRateVnd;

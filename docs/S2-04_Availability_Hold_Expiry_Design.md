@@ -155,7 +155,7 @@ FOR UPDATE;
 
 Nếu không còn thỏa điều kiện, bỏ qua booking. Nếu có reservation `CONFIRMED`, assignment chưa vacate hoặc tập slot đã thay đổi, cũng bỏ qua toàn bộ booking. Chỉ khi mọi kiểm tra đã đạt mới release reservation `HELD`, đổi booking `EXPIRED`, tăng version và ghi audit trong cùng transaction rồi commit. Chi tiết SQL thực thi nằm trong `ParkingRepository.HoldExpiry.cs`; không dùng một câu UPDATE hàng loạt để bỏ qua các kiểm tra này.
 
-Chạy worker lặp trên booking đã hết hạn không tăng version hoặc thêm audit expiry lần nữa. Exception tại một booking làm dừng lượt quét hiện tại; các transaction trước đó đã commit vẫn giữ nguyên, worker ghi lỗi và thử lại ở chu kỳ sau.
+Chạy worker lặp trên booking đã hết hạn không tăng version hoặc thêm audit expiry lần nữa. Trong lượt quét nền, lỗi PostgreSQL ở một booking được rollback cục bộ và bỏ qua để các booking tiếp theo vẫn được giải phóng (trừ trường hợp mất kết nối hoặc hủy tác vụ); nếu vẫn còn tồn đọng đủ 100 dòng, worker xử lý tiếp các batch kế tiếp trong cùng chu kỳ (tối đa 20 batch).
 
 ---
 

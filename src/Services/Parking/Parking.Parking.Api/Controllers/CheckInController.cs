@@ -17,8 +17,12 @@ public sealed class CheckInController(ISender sender) : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CheckIn([FromBody] CheckInRequestDto request, CancellationToken ct)
     {
+        Request.Headers.TryGetValue("Idempotency-Key", out var idempotencyHeaders);
+        if (idempotencyHeaders.Count > 1)
+            throw new ServiceException(400, "Multiple Idempotency-Key headers are not allowed.");
+
         var result = await sender.Send(new CheckInCommand(
-            User.Subject(), request, Request.Headers["Idempotency-Key"].ToString()), ct);
+            User.Subject(), request, idempotencyHeaders.ToString().Trim()), ct);
         return Ok(new ApiResponse<CheckInResponseDto>(result, true, 200, "Check-in successful."));
     }
 }

@@ -83,8 +83,13 @@ public interface IParkingRepository
         ConfirmCheckOutRequestDto request, string key, CancellationToken ct);
 
     Task RecordCheckOutMismatchAsync(Guid sessionId, Guid actorId, string observedPlate, CancellationToken ct);
+    Task<AuthorizeCheckOutResultDto?> GetCheckOutAuthorizationReplayAsync(Guid actorId,
+        ConfirmCheckOutRequestDto request, string key, CancellationToken ct)
+        => Task.FromResult<AuthorizeCheckOutResultDto?>(null);
     Task<AuthorizeCheckOutResultDto?> ClaimCheckOutAuthorizationAsync(Guid actorId,
         ConfirmCheckOutRequestDto request,string key,CancellationToken ct);
+    Task ReleaseCheckOutAuthorizationClaimAsync(Guid actorId, string key, CancellationToken ct)
+        => Task.CompletedTask;
     Task<AuthorizeCheckOutResultDto> SaveCheckOutAuthorizationAsync(Guid actorId,
         ConfirmCheckOutRequestDto request,string key,AuthorizeCheckOutResultDto result,CancellationToken ct);
 
@@ -128,6 +133,18 @@ public interface IParkingRepository
         int pageSize,
         CancellationToken ct);
 
+    Task<PagedResult<IncidentSummaryDto>> ListIncidentsAsync(
+        Guid lotId,
+        string? status,
+        string? severity,
+        string? query,
+        DateTimeOffset? from,
+        DateTimeOffset? to,
+        int page,
+        int pageSize,
+        CancellationToken ct)
+        => ListIncidentsAsync(lotId, status, severity, query, page, pageSize, ct);
+
     /// <summary>
     /// Lấy chi tiết thông tin một sự cố tại bãi đỗ xe kèm chứng cứ và quyết định xử lý ngoại lệ (nếu có).
     /// </summary>
@@ -145,6 +162,15 @@ public interface IParkingRepository
         Guid actorId,
         UpdateIncidentStatusRequestDto request,
         CancellationToken ct);
+
+    Task<IncidentDto> UpdateIncidentStatusAsync(
+        Guid lotId,
+        Guid incidentId,
+        Guid actorId,
+        UpdateIncidentStatusRequestDto request,
+        string? key,
+        CancellationToken ct)
+        => UpdateIncidentStatusAsync(lotId, incidentId, actorId, request, ct);
 
     /// <summary>
     /// Lấy lịch sử các hành động thay đổi trạng thái của sự cố mà không để lộ nhật ký audit thô.
@@ -166,6 +192,15 @@ public interface IParkingRepository
         ReopenIncidentRequestDto request,
         CancellationToken ct);
 
+    Task<IncidentDto> ReopenIncidentAsync(
+        Guid lotId,
+        Guid incidentId,
+        Guid actorId,
+        ReopenIncidentRequestDto request,
+        string? key,
+        CancellationToken ct)
+        => ReopenIncidentAsync(lotId, incidentId, actorId, request, ct);
+
     /// <summary>
     /// Hủy bỏ sự cố (trường hợp báo nhầm) kèm lý do, chuyển trạng thái sang Cancelled thay vì xóa cứng.
     /// </summary>
@@ -176,6 +211,15 @@ public interface IParkingRepository
         CancelIncidentRequestDto request,
         CancellationToken ct);
 
+    Task<IncidentDto> CancelIncidentAsync(
+        Guid lotId,
+        Guid incidentId,
+        Guid actorId,
+        CancelIncidentRequestDto request,
+        string? key,
+        CancellationToken ct)
+        => CancelIncidentAsync(lotId, incidentId, actorId, request, ct);
+
     /// <summary>
     /// Quản lý ban hành quyết định phê duyệt (Approved) hoặc từ chối (Rejected) ngoại lệ xuất bãi kèm chứng cứ đối chiếu.
     /// </summary>
@@ -185,6 +229,15 @@ public interface IParkingRepository
         Guid actorId,
         CreateIncidentDecisionRequestDto request,
         CancellationToken ct);
+
+    Task<IncidentExitDecisionDto> CreateIncidentDecisionAsync(
+        Guid lotId,
+        Guid incidentId,
+        Guid actorId,
+        CreateIncidentDecisionRequestDto request,
+        string? key,
+        CancellationToken ct)
+        => CreateIncidentDecisionAsync(lotId, incidentId, actorId, request, ct);
 
     // ==========================================
     // SCRUM-99: Shift Handovers
@@ -243,6 +296,15 @@ public interface IParkingRepository
         Guid actorId,
         ReassignReceiverRequestDto request,
         CancellationToken ct);
+
+    Task<ShiftHandoverDto> ReassignReceiverAsync(
+        Guid lotId,
+        Guid handoverId,
+        Guid actorId,
+        ReassignReceiverRequestDto request,
+        string? key,
+        CancellationToken ct)
+        => ReassignReceiverAsync(lotId, handoverId, actorId, request, ct);
 }
 
 

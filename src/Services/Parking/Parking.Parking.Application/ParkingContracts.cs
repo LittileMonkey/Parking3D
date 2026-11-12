@@ -1,4 +1,5 @@
 using Parking.Parking.Application.DTOs;
+using Parking.Parking.Application.Exceptions;
 
 namespace Parking.Parking.Application;
 
@@ -11,6 +12,27 @@ public sealed record RecognitionView(Guid Id, string Status, string? CandidatePl
 public interface IFacilityAccess
 {
     Task RequireAsync(Guid userId, Guid lotId, string capability, CancellationToken ct);
+
+    /// <summary>
+    /// Checks whether the user holds a facility-scoped capability without suppressing 503 availability errors.
+    /// </summary>
+    async Task<bool> HasCapabilityAsync(Guid userId, Guid lotId, string capability, CancellationToken ct)
+    {
+        try
+        {
+            await RequireAsync(userId, lotId, capability, ct);
+            return true;
+        }
+        catch (ForbiddenAccessException)
+        {
+            return false;
+        }
+        catch (Exception ex) when (ex.GetType().FullName == "Parking.ServiceDefaults.ServiceException" &&
+                                   ex.GetType().GetProperty("StatusCode")?.GetValue(ex) is 403)
+        {
+            return false;
+        }
+    }
 }
 
 public interface IRecognitionClient

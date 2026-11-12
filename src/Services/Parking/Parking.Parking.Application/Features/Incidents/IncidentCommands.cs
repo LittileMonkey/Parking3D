@@ -6,6 +6,69 @@ using Parking.Parking.Application.Interfaces;
 namespace Parking.Parking.Application.Features.Incidents;
 
 /// <summary>
+/// Shared validation helpers for incident evidence references and Q07 decision requirements.
+/// </summary>
+public static class IncidentEvidenceRules
+{
+    private static readonly HashSet<string> CameraKinds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CAMERA", "CAMERA_SNAPSHOT", "GATE_CAMERA"
+    };
+
+    private static readonly HashSet<string> VehicleDocKinds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "VEHICLE_REGISTRATION", "VEHICLE_DOCUMENT", "DOCUMENTS"
+    };
+
+    public static bool IsSafeReference(string? reference)
+    {
+        if (string.IsNullOrWhiteSpace(reference))
+            return false;
+        var trimmed = reference.Trim();
+        if (trimmed.Length > 2048)
+            return false;
+        var lower = trimmed.ToLowerInvariant();
+        if (lower.StartsWith("data:", StringComparison.Ordinal) ||
+            lower.StartsWith("javascript:", StringComparison.Ordinal) ||
+            lower.StartsWith("file:", StringComparison.Ordinal) ||
+            lower.Contains(";base64,", StringComparison.Ordinal))
+        {
+            return false;
+        }
+        return true;
+    }
+
+    public static bool AreAllItemsValid(IReadOnlyList<IncidentEvidenceDto>? evidence)
+    {
+        if (evidence is null || evidence.Count == 0)
+            return true;
+        foreach (var item in evidence)
+        {
+            if (item is null ||
+                string.IsNullOrWhiteSpace(item.Kind) ||
+                item.Kind.Trim().Length > 64 ||
+                !IsSafeReference(item.Reference))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static bool HasApprovedExitEvidence(IReadOnlyList<IncidentEvidenceDto>? evidence, bool requireCameraTimestamp = false)
+    {
+        if (evidence is null || evidence.Count == 0 || !AreAllItemsValid(evidence))
+            return false;
+
+        var hasCamera = evidence.Any(e =>
+            CameraKinds.Contains(e.Kind.Trim()) &&
+            (!requireCameraTimestamp || e.CapturedAt.HasValue));
+        var hasVehicleDoc = evidence.Any(e => VehicleDocKinds.Contains(e.Kind.Trim()));
+        return hasCamera && hasVehicleDoc;
+    }
+}
+
+/// <summary>
 /// Command báo cáo sự cố hoặc ngoại lệ mới tại bãi đỗ xe.
 /// </summary>
 public sealed record CreateIncidentCommand(
@@ -38,6 +101,9 @@ public sealed class CreateIncidentCommandValidator : AbstractValidator<CreateInc
             {
                 RuleFor(x => x.Request.LateReportReason!).MaximumLength(2000);
             });
+            RuleFor(x => x.Request.Evidence)
+                .Must(IncidentEvidenceRules.AreAllItemsValid)
+                .WithMessage("Each evidence item must specify a valid kind and a safe non-base64 reference (max 2048 chars).");
         });
         When(x => !string.IsNullOrWhiteSpace(x.IdempotencyKey), () =>
         {
@@ -53,7 +119,8 @@ public sealed record UpdateIncidentStatusCommand(
     Guid LotId,
     Guid IncidentId,
     Guid ActorId,
-    UpdateIncidentStatusRequestDto Request
+    UpdateIncidentStatusRequestDto Request,
+    string? IdempotencyKey = null
 ) : IRequest<IncidentDto>;
 
 /// <summary>
@@ -73,10 +140,20 @@ public sealed class UpdateIncidentStatusCommandValidator : AbstractValidator<Upd
                 .Must(s => s is "InProgress" or "Escalated" or "Resolved")
                 .WithMessage("Status must be InProgress, Escalated, or Resolved.");
             RuleFor(x => x.Request.ExpectedVersion).GreaterThan(0);
+            When(x => x.Request.Status is "Escalated" or "Resolved", () =>
+            {
+                RuleFor(x => x.Request.Notes)
+                    .NotEmpty()
+                    .WithMessage("Notes are required when escalating or resolving an incident.");
+            });
             When(x => !string.IsNullOrWhiteSpace(x.Request.Notes), () =>
             {
                 RuleFor(x => x.Request.Notes!).MaximumLength(2000);
             });
+        });
+        When(x => !string.IsNullOrWhiteSpace(x.IdempotencyKey), () =>
+        {
+            RuleFor(x => x.IdempotencyKey!).MaximumLength(128);
         });
     }
 }
@@ -88,7 +165,8 @@ public sealed record ReopenIncidentCommand(
     Guid LotId,
     Guid IncidentId,
     Guid ActorId,
-    ReopenIncidentRequestDto Request
+    ReopenIncidentRequestDto Request,
+    string? IdempotencyKey = null
 ) : IRequest<IncidentDto>;
 
 /// <summary>
@@ -107,6 +185,10 @@ public sealed class ReopenIncidentCommandValidator : AbstractValidator<ReopenInc
             RuleFor(x => x.Request.Reason).NotEmpty().MaximumLength(2000);
             RuleFor(x => x.Request.ExpectedVersion).GreaterThan(0);
         });
+        When(x => !string.IsNullOrWhiteSpace(x.IdempotencyKey), () =>
+        {
+            RuleFor(x => x.IdempotencyKey!).MaximumLength(128);
+        });
     }
 }
 
@@ -117,7 +199,8 @@ public sealed record CancelIncidentCommand(
     Guid LotId,
     Guid IncidentId,
     Guid ActorId,
-    CancelIncidentRequestDto Request
+    CancelIncidentRequestDto Request,
+    string? IdempotencyKey = null
 ) : IRequest<IncidentDto>;
 
 /// <summary>
@@ -136,6 +219,10 @@ public sealed class CancelIncidentCommandValidator : AbstractValidator<CancelInc
             RuleFor(x => x.Request.Reason).NotEmpty().MaximumLength(2000);
             RuleFor(x => x.Request.ExpectedVersion).GreaterThan(0);
         });
+        When(x => !string.IsNullOrWhiteSpace(x.IdempotencyKey), () =>
+        {
+            RuleFor(x => x.IdempotencyKey!).MaximumLength(128);
+        });
     }
 }
 
@@ -146,7 +233,8 @@ public sealed record CreateIncidentDecisionCommand(
     Guid LotId,
     Guid IncidentId,
     Guid ActorId,
-    CreateIncidentDecisionRequestDto Request
+    CreateIncidentDecisionRequestDto Request,
+    string? IdempotencyKey = null
 ) : IRequest<IncidentExitDecisionDto>;
 
 /// <summary>
@@ -167,12 +255,20 @@ public sealed class CreateIncidentDecisionCommandValidator : AbstractValidator<C
                 .WithMessage("Decision must be Approved or Rejected.");
             RuleFor(x => x.Request.Reason).NotEmpty().MaximumLength(2000);
             RuleFor(x => x.Request.ExpectedVersion).GreaterThan(0);
+            RuleFor(x => x.Request.Evidence)
+                .Must(IncidentEvidenceRules.AreAllItemsValid)
+                .WithMessage("Each evidence item must specify a valid kind and a safe non-base64 reference (max 2048 chars).");
             When(x => string.Equals(x.Request.Decision, "Approved", StringComparison.OrdinalIgnoreCase), () =>
             {
                 RuleFor(x => x.Request.Evidence)
                     .NotEmpty()
-                    .WithMessage("Quyết định phê duyệt (Approved) bắt buộc phải có chứng cứ kèm theo (camera, giấy tờ xe).");
+                    .Must(evidence => IncidentEvidenceRules.HasApprovedExitEvidence(evidence))
+                    .WithMessage("Quyết định phê duyệt (Approved) bắt buộc phải có đầy đủ chứng cứ camera (CAMERA/CAMERA_SNAPSHOT/GATE_CAMERA) và giấy tờ xe (VEHICLE_REGISTRATION/VEHICLE_DOCUMENT/DOCUMENTS).");
             });
+        });
+        When(x => !string.IsNullOrWhiteSpace(x.IdempotencyKey), () =>
+        {
+            RuleFor(x => x.IdempotencyKey!).MaximumLength(128);
         });
     }
 }
@@ -197,31 +293,33 @@ public sealed class IncidentCommandHandlers(
         return await repository.CreateIncidentAsync(command.LotId, command.ActorId, command.Request, command.IdempotencyKey, ct);
     }
 
-    /// <summary>Xử lý cập nhật trạng thái sự cố sau khi xác thực quyền INCIDENT_WRITE.</summary>
+    /// <summary>Xử lý cập nhật trạng thái sự cố sau khi xác thực quyền INCIDENT_WRITE (và MANAGER khi Resolved).</summary>
     public async Task<IncidentDto> Handle(UpdateIncidentStatusCommand command, CancellationToken ct)
     {
         await access.RequireAsync(command.ActorId, command.LotId, "INCIDENT_WRITE", ct);
-        return await repository.UpdateIncidentStatusAsync(command.LotId, command.IncidentId, command.ActorId, command.Request, ct);
+        if (string.Equals(command.Request.Status, "Resolved", StringComparison.OrdinalIgnoreCase))
+            await access.RequireAsync(command.ActorId, command.LotId, "MANAGER", ct);
+        return await repository.UpdateIncidentStatusAsync(command.LotId, command.IncidentId, command.ActorId, command.Request, command.IdempotencyKey, ct);
     }
 
     /// <summary>Xử lý mở lại sự cố sau khi xác thực quyền MANAGER.</summary>
     public async Task<IncidentDto> Handle(ReopenIncidentCommand command, CancellationToken ct)
     {
         await access.RequireAsync(command.ActorId, command.LotId, "MANAGER", ct);
-        return await repository.ReopenIncidentAsync(command.LotId, command.IncidentId, command.ActorId, command.Request, ct);
+        return await repository.ReopenIncidentAsync(command.LotId, command.IncidentId, command.ActorId, command.Request, command.IdempotencyKey, ct);
     }
 
     /// <summary>Xử lý hủy sự cố báo nhầm sau khi xác thực quyền MANAGER.</summary>
     public async Task<IncidentDto> Handle(CancelIncidentCommand command, CancellationToken ct)
     {
         await access.RequireAsync(command.ActorId, command.LotId, "MANAGER", ct);
-        return await repository.CancelIncidentAsync(command.LotId, command.IncidentId, command.ActorId, command.Request, ct);
+        return await repository.CancelIncidentAsync(command.LotId, command.IncidentId, command.ActorId, command.Request, command.IdempotencyKey, ct);
     }
 
     /// <summary>Xử lý ban hành quyết định ngoại lệ sau khi xác thực quyền MANAGER.</summary>
     public async Task<IncidentExitDecisionDto> Handle(CreateIncidentDecisionCommand command, CancellationToken ct)
     {
         await access.RequireAsync(command.ActorId, command.LotId, "MANAGER", ct);
-        return await repository.CreateIncidentDecisionAsync(command.LotId, command.IncidentId, command.ActorId, command.Request, ct);
+        return await repository.CreateIncidentDecisionAsync(command.LotId, command.IncidentId, command.ActorId, command.Request, command.IdempotencyKey, ct);
     }
 }

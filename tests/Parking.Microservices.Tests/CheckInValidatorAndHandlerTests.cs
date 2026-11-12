@@ -51,6 +51,40 @@ public class CheckInValidatorAndHandlerTests
     }
 
     [Fact]
+    public void Validator_ShouldFail_WhenWalkInVehicleTypeIsUnsupported()
+    {
+        var command = new CheckInCommand(
+            ActorId: Guid.NewGuid(),
+            Request: new CheckInRequestDto(
+                LotId: Guid.NewGuid(),
+                GateId: Guid.NewGuid(),
+                QrPayload: null,
+                DetectedPlate: "51A-888.99",
+                VehicleType: "TRUCK"),
+            IdempotencyKey: "test-walk-in-invalid-vtype");
+
+        var result = _validator.TestValidate(command);
+        result.ShouldHaveValidationErrorFor(x => x.Request.VehicleType);
+    }
+
+    [Fact]
+    public void Validator_ShouldPass_WhenWalkInVehicleTypeIsCaseInsensitiveSupported()
+    {
+        var command = new CheckInCommand(
+            ActorId: Guid.NewGuid(),
+            Request: new CheckInRequestDto(
+                LotId: Guid.NewGuid(),
+                GateId: Guid.NewGuid(),
+                QrPayload: null,
+                DetectedPlate: "51G-888.99",
+                VehicleType: " motorbike "),
+            IdempotencyKey: "test-walk-in-motorbike");
+
+        var result = _validator.TestValidate(command);
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
     public void Validator_ShouldFail_WhenActorOrIdempotencyKeyOrLotOrGateMissing()
     {
         var command = new CheckInCommand(

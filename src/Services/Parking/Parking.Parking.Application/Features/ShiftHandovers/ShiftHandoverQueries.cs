@@ -41,16 +41,18 @@ public sealed class ShiftHandoverQueryHandlers(
     public async Task<PagedResult<ShiftHandoverSummaryDto>> Handle(ListShiftHandoversQuery query, CancellationToken ct)
     {
         await access.RequireAsync(query.ActorId, query.LotId, "HANDOVER", ct);
+        var isManager = await access.HasCapabilityAsync(query.ActorId, query.LotId, "MANAGER", ct);
         return await repository.ListShiftHandoversAsync(
-            query.LotId, query.ActorId, query.IsManager, query.Status, query.Page, query.PageSize, ct);
+            query.LotId, query.ActorId, isManager, query.Status, query.Page, query.PageSize, ct);
     }
 
     /// <summary>Xử lý lấy chi tiết biên bản bàn giao ca.</summary>
     public async Task<ShiftHandoverDto> Handle(GetShiftHandoverByIdQuery query, CancellationToken ct)
     {
         await access.RequireAsync(query.ActorId, query.LotId, "HANDOVER", ct);
+        var isManager = await access.HasCapabilityAsync(query.ActorId, query.LotId, "MANAGER", ct);
         var handover = await repository.GetShiftHandoverByIdAsync(
-            query.LotId, query.HandoverId, query.ActorId, query.IsManager, ct);
+            query.LotId, query.HandoverId, query.ActorId, isManager, ct);
         if (handover is null)
             throw new NotFoundException("Biên bản bàn giao ca không tồn tại.");
         return handover;

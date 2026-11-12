@@ -8,5 +8,6 @@ public sealed record BookingQrContextDto(
     Guid VehicleId,
     Guid? CustomerId,
     string Status,
-    DateTimeOffset ArrivalDeadline
+    DateTimeOffset ArrivalDeadline,
+    DateTimeOffset? EndsAt = null
 );

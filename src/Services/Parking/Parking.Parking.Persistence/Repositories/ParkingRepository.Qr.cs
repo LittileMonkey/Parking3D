@@ -19,7 +19,8 @@ public sealed partial class ParkingRepository
                 vehicle_id,
                 customer_id,
                 status::text,
-                arrival_deadline
+                arrival_deadline,
+                ends_at
             FROM bookings
             WHERE id = @bookingId
             """;
@@ -45,7 +46,8 @@ public sealed partial class ParkingRepository
             reader.GetGuid(3),
             reader.IsDBNull(4) ? null : reader.GetGuid(4),
             reader.GetString(5),
-            reader.GetFieldValue<DateTimeOffset>(6)
+            reader.GetFieldValue<DateTimeOffset>(6),
+            reader.GetFieldValue<DateTimeOffset>(7)
         );
     }
 
@@ -141,7 +143,8 @@ public sealed partial class ParkingRepository
           AND l.status = 'ACTIVE'
           AND v.is_active
           AND @expiresAt > clock_timestamp()
-          AND @expiresAt <= b.arrival_deadline
+          AND b.ends_at > clock_timestamp()
+          AND @expiresAt <= LEAST(b.arrival_deadline, b.ends_at)
           AND NOT EXISTS (
               SELECT 1
               FROM session_slot_assignments a
@@ -172,32 +175,34 @@ public sealed partial class ParkingRepository
             }
         }
 
-        // 5. Thu hồi QR cũ và lưu QR mới trong cùng transaction.
-        const string saveSql = """
-        UPDATE qr_tokens
-        SET revoked_at = clock_timestamp()
-        WHERE booking_id = @bookingId
-          AND consumed_at IS NULL
-          AND revoked_at IS NULL;
+        // 5. Thu hồi QR cũ và lưu QR mới trong cùng transaction (chặn clock_timestamp() vượt expires_at ở ranh giới).
+        await using (var revoke = new NpgsqlCommand("""
+            UPDATE qr_tokens
+            SET revoked_at = clock_timestamp()
+            WHERE booking_id = @bookingId
+              AND consumed_at IS NULL
+              AND revoked_at IS NULL;
+            """, connection, transaction))
+        {
+            revoke.Parameters.AddWithValue("bookingId", bookingId);
+            await revoke.ExecuteNonQueryAsync(ct);
+        }
 
-        INSERT INTO qr_tokens (
-            booking_id,
-            nonce_hash,
-            expires_at,
-            created_at
-        )
-        VALUES (
-            @bookingId,
-            @nonceHash,
-            @expiresAt,
-            clock_timestamp()
-        );
-        """;
-
-        await using (var save = new NpgsqlCommand(
-            saveSql,
-            connection,
-            transaction))
+        await using (var save = new NpgsqlCommand("""
+            INSERT INTO qr_tokens (
+                booking_id,
+                nonce_hash,
+                expires_at,
+                created_at
+            )
+            SELECT
+                @bookingId,
+                @nonceHash,
+                @expiresAt,
+                ts.now_at
+            FROM (SELECT clock_timestamp() AS now_at) ts
+            WHERE @expiresAt > ts.now_at;
+            """, connection, transaction))
         {
             save.Parameters.AddWithValue("bookingId", bookingId);
             save.Parameters.AddWithValue("nonceHash", token.NonceHash);
@@ -205,7 +210,12 @@ public sealed partial class ParkingRepository
                 "expiresAt",
                 token.ExpiresAt.UtcDateTime);
 
-            await save.ExecuteNonQueryAsync(ct);
+            if (await save.ExecuteNonQueryAsync(ct) != 1)
+            {
+                throw new ServiceException(
+                    409,
+                    "Booking, slot hoặc hạn dùng QR không còn hợp lệ.");
+            }
         }
 
         await transaction.CommitAsync(ct);

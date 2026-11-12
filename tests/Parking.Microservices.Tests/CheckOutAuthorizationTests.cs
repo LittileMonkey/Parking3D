@@ -251,7 +251,7 @@ public sealed partial class ParkingWorkflowTests
         var results=await Task.WhenAll(Enumerable.Range(0,8).Select(_=>repository.CompleteCheckOutAsync(Staff,request,"concurrent",Ct,verified)));
         Assert.All(results,item=>Assert.Equal(results[0],item));
         Assert.Equal(1L,await Scalar("SELECT count(*) FROM audit_logs WHERE action='CHECK_OUT'"));
-        Assert.Equal(1L,await Scalar("SELECT count(*) FROM integration_outbox WHERE event_type='SlotStatusChanged.v1'"));
+        Assert.Equal(1L,await Scalar("SELECT count(*) FROM integration_outbox WHERE event_type='SlotStatusChanged.v1' AND payload->>'status'='AVAILABLE'"));
         Assert.Equal("RELEASED",await Scalar("SELECT status::text FROM slot_reservations"));
         await Assert.ThrowsAsync<ServiceException>(()=>repository.CompleteCheckOutAsync(Staff,request with {StaffNotes="different"},"concurrent",Ct,verified));
         var next=await Book();
@@ -285,7 +285,7 @@ public sealed partial class ParkingWorkflowTests
         await Assert.ThrowsAsync<global::Npgsql.PostgresException>(()=>repository.CompleteCheckOutAsync(Staff,request,"rollback",Ct,VerificationFor(request)));
         await AssertCheckOutNotWritten();
         Assert.Equal(reservationBefore,await Scalar("SELECT status::text FROM slot_reservations"));
-        Assert.Equal(0L,await Scalar("SELECT count(*) FROM integration_outbox WHERE event_type='SlotStatusChanged.v1'"));
+        Assert.Equal(0L,await Scalar("SELECT count(*) FROM integration_outbox WHERE event_type='SlotStatusChanged.v1' AND payload->>'status'='AVAILABLE'"));
     }
 
     [PostgresFact]

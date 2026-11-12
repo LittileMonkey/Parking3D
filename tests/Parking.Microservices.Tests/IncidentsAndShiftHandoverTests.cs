@@ -263,6 +263,133 @@ public class IncidentsAndShiftHandoverTests
         Assert.True(repo.ConfirmHandoverCalled);
     }
 
+    [Theory]
+    [InlineData("Escalated")]
+    [InlineData("Resolved")]
+    public void UpdateIncidentStatusValidator_ShouldFail_WhenEscalatedOrResolvedWithoutNotes(string targetStatus)
+    {
+        var command = new UpdateIncidentStatusCommand(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            new UpdateIncidentStatusRequestDto(Status: targetStatus, Notes: "   ", ExpectedVersion: 1));
+
+        var result = _updateIncidentStatusValidator.TestValidate(command);
+        result.ShouldHaveValidationErrorFor(x => x.Request.Notes);
+    }
+
+    [Fact]
+    public void CreateIncidentDecisionValidator_ShouldFail_WhenApprovedLacksRequiredOrUsesBase64Evidence()
+    {
+        var missingDoc = new CreateIncidentDecisionCommand(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            new CreateIncidentDecisionRequestDto(
+                Decision: "Approved",
+                Reason: "Chỉ có ảnh camera",
+                Evidence: new[]
+                {
+                    new IncidentEvidenceDto("CAMERA", "https://cdn.example.com/cam-1.jpg", DateTimeOffset.UtcNow)
+                },
+                ExpectedVersion: 1));
+
+        Assert.False(_decisionValidator.TestValidate(missingDoc).IsValid);
+
+        var base64Ref = new CreateIncidentDecisionCommand(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            new CreateIncidentDecisionRequestDto(
+                Decision: "Approved",
+                Reason: "Đính kèm base64",
+                Evidence: new[]
+                {
+                    new IncidentEvidenceDto("CAMERA", "data:image/png;base64,AAAA", DateTimeOffset.UtcNow),
+                    new IncidentEvidenceDto("VEHICLE_DOCUMENT", "https://cdn.example.com/doc.pdf", null)
+                },
+                ExpectedVersion: 1));
+
+        Assert.False(_decisionValidator.TestValidate(base64Ref).IsValid);
+    }
+
+    [Fact]
+    public void ListIncidentsQueryValidator_ShouldFail_WhenFromIsGreaterOrEqualToTo()
+    {
+        var anchor = DateTimeOffset.UtcNow;
+        var validator = new ListIncidentsQueryValidator();
+
+        var equalQuery = new ListIncidentsQuery(Guid.NewGuid(), Guid.NewGuid(), null, null, null, 1, 20, anchor, anchor);
+        Assert.False(validator.TestValidate(equalQuery).IsValid);
+
+        var reversedQuery = new ListIncidentsQuery(Guid.NewGuid(), Guid.NewGuid(), null, null, null, 1, 20, anchor.AddMinutes(5), anchor);
+        Assert.False(validator.TestValidate(reversedQuery).IsValid);
+    }
+
+    [Fact]
+    public async Task IncidentCommandHandler_ResolveIncident_ShouldRequireManagerCapability()
+    {
+        var lotId = Guid.NewGuid();
+        var incidentId = Guid.NewGuid();
+        var actorId = Guid.NewGuid();
+        var access = new StubFacilityAccess { AllowAccess = true };
+        access.DeniedCapabilities.Add("MANAGER");
+        var repo = new StubIncidentsRepository();
+        var handlers = new IncidentCommandHandlers(repo, access);
+
+        var resolveCmd = new UpdateIncidentStatusCommand(
+            lotId, incidentId, actorId,
+            new UpdateIncidentStatusRequestDto("Resolved", "Đã xử lý xong", 1));
+
+        var ex = await Assert.ThrowsAsync<ServiceException>(() => handlers.Handle(resolveCmd, CancellationToken.None));
+        Assert.Equal(403, ex.StatusCode);
+        Assert.False(repo.UpdateIncidentStatusCalled);
+        Assert.Equal(new[] { "INCIDENT_WRITE", "MANAGER" }, access.CheckedCapabilities);
+
+        access.CheckedCapabilities.Clear();
+        var escalateCmd = new UpdateIncidentStatusCommand(
+            lotId, incidentId, actorId,
+            new UpdateIncidentStatusRequestDto("Escalated", "Cần quản lý xem xét", 1));
+        var escalated = await handlers.Handle(escalateCmd, CancellationToken.None);
+        Assert.Equal("Escalated", escalated.Status);
+        Assert.Equal(new[] { "INCIDENT_WRITE" }, access.CheckedCapabilities);
+
+        access.CheckedCapabilities.Clear();
+        access.DeniedCapabilities.Clear();
+        var ok = await handlers.Handle(resolveCmd, CancellationToken.None);
+        Assert.Equal("Resolved", ok.Status);
+        Assert.True(repo.UpdateIncidentStatusCalled);
+        Assert.Equal(new[] { "INCIDENT_WRITE", "MANAGER" }, access.CheckedCapabilities);
+    }
+
+    [Fact]
+    public async Task ShiftHandoverQueryHandler_ShouldEnforceFacilityManagerCapabilityAndIgnoreClaimFlag()
+    {
+        var lotId = Guid.NewGuid();
+        var handoverId = Guid.NewGuid();
+        var actorId = Guid.NewGuid();
+        var access = new StubFacilityAccess { AllowAccess = true };
+        access.DeniedCapabilities.Add("MANAGER");
+        var repo = new StubIncidentsRepository();
+        var handlers = new ShiftHandoverQueryHandlers(repo, access);
+
+        await handlers.Handle(new ListShiftHandoversQuery(lotId, actorId, IsManager: true, null, 1, 20), CancellationToken.None);
+        Assert.False(repo.LastListHandoversIsManager);
+
+        await handlers.Handle(new GetShiftHandoverByIdQuery(lotId, handoverId, actorId, IsManager: true), CancellationToken.None);
+        Assert.False(repo.LastGetHandoverIsManager);
+
+        access.DeniedCapabilities.Clear();
+        await handlers.Handle(new ListShiftHandoversQuery(lotId, actorId, IsManager: false, null, 1, 20), CancellationToken.None);
+        Assert.True(repo.LastListHandoversIsManager);
+    }
+
+    [Fact]
+    public async Task ShiftHandoverQueryHandler_ShouldPropagate503_WhenManagerCapabilityCheckUnavailable()
+    {
+        var access = new StubFacilityAccess { AllowAccess = true, Throw503OnCapabilityCheck = true };
+        var repo = new StubIncidentsRepository();
+        var handlers = new ShiftHandoverQueryHandlers(repo, access);
+
+        var ex = await Assert.ThrowsAsync<ServiceException>(() =>
+            handlers.Handle(new ListShiftHandoversQuery(Guid.NewGuid(), Guid.NewGuid(), true, null, 1, 20), CancellationToken.None));
+        Assert.Equal(503, ex.StatusCode);
+    }
+
     // ==========================================
     // TEST DOUBLES / STUBS
     // ==========================================
@@ -270,12 +397,18 @@ public class IncidentsAndShiftHandoverTests
     private sealed class StubFacilityAccess : IFacilityAccess
     {
         public bool AllowAccess { get; set; } = true;
+        public bool Throw503OnCapabilityCheck { get; set; }
+        public HashSet<string> DeniedCapabilities { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public List<string> CheckedCapabilities { get; } = new();
         public string? LastCheckedCapability { get; private set; }
 
         public Task RequireAsync(Guid actorId, Guid lotId, string capability, CancellationToken ct)
         {
             LastCheckedCapability = capability;
-            if (!AllowAccess)
+            CheckedCapabilities.Add(capability);
+            if (Throw503OnCapabilityCheck && string.Equals(capability, "MANAGER", StringComparison.OrdinalIgnoreCase))
+                throw new ServiceException(503, "Identity service unavailable");
+            if (!AllowAccess || DeniedCapabilities.Contains(capability))
                 throw new ServiceException(403, $"Staff denied for {capability}");
             return Task.CompletedTask;
         }
@@ -284,7 +417,10 @@ public class IncidentsAndShiftHandoverTests
     private sealed class StubIncidentsRepository : IParkingRepository
     {
         public bool CreateIncidentCalled { get; private set; }
+        public bool UpdateIncidentStatusCalled { get; private set; }
         public bool ConfirmHandoverCalled { get; private set; }
+        public bool? LastListHandoversIsManager { get; private set; }
+        public bool? LastGetHandoverIsManager { get; private set; }
 
         public Task<IncidentDto> CreateIncidentAsync(Guid lotId, Guid actorId, CreateIncidentRequestDto request, string? key, CancellationToken ct)
         {
@@ -337,14 +473,63 @@ public class IncidentsAndShiftHandoverTests
 
         public Task<PagedResult<IncidentSummaryDto>> ListIncidentsAsync(Guid lotId, string? status, string? severity, string? query, int page, int pageSize, CancellationToken ct) => throw new NotImplementedException();
         public Task<IncidentDto?> GetIncidentByIdAsync(Guid lotId, Guid incidentId, CancellationToken ct) => throw new NotImplementedException();
-        public Task<IncidentDto> UpdateIncidentStatusAsync(Guid lotId, Guid incidentId, Guid actorId, UpdateIncidentStatusRequestDto request, CancellationToken ct) => throw new NotImplementedException();
+        public Task<IncidentDto> UpdateIncidentStatusAsync(Guid lotId, Guid incidentId, Guid actorId, UpdateIncidentStatusRequestDto request, CancellationToken ct)
+        {
+            UpdateIncidentStatusCalled = true;
+            return Task.FromResult(new IncidentDto(
+                IncidentId: incidentId,
+                LotId: lotId,
+                Title: "Incident",
+                Type: "GATE",
+                Severity: "High",
+                Description: "Details",
+                Status: request.Status,
+                ReportedByUserId: actorId,
+                DetectedAt: DateTimeOffset.UtcNow.AddMinutes(-10),
+                ReportedAt: DateTimeOffset.UtcNow.AddMinutes(-9),
+                UpdatedAt: DateTimeOffset.UtcNow,
+                ResolvedAt: request.Status == "Resolved" ? DateTimeOffset.UtcNow : null,
+                LateReportReason: null,
+                RelatedPlate: null,
+                RelatedSlotCode: null,
+                RelatedGate: null,
+                RelatedBookingId: null,
+                RelatedSessionId: null,
+                Evidence: Array.Empty<IncidentEvidenceDto>(),
+                ExitDecision: null,
+                Version: request.ExpectedVersion + 1));
+        }
         public Task<PagedResult<IncidentHistoryItemDto>> GetIncidentHistoryAsync(Guid lotId, Guid incidentId, int page, int pageSize, CancellationToken ct) => throw new NotImplementedException();
         public Task<IncidentDto> ReopenIncidentAsync(Guid lotId, Guid incidentId, Guid actorId, ReopenIncidentRequestDto request, CancellationToken ct) => throw new NotImplementedException();
         public Task<IncidentDto> CancelIncidentAsync(Guid lotId, Guid incidentId, Guid actorId, CancelIncidentRequestDto request, CancellationToken ct) => throw new NotImplementedException();
         public Task<IncidentExitDecisionDto> CreateIncidentDecisionAsync(Guid lotId, Guid incidentId, Guid actorId, CreateIncidentDecisionRequestDto request, CancellationToken ct) => throw new NotImplementedException();
         public Task<ShiftHandoverDto> CreateShiftHandoverAsync(Guid lotId, Guid actorId, CreateShiftHandoverRequestDto request, string? key, CancellationToken ct) => throw new NotImplementedException();
-        public Task<PagedResult<ShiftHandoverSummaryDto>> ListShiftHandoversAsync(Guid lotId, Guid actorId, bool isManager, string? status, int page, int pageSize, CancellationToken ct) => throw new NotImplementedException();
-        public Task<ShiftHandoverDto?> GetShiftHandoverByIdAsync(Guid lotId, Guid handoverId, Guid actorId, bool isManager, CancellationToken ct) => throw new NotImplementedException();
+        public Task<PagedResult<ShiftHandoverSummaryDto>> ListShiftHandoversAsync(Guid lotId, Guid actorId, bool isManager, string? status, int page, int pageSize, CancellationToken ct)
+        {
+            LastListHandoversIsManager = isManager;
+            return Task.FromResult(new PagedResult<ShiftHandoverSummaryDto>(Array.Empty<ShiftHandoverSummaryDto>(), page, pageSize, 0));
+        }
+        public Task<ShiftHandoverDto?> GetShiftHandoverByIdAsync(Guid lotId, Guid handoverId, Guid actorId, bool isManager, CancellationToken ct)
+        {
+            LastGetHandoverIsManager = isManager;
+            return Task.FromResult<ShiftHandoverDto?>(new ShiftHandoverDto(
+                HandoverId: handoverId,
+                LotId: lotId,
+                SenderShiftId: Guid.NewGuid(),
+                ReceiverShiftId: Guid.NewGuid(),
+                SenderUserId: Guid.NewGuid(),
+                ReceiverUserId: actorId,
+                CompletedTasks: "Done",
+                UnresolvedIssues: "None",
+                PendingTransactions: "None",
+                EquipmentStatus: "OK",
+                NotesForNext: "None",
+                Status: "PendingConfirmation",
+                CreatedAt: DateTimeOffset.UtcNow.AddHours(-1),
+                ConfirmedAt: null,
+                ConfirmedByUserId: null,
+                Version: 1));
+        }
         public Task<ShiftHandoverDto> ReassignReceiverAsync(Guid lotId, Guid handoverId, Guid actorId, ReassignReceiverRequestDto request, CancellationToken ct) => throw new NotImplementedException();
 
         // Baseline methods
