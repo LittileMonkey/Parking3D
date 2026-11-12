@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Npgsql;
@@ -366,7 +366,7 @@ public sealed partial class ParkingRepository
             throw new ServiceException(409, $"Xung đột dữ liệu: Phiên bản hiện tại là {version}, mong muốn {request.ExpectedVersion}.");
         }
 
-        var now = clock.GetUtcNow();
+        now = clock.GetUtcNow();
 
         // Both shifts must still be active at the handshake, not only when it was proposed.
         await using (var shifts = new NpgsqlCommand("""

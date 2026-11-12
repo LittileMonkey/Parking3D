@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { api } from "../services/api";
 
 type Step = "email" | "otp" | "password" | "success";
 
@@ -11,14 +12,27 @@ export default function ForgotPassword() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
+    setNotice("");
 
     if (step === "email") {
-      setEmail(email.trim().toLowerCase());
-      setStep("otp");
+      const normalized = email.trim().toLowerCase();
+      setBusy(true);
+      try {
+        const res = await api.forgetPassword(normalized);
+        setEmail(normalized);
+        setNotice(res?.message || "Đã gửi mã OTP qua email. Vui lòng kiểm tra hộp thư.");
+        setStep("otp");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Không gửi được mã OTP.");
+      } finally {
+        setBusy(false);
+      }
       return;
     }
 
@@ -40,11 +54,20 @@ export default function ForgotPassword() {
       return;
     }
 
-    setStep("success");
+    setBusy(true);
+    try {
+      await api.resetPassword(email, otp, password);
+      setStep("success");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không đặt lại được mật khẩu.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const goBack = () => {
     setError("");
+    setNotice("");
     setStep(step === "password" ? "otp" : "email");
   };
 
@@ -80,6 +103,7 @@ export default function ForgotPassword() {
 
             <form className="forgot-form" onSubmit={submit}>
               {error && <div className="forgot-error" role="alert">{error}</div>}
+              {notice && <div className="forgot-notice" role="status">{notice}</div>}
 
               {step === "email" && (
                 <div className="forgot-field">
@@ -144,10 +168,8 @@ export default function ForgotPassword() {
                 </>
               )}
 
-              <button className="forgot-submit" type="submit">
-                {step === "email" && "Gửi mã PIN"}
-                {step === "otp" && "Xác thực OTP"}
-                {step === "password" && "Đổi mật khẩu"}
+              <button className="forgot-submit" type="submit" disabled={busy}>
+                {busy ? "Đang xử lý..." : step === "email" ? "Gửi mã PIN" : step === "otp" ? "Xác thực OTP" : "Đổi mật khẩu"}
               </button>
             </form>
 
