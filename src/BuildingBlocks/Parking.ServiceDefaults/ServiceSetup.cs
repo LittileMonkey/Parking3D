@@ -93,7 +93,8 @@ public static class ServiceSetup
                 app.Logger.LogWarning("Request failed in {Service}: {ExceptionType}, status {Status}", serviceName, e.GetType().Name, status);
                 context.Response.StatusCode = status;
                 await context.Response.WriteAsJsonAsync(new ApiResponse<object>(null, false, status,
-                    e is ServiceException se ? se.Message : status == 409 ? "State or data constraint conflict" : "Request could not be completed"));
+                    e is ServiceException se ? se.Message : status == 409 ? "State or data constraint conflict" : "Request could not be completed")
+                    { ErrorCode = (e as ServiceException)?.ErrorCode });
             }
         });
         app.UseAuthentication(); app.UseAuthorization();

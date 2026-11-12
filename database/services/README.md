@@ -33,3 +33,23 @@ SELECT column_default FROM information_schema.columns
 WHERE table_schema='public' AND table_name='lot_vehicle_policies' AND column_name='hold_minutes';
 SELECT version FROM service_schema_versions ORDER BY version;
 ```
+
+## SCRUM-114 — ràng buộc bàn giao trên database đã tồn tại
+
+Sau khi đã có các bảng từ migration 003, áp dụng migration nâng cấp.
+
+```powershell
+psql -X -v ON_ERROR_STOP=1 -d <parking_database> -f database/services/parking/migrations/009_handover_integrity.sql
+```
+
+Migration bổ sung unique `(id, lot_id)`, composite foreign key `(handover_id, lot_id)` và điều kiện người giao khác người nhận. Script có thể chạy lại và ghi schema version 9. PostgreSQL kiểm tra dữ liệu hiện có trong cùng transaction. Nếu dữ liệu vi phạm constraint, transaction thất bại và cần xử lý bản ghi vi phạm trước khi áp dụng lại.
+
+## Ảnh chứng cứ Parking
+
+Migration `010_incident_evidence.sql` tạo bảng ảnh riêng theo bãi. Ảnh PNG/JPEG tối đa 4 MiB được lưu trong `bytea` cùng SHA-256, actor và thời điểm tải lên. API đọc ảnh kiểm tra quyền hiện tại theo bãi và trả envelope JSON. Contract nằm trong [EVIDENCE-API.md](../../docs/microservices/EVIDENCE-API.md).
+
+```powershell
+psql -X -v ON_ERROR_STOP=1 -d <parking_database> -f database/services/parking/migrations/010_incident_evidence.sql
+```
+
+`Seed-DockerDemo.ps1` áp dụng cả migration 009 và 010 trước khi seed. Fixture demo bổ sung bản đồ PUBLISHED, giữ dữ liệu sẵn có và có thể chạy lại. Script tạo assignment Manager theo bãi cho tài khoản bootstrap Admin, bắt đầu ca của tài khoản này và demo Staff để kiểm tra bàn giao hai phía.

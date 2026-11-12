@@ -1075,6 +1075,9 @@ export interface BackendCheckInPayload {
   qrPayload?: string;
   detectedPlate: string;
   vehicleType?: string;
+  allowMismatchOverride?: boolean;
+  overrideReason?: string;
+  evidence?: Array<{ kind: string; reference: string; capturedAt?: string | null }>;
 }
 
 export interface BackendCheckInResponse {

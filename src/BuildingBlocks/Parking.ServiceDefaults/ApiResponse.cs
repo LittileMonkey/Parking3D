@@ -1,8 +1,13 @@
 using Microsoft.AspNetCore.Http;
+using System.Text.Json.Serialization;
 
 namespace Parking.ServiceDefaults;
 
-public sealed record ApiResponse<T>(T? Result, bool IsSuccess, int StatusCode, string Message);
+public sealed record ApiResponse<T>(T? Result, bool IsSuccess, int StatusCode, string Message)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ErrorCode { get; init; }
+}
 
 public static class Responses
 {
@@ -13,7 +18,8 @@ public static class Responses
         Results.Json(new ApiResponse<object>(null, false, status, message), statusCode: status);
 }
 
-public sealed class ServiceException(int statusCode, string message) : Exception(message)
+public sealed class ServiceException(int statusCode, string message, string? errorCode = null) : Exception(message)
 {
     public int StatusCode { get; } = statusCode;
+    public string? ErrorCode { get; } = errorCode;
 }

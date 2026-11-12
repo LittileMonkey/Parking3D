@@ -210,6 +210,7 @@ public sealed partial class ParkingRepository
 
         var incidentId = Guid.NewGuid();
         var evidenceJson = JsonSerializer.Serialize(evidenceList, JsonOptions);
+        await ValidateStoredEvidenceAsync(conn, tx, lotId, evidenceList, ct);
 
         await using (var insertCmd = new NpgsqlCommand("""
             INSERT INTO parking_issues (
@@ -491,7 +492,7 @@ public sealed partial class ParkingRepository
         => UpdateIncidentStatusAsync(lotId, incidentId, actorId, request, null, ct);
 
     /// <summary>
-    /// Cập nhật tiến độ xử lý sự cố (InProgress/Escalated/Resolved) dưới khóa FOR UPDATE và kiểm tra expectedVersion.
+    /// Cập nhật tiến độ xử lý sự cố bằng version guard, ghi lịch sử và audit trong cùng transaction.
     /// </summary>
     public async Task<IncidentDto> UpdateIncidentStatusAsync(
         Guid lotId,
@@ -525,7 +526,6 @@ public sealed partial class ParkingRepository
         await using (var lockCmd = new NpgsqlCommand("""
             SELECT status, version FROM parking_issues
             WHERE lot_id = @lotId AND id = @incidentId
-            FOR UPDATE
             """, conn, tx))
         {
             lockCmd.Parameters.AddWithValue("lotId", lotId);
@@ -559,7 +559,7 @@ public sealed partial class ParkingRepository
                 resolved_at = CASE WHEN @isResolved THEN @now ELSE resolved_at END,
                 version = version + 1,
                 updated_at = @now
-            WHERE lot_id = @lotId AND id = @incidentId
+            WHERE lot_id = @lotId AND id = @incidentId AND version = @expectedVersion
             """, conn, tx))
         {
             updateCmd.Parameters.AddWithValue("newStatus", targetStatus);
@@ -568,7 +568,9 @@ public sealed partial class ParkingRepository
             updateCmd.Parameters.AddWithValue("now", now);
             updateCmd.Parameters.AddWithValue("lotId", lotId);
             updateCmd.Parameters.AddWithValue("incidentId", incidentId);
-            await updateCmd.ExecuteNonQueryAsync(ct);
+            updateCmd.Parameters.AddWithValue("expectedVersion", request.ExpectedVersion);
+            if (await updateCmd.ExecuteNonQueryAsync(ct) != 1)
+                throw new ServiceException(409, "Incident changed. Refresh the current version and retry.");
         }
 
         await using (var histCmd = new NpgsqlCommand("""
@@ -715,7 +717,6 @@ public sealed partial class ParkingRepository
         await using (var lockCmd = new NpgsqlCommand("""
             SELECT status, version FROM parking_issues
             WHERE lot_id = @lotId AND id = @incidentId
-            FOR UPDATE
             """, conn, tx))
         {
             lockCmd.Parameters.AddWithValue("lotId", lotId);
@@ -740,13 +741,15 @@ public sealed partial class ParkingRepository
                 resolved_at = NULL,
                 version = version + 1,
                 updated_at = @now
-            WHERE lot_id = @lotId AND id = @incidentId
+            WHERE lot_id = @lotId AND id = @incidentId AND version = @expectedVersion
             """, conn, tx))
         {
             updateCmd.Parameters.AddWithValue("now", now);
             updateCmd.Parameters.AddWithValue("lotId", lotId);
             updateCmd.Parameters.AddWithValue("incidentId", incidentId);
-            await updateCmd.ExecuteNonQueryAsync(ct);
+            updateCmd.Parameters.AddWithValue("expectedVersion", request.ExpectedVersion);
+            if (await updateCmd.ExecuteNonQueryAsync(ct) != 1)
+                throw new ServiceException(409, "Incident changed. Refresh the current version and retry.");
         }
 
         await using (var histCmd = new NpgsqlCommand("""
@@ -822,7 +825,6 @@ public sealed partial class ParkingRepository
         await using (var lockCmd = new NpgsqlCommand("""
             SELECT status, version FROM parking_issues
             WHERE lot_id = @lotId AND id = @incidentId
-            FOR UPDATE
             """, conn, tx))
         {
             lockCmd.Parameters.AddWithValue("lotId", lotId);
@@ -849,13 +851,15 @@ public sealed partial class ParkingRepository
             SET status = 'Cancelled',
                 version = version + 1,
                 updated_at = @now
-            WHERE lot_id = @lotId AND id = @incidentId
+            WHERE lot_id = @lotId AND id = @incidentId AND version = @expectedVersion
             """, conn, tx))
         {
             updateCmd.Parameters.AddWithValue("now", now);
             updateCmd.Parameters.AddWithValue("lotId", lotId);
             updateCmd.Parameters.AddWithValue("incidentId", incidentId);
-            await updateCmd.ExecuteNonQueryAsync(ct);
+            updateCmd.Parameters.AddWithValue("expectedVersion", request.ExpectedVersion);
+            if (await updateCmd.ExecuteNonQueryAsync(ct) != 1)
+                throw new ServiceException(409, "Incident changed. Refresh the current version and retry.");
         }
 
         await using (var histCmd = new NpgsqlCommand("""
@@ -949,7 +953,6 @@ public sealed partial class ParkingRepository
         await using (var lockCmd = new NpgsqlCommand("""
             SELECT status, version, booking_id FROM parking_issues
             WHERE lot_id = @lotId AND id = @incidentId
-            FOR UPDATE
             """, conn, tx))
         {
             lockCmd.Parameters.AddWithValue("lotId", lotId);
@@ -988,20 +991,23 @@ public sealed partial class ParkingRepository
         );
 
         var decisionJson = JsonSerializer.Serialize(decisionDto, JsonOptions);
+        await ValidateStoredEvidenceAsync(conn, tx, lotId, evidenceList, ct);
 
         await using (var updateCmd = new NpgsqlCommand("""
             UPDATE parking_issues
             SET exit_decision = @decision::jsonb,
                 version = version + 1,
                 updated_at = @now
-            WHERE lot_id = @lotId AND id = @incidentId
+            WHERE lot_id = @lotId AND id = @incidentId AND version = @expectedVersion
             """, conn, tx))
         {
             updateCmd.Parameters.AddWithValue("decision", decisionJson);
             updateCmd.Parameters.AddWithValue("now", now);
             updateCmd.Parameters.AddWithValue("lotId", lotId);
             updateCmd.Parameters.AddWithValue("incidentId", incidentId);
-            await updateCmd.ExecuteNonQueryAsync(ct);
+            updateCmd.Parameters.AddWithValue("expectedVersion", request.ExpectedVersion);
+            if (await updateCmd.ExecuteNonQueryAsync(ct) != 1)
+                throw new ServiceException(409, "Incident changed. Refresh the current version and retry.");
         }
 
         var decisionAction = $"DECISION_{decision.ToUpperInvariant()}";

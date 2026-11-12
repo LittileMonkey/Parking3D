@@ -103,6 +103,8 @@ for service,out in parts.items():
     dest=ROOT/'database/services'/service
     dest.mkdir(parents=True,exist_ok=True)
     result='\n\n'.join(out)+'\n'
+    if service == 'parking':
+        result += '\n' + (ROOT/'database/services/parking/migrations/010_incident_evidence.sql').read_text(encoding='utf-8')
     # No cross-owner FK can survive export.
     for t in re.findall(r'REFERENCES public\.(\w+)',result):
         assert owners.get(t,service)==service,(service,t)

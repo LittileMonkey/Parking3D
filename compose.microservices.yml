@@ -1,5 +1,14 @@
 # Local isolated Development; internal gRPC is not exposed to the host.
 services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
   identity-db:
     image: postgres:17
     environment:
@@ -110,12 +119,15 @@ services:
       Jwt__Key: ${JWT_KEY:?Run New-DevelopmentEnv.ps1}
       Grpc__ServiceKey: ${GRPC_SERVICE_KEY:?Run New-DevelopmentEnv.ps1}
       ConnectionStrings__Service: "Host=parking-db;Database=parking_parking;Username=parking;Password=${PARKING_DB_PASSWORD}"
+      ConnectionStrings__Redis: "redis:6379,abortConnect=false"
       Services__IdentityGrpc: http://identity:8081
       Services__ParkingGrpc: http://parking:8081
       Services__AIGrpc: http://ai:8081
       Services__PaymentGrpc: http://payment:8081
     depends_on:
       parking-db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
   payment:

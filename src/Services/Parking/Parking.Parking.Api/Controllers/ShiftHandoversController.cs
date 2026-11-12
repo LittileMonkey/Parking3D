@@ -21,7 +21,7 @@ public sealed class ShiftHandoversController(ISender sender) : ControllerBase
         [FromBody] CreateShiftHandoverRequestDto request,
         CancellationToken ct)
     {
-        var key = Request.ReadOptionalIdempotencyKey();
+        var key = Request.ReadRequiredIdempotencyKey();
         var result = await sender.Send(new CreateShiftHandoverCommand(
             lotId, User.Subject(), request, key), ct);
         return StatusCode(201, new ApiResponse<ShiftHandoverDto>(result, true, 201, "Đã gửi biên bản bàn giao, chờ người nhận xác nhận."));
@@ -69,7 +69,7 @@ public sealed class ShiftHandoversController(ISender sender) : ControllerBase
         [FromBody] ConfirmShiftHandoverRequestDto request,
         CancellationToken ct)
     {
-        var key = Request.ReadOptionalIdempotencyKey();
+        var key = Request.ReadRequiredIdempotencyKey();
         var result = await sender.Send(new ConfirmShiftHandoverCommand(
             lotId, handoverId, User.Subject(), request, key), ct);
         return Ok(new ApiResponse<ShiftHandoverDto>(result, true, 200, "Xác nhận nhận ca trực thành công."));
@@ -85,7 +85,7 @@ public sealed class ShiftHandoversController(ISender sender) : ControllerBase
         [FromBody] ReassignReceiverRequestDto request,
         CancellationToken ct)
     {
-        var key = Request.ReadOptionalIdempotencyKey();
+        var key = Request.ReadRequiredIdempotencyKey();
         var result = await sender.Send(new ReassignReceiverCommand(
             lotId, handoverId, User.Subject(), request, key), ct);
         return Ok(new ApiResponse<ShiftHandoverDto>(result, true, 200, "Đã chỉ định lại người nhận ca thành công."));

@@ -66,6 +66,10 @@ public static class IncidentEvidenceRules
         var hasVehicleDoc = evidence.Any(e => VehicleDocKinds.Contains(e.Kind.Trim()));
         return hasCamera && hasVehicleDoc;
     }
+
+    public static bool HasCameraEvidence(IReadOnlyList<IncidentEvidenceDto>? evidence) =>
+        evidence is { Count: > 0 } && AreAllItemsValid(evidence) &&
+        evidence.Any(item => CameraKinds.Contains(item.Kind.Trim()));
 }
 
 /// <summary>
