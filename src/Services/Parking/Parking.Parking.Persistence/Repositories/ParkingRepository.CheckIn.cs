@@ -44,7 +44,7 @@ public sealed partial class ParkingRepository
         }
 
         // Khóa key cho retry; tiếp theo VEHICLE -> SLOT giống luồng payment/expiry.
-        await using (var claim = Command("SELECT pg_advisory_xact_lock(hashtextextended(@key,0))"))
+        await using (var claim = Command("SELECT pg_advisory_xact_lock(hashtext(@key))"))
         {
             claim.Parameters.AddWithValue("key", dedupeKey);
             await claim.ExecuteNonQueryAsync(ct);
@@ -274,7 +274,7 @@ public sealed partial class ParkingRepository
         }
 
         // 1. Khóa Idempotency Key
-        await using (var claim = Command("SELECT pg_advisory_xact_lock(hashtextextended(@key,0))"))
+        await using (var claim = Command("SELECT pg_advisory_xact_lock(hashtext(@key))"))
         {
             claim.Parameters.AddWithValue("key", dedupeKey);
             await claim.ExecuteNonQueryAsync(ct);
@@ -400,7 +400,7 @@ public sealed partial class ParkingRepository
               lvl.display_order ASC,
               s.code ASC
             LIMIT 1
-            ;
+            FOR UPDATE OF s SKIP LOCKED;
             """))
         {
             slotSearch.Parameters.AddWithValue("entry",entryAt.UtcDateTime);
@@ -433,7 +433,7 @@ public sealed partial class ParkingRepository
             FROM pricing_plans p JOIN pricing_rules r ON r.plan_id=p.id AND r.rule_type='FLAT_BLOCK'
             WHERE p.lot_id=@lot AND p.vehicle_type=@type AND p.status='PUBLISHED' AND p.currency='VND'
               AND p.effective_from<=@entry AND (p.effective_until IS NULL OR p.effective_until>@entry)
-              AND NOT EXISTS(SELECT 1 FROM pricing_rules other WHERE other.plan_id=p.id AND other.id<>r.id)
+              -- Only pick the FLAT_BLOCK rule; other supplementary rules are tolerated
             ORDER BY p.version_no DESC LIMIT 1 RETURNING id
             """))
         {snapshot.Parameters.AddWithValue("entry",entryAt.UtcDateTime);snapshotId=await snapshot.ExecuteScalarAsync(ct) is Guid id?id:throw new ServiceException(409,"No supported published tariff for walk-in");}

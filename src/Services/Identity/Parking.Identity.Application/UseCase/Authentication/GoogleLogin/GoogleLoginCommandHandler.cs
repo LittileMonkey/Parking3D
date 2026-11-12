@@ -99,7 +99,6 @@ namespace Parking.Identity.Application.UseCase.Authentication.GoogleLogin
                 throw new AppException(ErrorCode.AccountLocked, "The account is temporarily locked. Please try again later.");
             }
 
-            if(user.LockedUntil.HasValue && user.LockedUntil.Value > DateTime.UtcNow) throw new AppException(ErrorCode.AccountLocked,"Account temporarily locked");
             await mfa.RequireAsync(user.Id,request.MfaCode,cancellationToken);
             var accessToken = accessTokenService.GenerateAccessToken(user);
 

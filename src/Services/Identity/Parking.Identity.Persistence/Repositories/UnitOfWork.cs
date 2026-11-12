@@ -13,7 +13,7 @@ public class UnitOfWork(ParkingDatabaseV4Context context) : IUnitOfWork
     public async Task AcquireLockAsync(string resource, CancellationToken cancellationToken = default)
     {
         if(context.Database.CurrentTransaction is null)throw new InvalidOperationException("Resource lock requires a transaction");
-        await context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({resource},0))",cancellationToken);
+        await context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtext({resource}))",cancellationToken);
     }
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>

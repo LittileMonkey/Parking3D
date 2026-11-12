@@ -41,7 +41,7 @@ public sealed partial class ParkingRepository(NpgsqlDataSource db, TimeProvider 
         // Khóa request theo khách trước khi ghi; retry cùng key không tạo booking thứ hai.
         var requestId = new Guid(SHA256.HashData(Encoding.UTF8.GetBytes(customerId + ":" + key)).AsSpan(0, 16));
         var fingerprint = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request))));
-        await using (var cmd = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended(@key,0)); SELECT lock_parking_resource('VEHICLE',@vehicle);", conn, tx))
+        await using (var cmd = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtext(@key)); SELECT lock_parking_resource('VEHICLE',@vehicle);", conn, tx))
         { cmd.Parameters.AddWithValue("key", customerId + ":" + key); cmd.Parameters.AddWithValue("vehicle", request.VehicleId); await cmd.ExecuteNonQueryAsync(ct); }
         await using (var old = new NpgsqlCommand("SELECT payload_hash,outcome FROM integration_inbox WHERE event_id=@id AND event_type='BookingRequest'", conn, tx))
         {
