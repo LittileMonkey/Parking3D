@@ -42,7 +42,25 @@ export default function StaffLayout() {
   };
 
   return (
-    <VisionSpatialWorkspace role="staff" currentTabId={getStaffActiveTab()}>
+    <VisionSpatialWorkspace role="staff" currentTabId={getStaffActiveTab()} openIncidentCount={openIncidentCount}>
+      {lots.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, fontSize: 13 }}>
+          <span>Bãi đang trực:</span>
+          <select
+            className="pm-form-select"
+            style={{ width: "auto" }}
+            value={selectedLotId}
+            onChange={(e) => setSelectedLotId(e.target.value)}
+            aria-label="Chọn cơ sở bãi đỗ"
+          >
+            {lots.map((lot) => (
+              <option key={lot.lotId} value={lot.lotId}>
+                {lot.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <Outlet
         context={{
           selectedLotId,

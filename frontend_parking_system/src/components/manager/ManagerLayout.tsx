@@ -44,7 +44,40 @@ export default function ManagerLayout() {
   };
 
   return (
-    <VisionSpatialWorkspace role="admin" currentTabId={getActiveTab()}>
+    <VisionSpatialWorkspace role="admin" currentTabId={getActiveTab()} onRefresh={handleRefresh}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", marginBottom: 14 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+          <span>Bãi xe:</span>
+          <select
+            className="pm-form-select"
+            style={{ width: "auto" }}
+            value={selectedLotId}
+            onChange={(e) => setSelectedLotId(e.target.value)}
+            aria-label="Chọn cơ sở bãi xe"
+          >
+            <option value="all">Tất cả bãi được quản lý</option>
+            {facilities.map((fac) => (
+              <option key={fac.lotId} value={fac.lotId}>
+                {fac.name} ({fac.code})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+          <span>Kỳ:</span>
+          <select
+            className="pm-form-select"
+            style={{ width: "auto" }}
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as ReportingPeriod)}
+            aria-label="Chọn kỳ báo cáo"
+          >
+            <option value="today">Hôm nay</option>
+            <option value="week">7 ngày</option>
+            <option value="month">30 ngày</option>
+          </select>
+        </label>
+      </div>
       {facilityError && <p role="alert">{facilityError}</p>}
       <Outlet
         context={{
