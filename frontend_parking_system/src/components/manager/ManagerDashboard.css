@@ -11,7 +11,7 @@
   background-color: #081e27;
   background-image:
     linear-gradient(135deg, rgba(8, 25, 38, 0.88) 0%, rgba(13, 38, 52, 0.80) 50%, rgba(6, 20, 30, 0.94) 100%),
-    url("/assets/smart_parking_hero.png");
+    url("/assets/admin_smart_parking_bg.jpg");
   background-size: cover;
   background-position: center center;
   background-attachment: fixed;
@@ -1898,63 +1898,60 @@
 
 /* ── A. Master Shell Theme Variables: Liquid Frosted Glass ── */
 .pm-manager-shell.pm-theme-dark {
-  --pm-bg-color: #070d18;
-  --pm-bg-gradient:
-    radial-gradient(circle at 14% 18%, rgba(20, 175, 190, 0.22) 0%, transparent 48%),
-    radial-gradient(circle at 86% 22%, rgba(99, 102, 241, 0.16) 0%, transparent 45%),
-    radial-gradient(circle at 50% 88%, rgba(255, 120, 40, 0.12) 0%, transparent 48%),
-    linear-gradient(135deg, #060a12 0%, #0c1424 50%, #070c17 100%);
-  --pm-card-bg: rgba(15, 23, 42, 0.64);
-  --pm-card-border: rgba(255, 255, 255, 0.13);
-  --pm-card-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.20);
-  --pm-dock-bg: rgba(13, 20, 36, 0.68);
-  --pm-dock-border: rgba(255, 255, 255, 0.15);
-  --pm-strip-bg: rgba(255, 255, 255, 0.05);
-  --pm-strip-text: #f8fafc;
+  --pm-bg-image:
+    linear-gradient(135deg, rgba(6, 14, 25, 0.72) 0%, rgba(9, 22, 38, 0.62) 50%, rgba(4, 10, 18, 0.82) 100%),
+    url("/assets/admin_smart_parking_bg.jpg");
+  --pm-card-bg: rgba(14, 24, 40, 0.52);
+  --pm-card-border: rgba(255, 255, 255, 0.20);
+  --pm-card-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08), inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.35);
+  --pm-dock-bg: rgba(11, 20, 34, 0.55);
+  --pm-dock-border: rgba(255, 255, 255, 0.22);
+  --pm-strip-bg: rgba(255, 255, 255, 0.08);
+  --pm-strip-text: #ffffff;
   --pm-strip-sub: #94a3b8;
-  --pm-strip-border: rgba(255, 255, 255, 0.10);
-  --pm-strip-shadow: 0 8px 24px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --pm-strip-border: rgba(255, 255, 255, 0.16);
+  --pm-strip-shadow: 0 8px 24px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.20);
   --pm-text-heading: #ffffff;
   --pm-text-muted: #94a3b8;
-  --pm-input-bg: rgba(255, 255, 255, 0.06);
-  --pm-input-border: rgba(255, 255, 255, 0.14);
+  --pm-input-bg: rgba(255, 255, 255, 0.10);
+  --pm-input-border: rgba(255, 255, 255, 0.22);
   --pm-input-text: #ffffff;
-  --pm-calendar-cell: rgba(255, 255, 255, 0.05);
+  --pm-calendar-cell: rgba(255, 255, 255, 0.08);
   --pm-calendar-text: #e2e8f0;
-  --pm-subcard-bg: rgba(255, 255, 255, 0.04);
-  --pm-subcard-border: rgba(255, 255, 255, 0.08);
+  --pm-subcard-bg: rgba(255, 255, 255, 0.07);
+  --pm-subcard-border: rgba(255, 255, 255, 0.14);
 }
 
 .pm-manager-shell.pm-theme-light {
-  --pm-bg-color: #e8eef5;
-  --pm-bg-gradient:
-    radial-gradient(circle at 12% 16%, rgba(20, 175, 190, 0.25) 0%, transparent 45%),
-    radial-gradient(circle at 88% 20%, rgba(99, 102, 241, 0.16) 0%, transparent 45%),
-    radial-gradient(circle at 50% 85%, rgba(255, 120, 40, 0.14) 0%, transparent 50%),
-    linear-gradient(135deg, #e4edf4 0%, #f0f6fa 50%, #d8e5f0 100%);
-  --pm-card-bg: rgba(255, 255, 255, 0.62);
+  --pm-bg-image:
+    linear-gradient(135deg, rgba(235, 244, 252, 0.78) 0%, rgba(220, 236, 248, 0.70) 50%, rgba(200, 224, 242, 0.84) 100%),
+    url("/assets/admin_smart_parking_bg.jpg");
+  --pm-card-bg: rgba(255, 255, 255, 0.58);
   --pm-card-border: rgba(255, 255, 255, 0.85);
-  --pm-card-shadow: 0 24px 50px -10px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.9), inset 0 1px 2px rgba(255, 255, 255, 0.95);
-  --pm-dock-bg: rgba(255, 255, 255, 0.68);
+  --pm-card-shadow: 0 24px 50px -10px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.9), inset 0 1px 2px rgba(255, 255, 255, 0.95);
+  --pm-dock-bg: rgba(255, 255, 255, 0.65);
   --pm-dock-border: rgba(255, 255, 255, 0.85);
-  --pm-strip-bg: rgba(255, 255, 255, 0.72);
+  --pm-strip-bg: rgba(255, 255, 255, 0.70);
   --pm-strip-text: #0f172a;
   --pm-strip-sub: #475569;
-  --pm-strip-border: rgba(255, 255, 255, 0.80);
-  --pm-strip-shadow: 0 8px 24px rgba(15, 23, 42, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --pm-strip-border: rgba(255, 255, 255, 0.85);
+  --pm-strip-shadow: 0 8px 24px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.9);
   --pm-text-heading: #0f172a;
   --pm-text-muted: #475569;
-  --pm-input-bg: rgba(255, 255, 255, 0.70);
-  --pm-input-border: rgba(255, 255, 255, 0.80);
+  --pm-input-bg: rgba(255, 255, 255, 0.75);
+  --pm-input-border: rgba(255, 255, 255, 0.85);
   --pm-input-text: #0f172a;
-  --pm-calendar-cell: rgba(255, 255, 255, 0.55);
+  --pm-calendar-cell: rgba(255, 255, 255, 0.60);
   --pm-calendar-text: #1e293b;
-  --pm-subcard-bg: rgba(255, 255, 255, 0.55);
-  --pm-subcard-border: rgba(255, 255, 255, 0.70);
+  --pm-subcard-bg: rgba(255, 255, 255, 0.60);
+  --pm-subcard-border: rgba(255, 255, 255, 0.75);
 }
 
 .pm-manager-shell {
-  background: var(--pm-bg-gradient, #0b0f17) !important;
+  background-image: var(--pm-bg-image, linear-gradient(135deg, rgba(6, 14, 25, 0.72) 0%, rgba(9, 22, 38, 0.62) 50%, rgba(4, 10, 18, 0.82) 100%), url("/assets/admin_smart_parking_bg.jpg")) !important;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-attachment: fixed !important;
   color: var(--pm-text-heading, #ffffff) !important;
   transition: background 0.3s ease, color 0.3s ease;
 }
@@ -2005,6 +2002,22 @@
 
 .pm-dock-brand-icon:hover {
   transform: scale(1.06);
+}
+
+.pm-dock-role-pill {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #22d3ee;
+  background: rgba(34, 211, 238, 0.18);
+  border: 1px solid rgba(34, 211, 238, 0.38);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 9999px;
+  padding: 2px 7px;
+  margin-top: 2px;
+  box-shadow: 0 2px 8px rgba(34, 211, 238, 0.25);
 }
 
 .pm-dock-nav {

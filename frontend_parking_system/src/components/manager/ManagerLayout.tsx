@@ -1,53 +1,20 @@
-import NotificationBell from "../customer/NotificationBell";
 import { useState, useEffect } from "react";
-import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
-import {
-  LayoutDashboard,
-  LogOut,
-  Building2,
-  Users,
-  AlertTriangle,
-  Bell,
-  RotateCw,
-  ParkingCircle,
-  DollarSign,
-  Sliders,
-  FileText,
-  Sun,
-  Moon,
-  Menu,
-  X,
-} from "lucide-react";
+import { Outlet, useLocation } from "react-router-dom";
 import { managerApi } from "../../services/manager/managerApi";
-import { useAuth } from "../../context/AuthContext";
 import type { ManagerFacilitySummary, ReportingPeriod } from "../../types/manager";
+import VisionSpatialWorkspace from "../glass/VisionSpatialWorkspace";
 import "./ManagerDashboard.css";
 
 export default function ManagerLayout() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
   const location = useLocation();
 
-  const [theme, setTheme] = useState<"dark" | "light">(() => {
-    return (localStorage.getItem("pm-manager-theme") as "dark" | "light") || "dark";
-  });
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [facilities, setFacilities] = useState<Pick<ManagerFacilitySummary, "lotId" | "code" | "name" | "address">[]>([]);
   const [facilityError, setFacilityError] = useState("");
   const [selectedLotId, setSelectedLotId] = useState<string>("all");
   const [period, setPeriod] = useState<ReportingPeriod>("today");
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
 
-  // Sync theme with localStorage
-  const toggleTheme = () => {
-    const nextTheme = theme === "dark" ? "light" : "dark";
-    setTheme(nextTheme);
-    localStorage.setItem("pm-manager-theme", nextTheme);
-  };
-
-  // Load facility list for the header selector
+  // Load facility list
   useEffect(() => {
     async function loadFacilities() {
       try {
@@ -64,298 +31,65 @@ export default function ManagerLayout() {
   }, [refreshKey]);
 
   const handleRefresh = () => {
-    setIsRefreshing(true);
     setRefreshKey((prev) => prev + 1);
-    setTimeout(() => setIsRefreshing(false), 800);
   };
 
-  const navItems = [
-    {
-      to: "/manager/dashboard",
-      label: "Overview",
-      fullName: "Tổng quan điều hành",
-      icon: <LayoutDashboard size={21} />,
-    },
-    {
-      to: "/manager/pricing",
-      label: "Biểu phí",
-      fullName: "Biểu phí & Chính sách",
-      icon: <DollarSign size={21} />,
-    },
-    {
-      to: "/manager/facility-layout",
-      label: "Sơ đồ Ô đỗ",
-      fullName: "Sơ đồ & Ô đỗ (Slots)",
-      icon: <Sliders size={21} />,
-    },
-    {
-      to: "/manager/staff-shifts",
-      label: "Nhân sự",
-      fullName: "Ca trực & Đối soát quỹ",
-      icon: <Users size={21} />,
-    },
-    {
-      to: "/manager/incidents-approvals",
-      label: "Ngoại lệ",
-      fullName: "Phê duyệt ngoại lệ",
-      icon: <AlertTriangle size={21} />,
-
-    },
-    {
-      to: "/manager/reports-audit",
-      label: "Báo cáo",
-      fullName: "Báo cáo & Audit logs",
-      icon: <FileText size={21} />,
-    },
-  ];
+  const getActiveTab = () => {
+    if (location.pathname.includes("/pricing")) return "pricing";
+    if (location.pathname.includes("/facility-layout")) return "slots";
+    if (location.pathname.includes("/staff-shifts")) return "staff";
+    if (location.pathname.includes("/incidents-approvals")) return "incidents";
+    if (location.pathname.includes("/reports-audit")) return "reports";
+    return "overview";
+  };
 
   return (
-    <div className={`pm-manager-shell pm-theme-${theme}`}>
-      {/* ─── Floating Left Capsule Dock (Inspired by Screenshot) ─────────────── */}
-      <aside className="pm-floating-dock" aria-label="Thanh điều hướng nhanh">
-        {/* Top Logo / Brand Icon */}
-        <div className="pm-dock-top">
-          <div
-            className="pm-dock-brand-icon"
-            onClick={() => navigate("/manager/dashboard")}
-            role="button"
-            tabIndex={0}
-            title="ParkMatrix Smart 3D System"
+    <VisionSpatialWorkspace role="admin" currentTabId={getActiveTab()} onRefresh={handleRefresh}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", marginBottom: 14 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+          <span>Bãi xe:</span>
+          <select
+            className="pm-form-select"
+            style={{ width: "auto" }}
+            value={selectedLotId}
+            onChange={(e) => setSelectedLotId(e.target.value)}
+            aria-label="Chọn cơ sở bãi xe"
           >
-            <ParkingCircle size={24} />
-          </div>
-
-        </div>
-
-        {/* Vertical Icon Navigation List */}
-        <nav className="pm-dock-nav">
-          {navItems.map((item) => {
-            const isActive = location.pathname === item.to;
-            return (
-              <div key={item.to} className="pm-dock-item-wrap">
-                <NavLink
-                  to={item.to}
-                  className={({ isActive: active }) =>
-                    `pm-dock-link ${active || isActive ? "active" : ""}`
-                  }
-                  aria-label={item.fullName}
-                >
-                  {item.icon}
-                  
-                </NavLink>
-                {/* Floating Tooltip just like the "Overview" tooltip in screenshot! */}
-                <div className="pm-dock-tooltip">{item.label}</div>
-              </div>
-            );
-          })}
-        </nav>
-
-        {/* Bottom Theme Toggle & Profile Avatar */}
-        <div className="pm-dock-bottom">
-          <button
-            type="button"
-            className="pm-dock-theme-toggle"
-            onClick={toggleTheme}
-            title={theme === "dark" ? "Chuyển sang giao diện Sáng (Light Mode)" : "Chuyển sang giao diện Tối (Dark Mode)"}
-            aria-label="Đổi giao diện Sáng / Tối"
+            <option value="all">Tất cả bãi được quản lý</option>
+            {facilities.map((fac) => (
+              <option key={fac.lotId} value={fac.lotId}>
+                {fac.name} ({fac.code})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+          <span>Kỳ:</span>
+          <select
+            className="pm-form-select"
+            style={{ width: "auto" }}
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as ReportingPeriod)}
+            aria-label="Chọn kỳ báo cáo"
           >
-            {theme === "dark" ? <Sun size={20} /> : <Moon size={20} />}
-          </button>
-
-          <div
-            className="pm-dock-avatar"
-            onClick={() => setShowProfileMenu(!showProfileMenu)}
-            role="button"
-            tabIndex={0}
-            title="Tài khoản Quản lý"
-          >
-            QL
-          </div>
-        </div>
-      </aside>
-
-      {/* ─── Main Content Canvas ────────────────────────────────────────── */}
-      <main className="pm-manager-main" style={{ flex: 1, minWidth: 0, paddingRight: "16px" }}>
-        {/* Top Header Bar */}
-        <header className="pm-manager-header" style={{ marginBottom: "16px" }}>
-          {/* Header Left: Mobile toggle & Facility Selector */}
-          <div className="pm-header-left">
-            <button
-              type="button"
-              className="pm-mobile-menu-btn"
-              onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
-              title="Menu"
-            >
-              {mobileSidebarOpen ? <X size={22} /> : <Menu size={22} />}
-            </button>
-
-            <div className="pm-facility-dropdown-wrap">
-              <span className="pm-pulsing-dot" title="Hệ thống trực tuyến" />
-              <Building2 size={15} style={{ marginRight: 6, color: "#22d3ee" }} />
-              <select
-                value={selectedLotId}
-                onChange={(e) => setSelectedLotId(e.target.value)}
-                aria-label="Chọn cơ sở bãi xe"
-              >
-                <option value="all">Tất cả bãi được quản lý</option>
-                {facilities.map((fac) => (
-                  <option key={fac.lotId} value={fac.lotId}>
-                    {fac.name} ({fac.code})
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Header Center: Reporting Period Pills */}
-          <div className="pm-header-center" role="tablist" aria-label="Kỳ báo cáo">
-            <button
-              type="button"
-              className={`pm-period-btn ${period === "today" ? "active" : ""}`}
-              onClick={() => setPeriod("today")}
-            >
-              Hôm nay
-            </button>
-            <button
-              type="button"
-              className={`pm-period-btn ${period === "week" ? "active" : ""}`}
-              onClick={() => setPeriod("week")}
-            >
-              7 ngày
-            </button>
-            <button
-              type="button"
-              className={`pm-period-btn ${period === "month" ? "active" : ""}`}
-              onClick={() => setPeriod("month")}
-            >
-              30 ngày
-            </button>
-          </div>
-
-          {/* Header Right: Search, Theme Toggle, Refresh, Alerts, Profile */}
-          <div className="pm-header-right">
-            {/* Theme Toggle Pill Button */}
-            <button
-              type="button"
-              className="pm-v8-theme-pill-btn"
-              onClick={toggleTheme}
-              title={theme === "dark" ? "Chuyển sang giao diện Sáng (Light Mode)" : "Chuyển sang giao diện Tối (Dark Mode)"}
-            >
-              {theme === "dark" ? (
-                <>
-                  <Sun size={15} style={{ color: "#ff7828" }} />
-                  <span>Chế độ Sáng</span>
-                </>
-              ) : (
-                <>
-                  <Moon size={15} style={{ color: "#087f8c" }} />
-                  <span>Chế độ Tối</span>
-                </>
-              )}
-            </button>
-
-            <button
-              type="button"
-              className={`pm-header-icon-btn ${isRefreshing ? "spinning" : ""}`}
-              onClick={handleRefresh}
-              title="Làm mới dữ liệu thời gian thực"
-            >
-              <RotateCw size={17} />
-            </button>
-
-            <button
-              type="button"
-              className="pm-header-icon-btn"
-              onClick={() => navigate("/manager/incidents-approvals")}
-              title="Thông báo vận hành"
-            >
-              <Bell size={17} />
-              
-            </button>
-
-            <NotificationBell />
-            {/* Profile Avatar Chip */}
-            <div
-              className="pm-profile-chip"
-              onClick={() => setShowProfileMenu(!showProfileMenu)}
-              role="button"
-              tabIndex={0}
-            >
-              <div className="pm-avatar-img">
-                {(user?.fullName || user?.userName || "QL").substring(0, 2).toUpperCase()}
-              </div>
-              <div className="pm-profile-meta">
-                <span className="pm-profile-name">{user?.fullName || "Manager"}</span>
-                <span className="pm-profile-role">{user?.roles?.[0] || user?.role || "PARKING MANAGER"}</span>
-              </div>
-            </div>
-
-            {/* Profile Dropdown Menu */}
-            {showProfileMenu && (
-              <div
-                style={{
-                  position: "absolute",
-                  top: "65px",
-                  right: "24px",
-                  background: "var(--pm-card-bg)",
-                  backdropFilter: "blur(18px)",
-                  border: "1px solid var(--pm-card-border)",
-                  borderRadius: "16px",
-                  padding: "8px",
-                  boxShadow: "var(--pm-card-shadow)",
-                  zIndex: 80,
-                  minWidth: "210px",
-                }}
-              >
-                <div style={{ padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.08)", color: "var(--pm-text-muted)", fontSize: "11px" }}>
-                  {user?.email || "Tài khoản Điều Hành"}
-                </div>
-                <button
-                  type="button"
-                  style={{ width: "100%", background: "none", border: "none", color: "var(--pm-text-heading)", textAlign: "left", padding: "10px 12px", borderRadius: "10px", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", fontSize: "12px", fontWeight: 600 }}
-                  onClick={() => { setShowProfileMenu(false); navigate("/manager/reports-audit"); }}
-                >
-                  <FileText size={14} style={{ color: "#ff7828" }} /> Nhật Ký Hoạt Động & Audit
-                </button>
-                <button
-                  type="button"
-                  style={{ width: "100%", background: "none", border: "none", color: "var(--pm-text-heading)", textAlign: "left", padding: "10px 12px", borderRadius: "10px", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", fontSize: "12px", fontWeight: 600 }}
-                  onClick={() => { setShowProfileMenu(false); navigate("/manager/staff-shifts"); }}
-                >
-                  <Users size={14} style={{ color: "#14afbe" }} /> Đối Soát Ca & Bàn Giao
-                </button>
-                <button
-                  type="button"
-                  style={{ width: "100%", background: "none", border: "none", color: "#f43f5e", textAlign: "left", padding: "10px 12px", borderRadius: "10px", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", fontSize: "12px", fontWeight: 600 }}
-                  onClick={async () => {
-                    setShowProfileMenu(false);
-                    await logout();
-                    navigate("/login");
-                  }}
-                >
-                  <LogOut size={14} style={{ color: "#f43f5e" }} /> Đăng Xuất Quản Lý
-                </button>
-              </div>
-            )}
-          </div>
-        </header>
-
-        {/* Outlet for Dashboard and Sub-views */}
-        {facilityError && <p role="alert">{facilityError}</p>}
-        <Outlet
-          context={{
-            selectedLotId,
-            setSelectedLotId,
-            period,
-            setPeriod,
-            refreshKey,
-            handleRefresh,
-            theme,
-            toggleTheme,
-          }}
-        />
-      </main>
-    </div>
+            <option value="today">Hôm nay</option>
+            <option value="week">7 ngày</option>
+            <option value="month">30 ngày</option>
+          </select>
+        </label>
+      </div>
+      {facilityError && <p role="alert">{facilityError}</p>}
+      <Outlet
+        context={{
+          selectedLotId,
+          setSelectedLotId,
+          period,
+          setPeriod,
+          refreshKey,
+          handleRefresh,
+          facilities,
+        }}
+      />
+    </VisionSpatialWorkspace>
   );
 }
-

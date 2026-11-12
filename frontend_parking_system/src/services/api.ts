@@ -233,20 +233,64 @@ export class ApiError extends Error {
   }
 }
 
+let refreshInFlight: Promise<string | null> | null = null;
+
+async function tryRefreshAccessToken(): Promise<string | null> {
+  if (refreshInFlight) return refreshInFlight;
+  const currentRefresh = sessionStorage.getItem("parking.refreshToken");
+  if (!currentRefresh) return null;
+
+  refreshInFlight = (async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/refresh-token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: currentRefresh }),
+      });
+      if (!response.ok) return null;
+      const body = (await response.json()) as ApiEnvelope<AuthTokens>;
+      const tokens = body.result ?? (body as unknown as AuthTokens);
+      const nextAccess = tokens?.accessToken ?? tokens?.token;
+      if (!nextAccess) return null;
+      sessionStorage.setItem("parking.accessToken", nextAccess);
+      if (tokens?.refreshToken) {
+        sessionStorage.setItem("parking.refreshToken", tokens.refreshToken);
+      }
+      return nextAccess;
+    } catch {
+      return null;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+
+  return refreshInFlight;
+}
+
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  if (init.body && !(init.body instanceof FormData)) {
-    headers.set("Content-Type", "application/json");
-  }
+  const send = async (overrideToken?: string): Promise<Response> => {
+    const headers = new Headers(init.headers);
+    if (init.body && !(init.body instanceof FormData)) {
+      headers.set("Content-Type", "application/json");
+    }
 
-  const token = sessionStorage.getItem("parking.accessToken");
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+    const token = overrideToken ?? sessionStorage.getItem("parking.accessToken");
+    if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  let response: Response;
-  try {
-    response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
-  } catch {
-    throw new ApiError("Không kết nối được máy chủ. Hãy kiểm tra API đang chạy tại localhost:8080.", 0);
+    try {
+      return await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+    } catch {
+      throw new ApiError("Không kết nối được máy chủ. Hãy kiểm tra API đang chạy tại localhost:8080.", 0);
+    }
+  };
+
+  let response = await send();
+  const skipRefreshPaths = ["/api/v1/auth/login", "/api/v1/auth/refresh-token", "/api/v1/auth/guest/verify"];
+  if (response.status === 401 && !skipRefreshPaths.includes(path)) {
+    const refreshed = await tryRefreshAccessToken();
+    if (refreshed) {
+      response = await send(refreshed);
+    }
   }
 
   const text = await response.text();
@@ -297,6 +341,14 @@ export const api = {
 
   async getParkingLots(): Promise<ParkingLot[]> {
     return request<ParkingLot[]>("/api/v1/parking-lots");
+  },
+
+  async getParkingLotById(lotId: string): Promise<ParkingLotDetail> {
+    return request<ParkingLotDetail>(`/api/v1/parking-lots/${encodeURIComponent(lotId)}`);
+  },
+
+  async getLotLayout3D(lotId: string): Promise<LotLayout3DDto> {
+    return request<LotLayout3DDto>(`/api/v1/parking-lots/${encodeURIComponent(lotId)}/layout`);
   },
 
   async getEntryGates(lotId: string): Promise<{ id: string; lotId: string; code: string }[]> {
@@ -430,6 +482,34 @@ export const api = {
     return request<AuthTokens>("/api/v1/auth/login", {
       method: "POST",
       body: JSON.stringify({ email: userName, password, mfaCode }),
+    });
+  },
+
+  async loginWithGoogle(idToken: string, mfaCode?: string): Promise<AuthTokens> {
+    return request<AuthTokens>("/api/v1/auth/google", {
+      method: "POST",
+      body: JSON.stringify({ idToken, mfaCode }),
+    });
+  },
+
+  async forgetPassword(email: string): Promise<{ message: string }> {
+    return request<{ message: string }>("/api/v1/auth/forget-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  async resetPassword(email: string, otp: string, newPassword: string): Promise<boolean> {
+    return request<boolean>("/api/v1/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ email, otp, newPassword }),
+    });
+  },
+
+  async refreshToken(refreshToken: string): Promise<AuthTokens> {
+    return request<AuthTokens>("/api/v1/auth/refresh-token", {
+      method: "POST",
+      body: JSON.stringify({ refreshToken }),
     });
   },
 
@@ -769,6 +849,137 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
+
+  // ─── ACCOUNT, MEMBERSHIP, VEHICLES & CHECKOUT QR ──────────────────────────
+  async updateAccountInformation(payload: {
+    fullName: string;
+    emailNormalized: string;
+    phoneE164?: string | null;
+  }): Promise<AccountUserDto> {
+    return request<AccountUserDto>("/api/v1/account/update-information", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async changePassword(payload: {
+    password: string;
+    newPassword: string;
+    confirmPassword: string;
+  }): Promise<boolean> {
+    return request<boolean>("/api/v1/account/change-password", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getMyMembership(): Promise<MembershipDto> {
+    return request<MembershipDto>("/api/v1/membership/me");
+  },
+
+  async updateUserMembership(userId: string, tierCode: string): Promise<MembershipDto> {
+    return request<MembershipDto>(`/api/v1/membership/${encodeURIComponent(userId)}`, {
+      method: "PUT",
+      body: JSON.stringify({ tierCode }),
+    });
+  },
+
+  async getUserVehicleById(vehicleId: string): Promise<UserVehicle> {
+    return request<UserVehicle>(`/api/v1/user-vehicles/${encodeURIComponent(vehicleId)}`);
+  },
+
+  async updateUserVehicle(
+    vehicleId: string,
+    payload: { licensePlate: string; vehicleType: string; isDefault: boolean }
+  ): Promise<UserVehicle> {
+    return request<UserVehicle>(`/api/v1/user-vehicles/${encodeURIComponent(vehicleId)}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteUserVehicle(vehicleId: string): Promise<void> {
+    await request<unknown>(`/api/v1/user-vehicles/${encodeURIComponent(vehicleId)}`, {
+      method: "DELETE",
+    });
+  },
+
+  async issueCheckOutQr(sessionId: string): Promise<BookingQrResponse> {
+    return request<BookingQrResponse>(`/api/v1/check-out/${encodeURIComponent(sessionId)}/qr`, {
+      method: "POST",
+    });
+  },
+
+  // ─── AI DOCUMENTS, CONVERSATIONAL ASSISTANT & SMART SEARCH ────────────────
+  async createAiDocument(payload: AiDocumentRequest): Promise<{ id: string }> {
+    return request<{ id: string }>("/api/v1/ai/documents", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async publishAiDocument(
+    id: string,
+    version: number,
+    confirmPublicContentReviewed: boolean
+  ): Promise<{ id: string; status: string }> {
+    return request<{ id: string; status: string }>(`/api/v1/ai/documents/${encodeURIComponent(id)}/publish`, {
+      method: "POST",
+      body: JSON.stringify({ version, confirmPublicContentReviewed }),
+    });
+  },
+
+  async chatWithAiAssistant(payload: {
+    sessionId?: string;
+    userId?: string;
+    message: string;
+    currentParkingLotId?: string;
+  }): Promise<AiAssistantChatResponse> {
+    return request<AiAssistantChatResponse>("/api/v1/ai/assistant/chat", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async resetAiAssistantSession(sessionId: string): Promise<boolean> {
+    return request<boolean>(`/api/v1/ai/assistant/session/${encodeURIComponent(sessionId)}`, {
+      method: "DELETE",
+    });
+  },
+
+  async smartSearchParking(payload: {
+    naturalLanguagePrompt: string;
+    userCurrentLatitude?: number;
+    userCurrentLongitude?: number;
+  }): Promise<AiParkingRecommendation> {
+    return request<AiParkingRecommendation>("/api/v1/ai/parking/smart-search", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async recommendParking(criteria: Record<string, unknown>): Promise<AiParkingRecommendation> {
+    return request<AiParkingRecommendation>("/api/v1/ai/parking/recommend", {
+      method: "POST",
+      body: JSON.stringify(criteria),
+    });
+  },
+
+  // ─── NOTIFICATIONS ────────────────────────────────────────────────────────
+  async getNotifications(): Promise<{
+    unreadCount: number;
+    items: Array<{ id: string; bookingId?: string | null; kind: string; message: string; createdAt: string; readAt?: string | null }>;
+  }> {
+    return request("/api/v1/notifications");
+  },
+
+  async markAllNotificationsRead(): Promise<{ read: boolean }> {
+    return request("/api/v1/notifications/read-all", { method: "POST" });
+  },
+
+  async markNotificationRead(id: string): Promise<{ id: string }> {
+    return request(`/api/v1/notifications/${encodeURIComponent(id)}/read`, { method: "POST" });
+  },
 };
 
 export interface PaymentReceiptDto {
@@ -922,4 +1133,70 @@ export interface StaffSessionRow {
   status: "ACTIVE" | "EXIT_PENDING" | "COMPLETED";
   slotCode: string;
   levelName: string;
+}
+
+export interface ParkingLotDetail extends ParkingLot {
+  operatingStatus?: string;
+  status?: string;
+  description?: string | null;
+}
+
+export interface LotLayout3DDto {
+  lotId: string;
+  code: string;
+  name: string;
+  levels: Array<{
+    id: string;
+    code?: string;
+    name: string;
+    zones?: unknown[];
+  }>;
+}
+
+export interface MembershipDto {
+  userId?: string;
+  tierCode: string;
+  status?: string;
+  discountPercent?: number;
+  validFrom?: string;
+  validUntil?: string | null;
+}
+
+export interface AiDocumentRequest {
+  lotId?: string | null;
+  documentKey: string;
+  revision: number;
+  title: string;
+  sourceReference: string;
+  effectiveFrom: string;
+  effectiveUntil?: string | null;
+  content: string;
+}
+
+export interface AiAssistantChatResponse {
+  sessionId: string;
+  replyMessage: string;
+  suggestedActions?: string[];
+  createdAt: string;
+  isFallback?: boolean;
+}
+
+export interface AiParkingRecommendation {
+  parsedCriteria?: Record<string, unknown>;
+  recommendedLots?: Array<{
+    parkingLotId: string;
+    lotName: string;
+    address: string;
+    distanceMeters: number;
+    estimatedTotalPrice: number;
+    pricePerHour: number;
+    availableSlots: number;
+    totalCapacity: number;
+    occupancyRatePercent: number;
+    matchScore: number;
+    recommendationReason: string;
+  }>;
+  summaryExplanation?: string;
+  processingTimeMs?: number;
+  isFallback?: boolean;
 }

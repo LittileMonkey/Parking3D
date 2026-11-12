@@ -6,6 +6,7 @@ export interface AuthContextValue {
   isAuthenticated: boolean;
   guestLogin: (email: string, code: string, mfaCode?: string) => Promise<AuthUser>;
   login: (userName: string, password: string, mfaCode?: string) => Promise<AuthUser>;
+  loginWithGoogle: (idToken: string, mfaCode?: string) => Promise<AuthUser>;
   logout: () => Promise<void>;
   getRedirectPath: (targetUser?: AuthUser | null) => string;
 }
@@ -180,6 +181,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const response = await api.login(userName, password, mfaCode);
     return acceptLogin(response,userName);
   };
+  const loginWithGoogle = async (idToken: string, mfaCode?: string): Promise<AuthUser> => {
+    const response = await api.loginWithGoogle(idToken, mfaCode);
+    return acceptLogin(response, response.email ?? "");
+  };
   const guestLogin = async (email: string, code: string, mfaCode?: string): Promise<AuthUser> => acceptLogin(await api.guestLogin(email,code,mfaCode),email);
   const acceptLogin = async (response: AuthTokens, userName: string): Promise<AuthUser> => {
     const accessToken = response.accessToken ?? response.token;
@@ -243,6 +248,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isAuthenticated: user !== null,
         login,
+        loginWithGoogle,
         guestLogin,
         logout,
         getRedirectPath,

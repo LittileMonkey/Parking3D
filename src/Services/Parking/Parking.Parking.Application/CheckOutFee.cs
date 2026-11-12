@@ -1,7 +1,7 @@
 using System;
 using System.Text.Json;
-using Parking.Pricing;
 using Parking.Parking.Domain;
+using Parking.Pricing;
 
 namespace Parking.Parking.Application;
 
