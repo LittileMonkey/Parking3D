@@ -21,9 +21,9 @@ public sealed class IncidentsController(ISender sender) : ControllerBase
         [FromBody] CreateIncidentRequestDto request,
         CancellationToken ct)
     {
-        var key = Request.Headers["Idempotency-Key"].ToString();
+        var key = Request.ReadOptionalIdempotencyKey();
         var result = await sender.Send(new CreateIncidentCommand(
-            lotId, User.Subject(), request, string.IsNullOrWhiteSpace(key) ? null : key), ct);
+            lotId, User.Subject(), request, key), ct);
         return StatusCode(201, new ApiResponse<IncidentDto>(result, true, 201, "Đã ghi nhận sự cố."));
     }
 
@@ -38,10 +38,12 @@ public sealed class IncidentsController(ISender sender) : ControllerBase
         [FromQuery] string? query,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 25,
+        [FromQuery] DateTimeOffset? from = null,
+        [FromQuery] DateTimeOffset? to = null,
         CancellationToken ct = default)
     {
         var result = await sender.Send(new ListIncidentsQuery(
-            lotId, User.Subject(), status, severity, query, page, pageSize), ct);
+            lotId, User.Subject(), status, severity, query, page, pageSize, from, to), ct);
         return Ok(new ApiResponse<PagedResult<IncidentSummaryDto>>(result, true, 200, "Đã tải danh sách sự cố."));
     }
 
@@ -68,8 +70,9 @@ public sealed class IncidentsController(ISender sender) : ControllerBase
         [FromBody] UpdateIncidentStatusRequestDto request,
         CancellationToken ct)
     {
+        var key = Request.ReadOptionalIdempotencyKey();
         var result = await sender.Send(new UpdateIncidentStatusCommand(
-            lotId, incidentId, User.Subject(), request), ct);
+            lotId, incidentId, User.Subject(), request, key), ct);
         return Ok(new ApiResponse<IncidentDto>(result, true, 200, "Đã cập nhật tiến độ sự cố."));
     }
 
@@ -99,8 +102,9 @@ public sealed class IncidentsController(ISender sender) : ControllerBase
         [FromBody] ReopenIncidentRequestDto request,
         CancellationToken ct)
     {
+        var key = Request.ReadOptionalIdempotencyKey();
         var result = await sender.Send(new ReopenIncidentCommand(
-            lotId, incidentId, User.Subject(), request), ct);
+            lotId, incidentId, User.Subject(), request, key), ct);
         return Ok(new ApiResponse<IncidentDto>(result, true, 200, "Đã mở lại sự cố thành công."));
     }
 
@@ -114,8 +118,9 @@ public sealed class IncidentsController(ISender sender) : ControllerBase
         [FromBody] CancelIncidentRequestDto request,
         CancellationToken ct)
     {
+        var key = Request.ReadOptionalIdempotencyKey();
         var result = await sender.Send(new CancelIncidentCommand(
-            lotId, incidentId, User.Subject(), request), ct);
+            lotId, incidentId, User.Subject(), request, key), ct);
         return Ok(new ApiResponse<IncidentDto>(result, true, 200, "Đã hủy báo cáo sự cố."));
     }
 
@@ -129,8 +134,9 @@ public sealed class IncidentsController(ISender sender) : ControllerBase
         [FromBody] CreateIncidentDecisionRequestDto request,
         CancellationToken ct)
     {
+        var key = Request.ReadOptionalIdempotencyKey();
         var result = await sender.Send(new CreateIncidentDecisionCommand(
-            lotId, incidentId, User.Subject(), request), ct);
+            lotId, incidentId, User.Subject(), request, key), ct);
         return StatusCode(201, new ApiResponse<IncidentExitDecisionDto>(result, true, 201, "Đã ban hành quyết định xử lý ngoại lệ."));
     }
 }

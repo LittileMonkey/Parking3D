@@ -123,11 +123,15 @@ public sealed partial class ParkingWorkflowTests : IAsyncLifetime
         return await command.ExecuteScalarAsync();
     }
 
-    private Task<BookingView> Book(int startMinutes = 2) => repository.CreateBookingAsync(Customer,
-        new BookingRequest(Lot, Slot, Vehicle, DateTimeOffset.UtcNow.AddMinutes(startMinutes),
-            DateTimeOffset.UtcNow.AddMinutes(startMinutes + 60)), Guid.NewGuid().ToString(), Ct);
+    private Task<BookingView> Book(int startMinutes = 2)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return repository.CreateBookingAsync(Customer,
+            new BookingRequest(Lot, Slot, Vehicle, now.AddMinutes(startMinutes),
+                now.AddMinutes(startMinutes + 60)), Guid.NewGuid().ToString(), Ct);
+    }
 
-    private async Task<GeneratedQrToken> ConfirmAndIssue(BookingView booking)
+    private async Task ConfirmBookingAsync(BookingView booking)
     {
         var payment = new PaymentSucceeded
         {
@@ -142,6 +146,11 @@ public sealed partial class ParkingWorkflowTests : IAsyncLifetime
         var grpc = new PaymentEventsGrpc(data);
         Assert.Equal("CONFIRMED", (await grpc.DeliverPaymentSucceeded(payment, new CallContext())).Outcome);
         Assert.Equal("CONFIRMED", (await grpc.DeliverPaymentSucceeded(payment, new CallContext())).Outcome); // replay
+    }
+
+    private async Task<GeneratedQrToken> ConfirmAndIssue(BookingView booking)
+    {
+        await ConfirmBookingAsync(booking);
         var context = (await repository.GetBookingQrContextAsync(booking.Id, Ct))!;
         var token = qr.GenerateToken(booking.Id, Lot, Vehicle, context.ArrivalDeadline);
         await repository.SaveIssuedQrTokenAsync(booking.Id, Lot, Vehicle, token, Ct);
@@ -399,6 +408,41 @@ public async Task HoldExpiryDoesNotExpireBookingBeforeDeadline()
     }
 
     [PostgresFact]
+    public async Task AvailabilityExcludesDisabledSlotsAndOmitsEmptyLevelsWhenFilteringByVehicleType()
+    {
+        var level2 = Guid.NewGuid();
+        var zone2 = Guid.NewGuid();
+        var motorbikeSlot = Guid.NewGuid();
+        var disabledCarSlot = Guid.NewGuid();
+        await Sql("""
+            INSERT INTO parking_levels(id,lot_id,code,name,level_kind,elevation_m,display_order)
+              VALUES(@level2,@lot,'F2','Tầng 2','INDOOR',3,2);
+            INSERT INTO zones(id,lot_id,level_id,code,name)
+              VALUES(@zone2,@lot,@level2,'B','Khu B');
+            INSERT INTO parking_slots(id,lot_id,zone_id,level_id,code,operational_status,width_m,length_m)
+              VALUES(@motoSlot,@lot,@zone2,@level2,'B01','ACTIVE',1,2),
+                    (@disabledSlot,@lot,@zone2,@level2,'B02','DISABLED',2.5,5);
+            INSERT INTO lot_vehicle_policies(lot_id,vehicle_type,guest_booking_enabled,dynamic_multiplier_cap,hold_minutes,min_booking_minutes,max_booking_minutes,
+              early_arrival_minutes,late_arrival_minutes,warning_percent,admission_percent,reserved_capacity,cancellation_refund_cutoff_minutes)
+              VALUES(@lot,'MOTORBIKE',false,2,5,30,1440,15,30,80,100,0,120)
+              ON CONFLICT (lot_id, vehicle_type) DO NOTHING;
+            INSERT INTO slot_vehicle_types(slot_id,lot_id,vehicle_type)
+              VALUES(@motoSlot,@lot,'MOTORBIKE'), (@disabledSlot,@lot,'CAR');
+            """, ("level2", level2), ("lot", Lot), ("zone2", zone2), ("motoSlot", motorbikeSlot), ("disabledSlot", disabledCarSlot));
+
+        var carFiltered = await repository.GetLotAvailabilityAsync(Lot, null, null, "CAR", null, Ct);
+        Assert.Equal(1, carFiltered.TotalSlots);
+        Assert.Single(carFiltered.Levels);
+        Assert.Equal("F1", carFiltered.Levels[0].LevelCode);
+        Assert.DoesNotContain(carFiltered.Levels.SelectMany(l => l.Slots), s => s.SlotId == disabledCarSlot);
+
+        var unfiltered = await repository.GetLotAvailabilityAsync(Lot, null, null, null, null, Ct);
+        Assert.Equal(2, unfiltered.TotalSlots);
+        Assert.Equal(2, unfiltered.Levels.Count);
+        Assert.DoesNotContain(unfiltered.Levels.SelectMany(l => l.Slots), s => s.SlotId == disabledCarSlot);
+    }
+
+    [PostgresFact]
     public async Task ReplayKeyCannotBeReusedForAnotherBodyAndExitGateCannotAdmit()
     {
         var token = await ConfirmAndIssue(await Book());
@@ -408,6 +452,59 @@ public async Task HoldExpiryDoesNotExpireBookingBeforeDeadline()
         await Enter(token, "fingerprint");
         await Assert.ThrowsAsync<ServiceException>(() => Enter(token, "fingerprint", Request(token) with { DetectedPlate = "OTHER" }));
         Assert.Equal(1L, await Scalar("SELECT count(*) FROM parking_sessions"));
+    }
+
+    [PostgresFact]
+    public async Task RejectedPlateMismatchPersistsIncidentAndDoesNotConsumeQr()
+    {
+        var token = await ConfirmAndIssue(await Book());
+        var ex = await Assert.ThrowsAsync<ServiceException>(() =>
+            Enter(token, "mismatch-reject", Request(token) with { DetectedPlate = "51A00000" }));
+
+        Assert.Equal(409, ex.StatusCode);
+        Assert.Equal(0L, await Scalar("SELECT count(*) FROM parking_sessions"));
+        Assert.Equal(0L, await Scalar("SELECT count(*) FROM qr_tokens WHERE consumed_at IS NOT NULL"));
+        Assert.Equal(1L, await Scalar("""
+            SELECT count(*) FROM parking_issues
+            WHERE issue_type = 'INCIDENT_0482_PLATE_MISMATCH'
+              AND status = 'Open'
+              AND related_plate = '51A00000'
+            """));
+        Assert.Equal(1L, await Scalar("SELECT count(*) FROM incident_history WHERE action = 'CREATED'"));
+    }
+
+    [PostgresFact]
+    public async Task CheckInPublishesSlotOccupiedOutboxAndReplaysAcrossPlateFormatting()
+    {
+        var token = await ConfirmAndIssue(await Book());
+        var first = await Enter(token, "canonical-replay", Request(token) with { DetectedPlate = "51a-123.45" });
+        var second = await Enter(token, "canonical-replay", Request(token) with { DetectedPlate = "51A12345" });
+
+        Assert.Equal(first, second);
+        Assert.Equal(1L, await Scalar("SELECT count(*) FROM parking_sessions"));
+        Assert.Equal(1L, await Scalar("""
+            SELECT count(*) FROM integration_outbox
+            WHERE event_type = 'SlotStatusChanged.v1'
+              AND payload->>'status' = 'OCCUPIED'
+            """));
+    }
+
+    [PostgresFact]
+    public async Task IssueQrRejectsTokensExceedingBookingEndsAtOrExpiredWindow()
+    {
+        await Sql("UPDATE lot_vehicle_policies SET late_arrival_minutes = 65 WHERE lot_id = @lot AND vehicle_type = 'CAR'", ("lot", Lot));
+        var booking = await Book();
+        await ConfirmBookingAsync(booking);
+        var context = (await repository.GetBookingQrContextAsync(booking.Id, Ct))!;
+        Assert.NotNull(context.EndsAt);
+
+        var pastEndToken = qr.GenerateToken(booking.Id, Lot, Vehicle, context.ArrivalDeadline);
+        await Assert.ThrowsAsync<ServiceException>(() =>
+            repository.SaveIssuedQrTokenAsync(booking.Id, Lot, Vehicle, pastEndToken, Ct));
+
+        var cappedToken = qr.GenerateToken(booking.Id, Lot, Vehicle, context.EndsAt!.Value);
+        await repository.SaveIssuedQrTokenAsync(booking.Id, Lot, Vehicle, cappedToken, Ct);
+        Assert.Equal(1L, await Scalar("SELECT count(*) FROM qr_tokens WHERE consumed_at IS NULL AND revoked_at IS NULL"));
     }
 
     private sealed class CallContext : ServerCallContext

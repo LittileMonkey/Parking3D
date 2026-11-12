@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Npgsql;
+using NpgsqlTypes;
 using Parking.Parking.Application.DTOs;
 using Parking.Parking.Application.Interfaces;
 using Parking.Parking.Domain;
@@ -27,8 +28,10 @@ public sealed partial class ParkingRepository
         await using var transaction = await connection.BeginTransactionAsync(ct);
         var dedupeKey = $"CheckIn:{actorId}:{key}";
         var requestId = new Guid(SHA256.HashData(Encoding.UTF8.GetBytes(dedupeKey)).AsSpan(0, 16));
-        var fingerprint = Convert.ToHexStringLower(SHA256.HashData(
-            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request))));
+        var normalizedVehicleHint = string.IsNullOrWhiteSpace(request.VehicleType)
+            ? null
+            : request.VehicleType.Trim().ToUpperInvariant();
+        var fingerprint = ComputeCheckInFingerprint(request, plate, normalizedVehicleHint);
 
         // Mỗi lệnh dùng chung connection/transaction và bộ IDs đã xác minh; không tự commit riêng.
         NpgsqlCommand Command(string sql)
@@ -83,9 +86,14 @@ public sealed partial class ParkingRepository
 
         Guid snapshotId;
         string vehicleType;
+        string bookedPlate;
+        string normalizedVehiclePlate;
+        DateTimeOffset startsAt;
+        DateTimeOffset endsAt;
+        DateTimeOffset arrivalDeadline;
+        int earlyMinutes;
         string timezone;
         DateTimeOffset entryAt;
-        DateTimeOffset endsAt;
         string slotCode;
         await using (var validate = Command("""
             SELECT b.pricing_snapshot_id,b.vehicle_type,b.plate_snapshot,v.plate_normalized,
@@ -110,45 +118,67 @@ public sealed partial class ParkingRepository
                 throw new ServiceException(409, "Booking, entry gate, vehicle or physical slot is unavailable.");
             snapshotId = reader.GetGuid(0);
             vehicleType = reader.GetString(1);
-            var bookedPlate = reader.GetString(2);
-            var normalizedVehiclePlate = reader.GetString(3);
-            if (plate != bookedPlate || plate != normalizedVehiclePlate)
-            {
-                if (!request.AllowMismatchOverride)
-                {
-                    await using var logInc = Command("""
-                        INSERT INTO parking_issues(id, lot_id, booking_id, issue_type, status, reason, reported_by, created_at)
-                        VALUES(gen_random_uuid(), @lot, @booking, 'INCIDENT_0482_PLATE_MISMATCH', 'REPORTED',
-                               'Observed plate ' || @plate || ' does not match booked plate ' || @bookedPlate, @actor, clock_timestamp());
-                        """);
-                    logInc.Parameters.AddWithValue("plate", plate);
-                    logInc.Parameters.AddWithValue("bookedPlate", bookedPlate);
-                    await logInc.ExecuteNonQueryAsync(ct);
-
-                    throw new ServiceException(409, "Observed plate does not match the booked vehicle. Staff override required.");
-                }
-
-                await using var resolveInc = Command("""
-                    INSERT INTO parking_issues(id, lot_id, booking_id, issue_type, status, reason, resolution, reported_by, approved_by, created_at, resolved_at)
-                    VALUES(gen_random_uuid(), @lot, @booking, 'INCIDENT_0482_PLATE_MISMATCH', 'RESOLVED',
-                           'Plate mismatch override: observed ' || @plate || ' vs booked ' || @bookedPlate,
-                           @overrideReason, @actor, @actor, clock_timestamp(), clock_timestamp());
-                    """);
-                resolveInc.Parameters.AddWithValue("plate", plate);
-                resolveInc.Parameters.AddWithValue("bookedPlate", bookedPlate);
-                resolveInc.Parameters.AddWithValue("overrideReason", request.OverrideReason ?? "Staff confirmed matching vehicle/driver");
-                await resolveInc.ExecuteNonQueryAsync(ct);
-            }
-            var startsAt = reader.GetFieldValue<DateTimeOffset>(4);
+            bookedPlate = reader.GetString(2);
+            normalizedVehiclePlate = reader.GetString(3);
+            startsAt = reader.GetFieldValue<DateTimeOffset>(4);
             endsAt = reader.GetFieldValue<DateTimeOffset>(5);
-            var arrivalDeadline = reader.GetFieldValue<DateTimeOffset>(6);
-            var earlyMinutes = reader.GetInt32(7);
+            arrivalDeadline = reader.GetFieldValue<DateTimeOffset>(6);
+            earlyMinutes = reader.GetInt32(7);
             timezone = reader.GetString(8);
             entryAt = reader.GetFieldValue<DateTimeOffset>(9);
             slotCode = reader.GetString(10);
-            if (entryAt < startsAt.AddMinutes(-earlyMinutes) || entryAt > arrivalDeadline || entryAt >= endsAt)
-                throw new ServiceException(409, "Check-in is outside the allowed arrival window.");
         }
+
+        // Đóng reader của validate trước khi ghi sự cố hoặc rollback transaction (tránh lỗi connection busy).
+        var hasPlateMismatch = plate != bookedPlate || plate != normalizedVehiclePlate;
+        string? overrideReason = null;
+        if (hasPlateMismatch)
+        {
+            var expectedPlateLabel = bookedPlate == normalizedVehiclePlate
+                ? bookedPlate
+                : $"{bookedPlate}/{normalizedVehiclePlate}";
+            var mismatchDescription = $"Observed plate {plate} does not match booked plate {expectedPlateLabel}.";
+
+            if (!request.AllowMismatchOverride)
+            {
+                await transaction.RollbackAsync(ct);
+                await RecordRejectedPlateMismatchIncidentAsync(
+                    connection, request.LotId, token.BookingId, actorId, plate, slotCode,
+                    $"Observed plate {plate} does not match booked plate {expectedPlateLabel}",
+                    mismatchDescription, ct);
+                throw new ServiceException(409, "Observed plate does not match the booked vehicle. Staff override required.");
+            }
+
+            overrideReason = string.IsNullOrWhiteSpace(request.OverrideReason)
+                ? "Staff confirmed matching vehicle/driver"
+                : request.OverrideReason.Trim();
+            var overrideIncidentId = Guid.NewGuid();
+            await using var resolveInc = Command("""
+                INSERT INTO parking_issues(
+                    id, lot_id, booking_id, issue_type, status, reason, resolution,
+                    reported_by, approved_by, title, severity, description,
+                    detected_at, related_plate, related_slot_code, version, created_at, updated_at, resolved_at)
+                VALUES(
+                    @incidentId, @lot, @booking, 'INCIDENT_0482_PLATE_MISMATCH', 'Resolved',
+                    @reason, @overrideReason, @actor, @actor,
+                    'Lệch biển số khi check-in (Staff override)', 'High',
+                    @description, clock_timestamp(), @plate, @slotCode, 1, clock_timestamp(), clock_timestamp(), clock_timestamp());
+                INSERT INTO incident_history(
+                    id, incident_id, lot_id, action, from_status, to_status, performed_by_user_id, reason, performed_at)
+                VALUES(
+                    gen_random_uuid(), @incidentId, @lot, 'CREATED_AND_RESOLVED', NULL, 'Resolved', @actor, @overrideReason, clock_timestamp());
+                """);
+            resolveInc.Parameters.AddWithValue("incidentId", overrideIncidentId);
+            resolveInc.Parameters.AddWithValue("reason", $"Plate mismatch override: observed {plate} vs booked {expectedPlateLabel}");
+            resolveInc.Parameters.AddWithValue("overrideReason", overrideReason);
+            resolveInc.Parameters.AddWithValue("description", mismatchDescription);
+            resolveInc.Parameters.AddWithValue("plate", plate);
+            resolveInc.Parameters.AddWithValue("slotCode", slotCode);
+            await resolveInc.ExecuteNonQueryAsync(ct);
+        }
+
+        if (entryAt < startsAt.AddMinutes(-earlyMinutes) || entryAt > arrivalDeadline || entryAt >= endsAt)
+            throw new ServiceException(409, "Check-in is outside the allowed arrival window.");
 
         // Kiểm tra giờ hoạt động theo timezone riêng của bãi và closure hiện tại.
         var openingIntervals = new List<(int From, int To)>();
@@ -183,6 +213,7 @@ public sealed partial class ParkingRepository
 
         // Chuyển reservation sang physical assignment: slot vẫn OCCUPIED khi xe còn ở bãi.
         var sessionId = Guid.NewGuid();
+        var slotChangedEventId = Guid.NewGuid();
         await using (var write = Command("""
             INSERT INTO parking_sessions(id,lot_id,vehicle_id,vehicle_type,booking_id,pricing_snapshot_id,
               plate_snapshot,entry_gate_id,entry_at,expected_exit_at,status,entry_method,entered_by)
@@ -195,7 +226,15 @@ public sealed partial class ParkingRepository
             UPDATE qr_tokens SET revoked_at=@entry WHERE booking_id=@booking AND consumed_at IS NULL AND revoked_at IS NULL;
             INSERT INTO audit_logs(id,lot_id,actor_user_id,actor_type,action,entity_type,entity_id,request_id,new_values,created_at)
             VALUES(gen_random_uuid(),@lot,@actor,'STAFF','CHECK_IN','PARKING_SESSION',@entity,@request,
-              jsonb_build_object('bookingId',@booking,'slotId',@slot,'slotCode',@slotCode,'status','ACTIVE'),@entry);
+              jsonb_strip_nulls(jsonb_build_object(
+                'bookingId',@booking,
+                'slotId',@slot,
+                'slotCode',@slotCode,
+                'status','ACTIVE',
+                'plateMismatchOverride',@mismatchOverride,
+                'bookedPlate',@bookedPlate::text,
+                'overrideReason',@overrideReason::text
+              )),@entry);
             INSERT INTO outbox_events(id,lot_id,event_type,aggregate_id,payload,occurred_at,attempts)
             VALUES(gen_random_uuid(),@lot,'CheckInSucceeded',@session,
               jsonb_build_object(
@@ -212,6 +251,8 @@ public sealed partial class ParkingRepository
                 'entryAt',@entry,
                 'barrierAction','OPEN'
               ),@entry,0);
+            INSERT INTO integration_outbox(event_id,event_type,aggregate_id,payload,occurred_at)
+            VALUES(@slotChangedId,'SlotStatusChanged.v1',@slot,@slotChangedPayload::jsonb,@entry);
             """))
         {
             write.Parameters.AddWithValue("session", sessionId);
@@ -224,6 +265,11 @@ public sealed partial class ParkingRepository
             write.Parameters.AddWithValue("end", endsAt.UtcDateTime);
             write.Parameters.AddWithValue("entity", sessionId.ToString());
             write.Parameters.AddWithValue("request", requestId.ToString());
+            write.Parameters.AddWithValue("mismatchOverride", hasPlateMismatch);
+            write.Parameters.Add("bookedPlate", NpgsqlDbType.Text).Value = hasPlateMismatch ? bookedPlate : DBNull.Value;
+            write.Parameters.Add("overrideReason", NpgsqlDbType.Text).Value = (object?)overrideReason ?? DBNull.Value;
+            write.Parameters.AddWithValue("slotChangedId", slotChangedEventId);
+            write.Parameters.AddWithValue("slotChangedPayload", BuildSlotOccupiedEventPayload(slotChangedEventId, request.LotId, slotId, entryAt));
             await write.ExecuteNonQueryAsync(ct);
         }
         var response = new CheckInResponseDto(sessionId, token.BookingId, request.LotId, slotId, "ACTIVE", entryAt, slotCode, vehicleType, "QR");
@@ -246,20 +292,22 @@ public sealed partial class ParkingRepository
     public async Task<CheckInResponseDto> CheckInWalkInAsync(Guid actorId, CheckInRequestDto request, string key, CancellationToken ct)
     {
         if (actorId == Guid.Empty || request.LotId == Guid.Empty || request.GateId == Guid.Empty ||
-            string.IsNullOrWhiteSpace(key) || key.Length > 128 ||
+            string.IsNullOrWhiteSpace(key) || key.Trim().Length > 128 ||
             !PlateNumber.TryNormalize(request.DetectedPlate, out var plate))
             throw new ServiceException(400, "Valid actor, lot, gate, plate and Idempotency-Key required.");
 
+        key = key.Trim();
         var vehicleType = string.IsNullOrWhiteSpace(request.VehicleType)
             ? "CAR"
             : request.VehicleType.Trim().ToUpperInvariant();
+        if (vehicleType is not ("CAR" or "MOTORBIKE"))
+            throw new ServiceException(400, "VehicleType must be CAR or MOTORBIKE.");
 
         await using var connection = await db.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
         var dedupeKey = $"CheckInWalkIn:{actorId}:{key}";
         var requestId = new Guid(SHA256.HashData(Encoding.UTF8.GetBytes(dedupeKey)).AsSpan(0, 16));
-        var fingerprint = Convert.ToHexStringLower(SHA256.HashData(
-            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request))));
+        var fingerprint = ComputeCheckInFingerprint(request, plate, vehicleType);
 
         NpgsqlCommand Command(string sql)
         {
@@ -328,8 +376,12 @@ public sealed partial class ParkingRepository
 
         // 4. Kiểm tra chính sách xe và dung lượng (Policy)
         int maxBookingMinutes;
+        decimal admissionPercent;
+        int reservedCapacity;
+        int holdMinutes;
+        int lateArrivalMinutes;
         await using (var policyCheck = Command("""
-            SELECT p.max_booking_minutes, p.admission_percent, p.warning_percent
+            SELECT p.max_booking_minutes, p.admission_percent, p.reserved_capacity, p.hold_minutes, p.late_arrival_minutes
             FROM lot_vehicle_policies p
             WHERE p.lot_id=@lot AND p.vehicle_type=@type
             """))
@@ -338,19 +390,78 @@ public sealed partial class ParkingRepository
             if (!await reader.ReadAsync(ct))
                 throw new ServiceException(409, $"Vehicle type {vehicleType} is not supported at this parking lot.");
             maxBookingMinutes = reader.GetInt32(0);
+            admissionPercent = reader.GetDecimal(1);
+            reservedCapacity = reader.GetInt32(2);
+            holdMinutes = reader.GetInt32(3);
+            lateArrivalMinutes = reader.GetInt32(4);
         }
 
-        // 5. Đăng ký xe tự động vào bảng vehicles nếu chưa có & Khóa VEHICLE
+        var endsAt = entryAt.AddMinutes(maxBookingMinutes > 0 ? maxBookingMinutes : 1440);
+
+        await using (var capacityCheck = Command("""
+            SELECT
+                COUNT(*)::int AS total_slots,
+                COUNT(*) FILTER (WHERE EXISTS (
+                    SELECT 1 FROM session_slot_assignments a
+                    WHERE a.slot_id = s.id AND a.vacated_at IS NULL
+                ))::int AS occupied_slots,
+                COUNT(*) FILTER (WHERE
+                    NOT EXISTS (
+                        SELECT 1 FROM session_slot_assignments a
+                        WHERE a.slot_id = s.id AND a.vacated_at IS NULL
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1 FROM slot_reservations sr
+                        JOIN bookings b ON b.id = sr.booking_id
+                        WHERE sr.slot_id = s.id
+                          AND (
+                              sr.status = 'CONFIRMED'
+                              OR (sr.status = 'HELD' AND b.status = 'PENDING_PAYMENT' AND b.hold_expires_at > clock_timestamp())
+                          )
+                          AND tstzrange(sr.starts_at, sr.ends_at, '[)') && tstzrange(@entry, @end, '[)')
+                    )
+                )::int AS free_unreserved_slots
+            FROM parking_slots s
+            JOIN slot_vehicle_types svt ON svt.slot_id = s.id AND svt.lot_id = s.lot_id
+            WHERE s.lot_id = @lot
+              AND s.operational_status = 'ACTIVE'
+              AND svt.vehicle_type = @type;
+            """))
+        {
+            capacityCheck.Parameters.AddWithValue("entry", entryAt.UtcDateTime);
+            capacityCheck.Parameters.AddWithValue("end", endsAt.UtcDateTime);
+            await using var reader = await capacityCheck.ExecuteReaderAsync(ct);
+            if (await reader.ReadAsync(ct))
+            {
+                var totalSlots = reader.GetInt32(0);
+                var occupiedSlots = reader.GetInt32(1);
+                var freeUnreservedSlots = reader.GetInt32(2);
+                if (totalSlots == 0 || freeUnreservedSlots <= reservedCapacity ||
+                    (admissionPercent < 100m && (occupiedSlots + 1) * 100m > totalSlots * admissionPercent))
+                {
+                    throw new ServiceException(409, "No available walk-in capacity for this vehicle type at this parking lot.");
+                }
+            }
+        }
+
+        // 5. Đăng ký xe tự động vào bảng vehicles nếu chưa có & đối soát vehicle_type & Khóa VEHICLE
         Guid vehicleId;
+        string storedVehicleType;
         await using (var ensureVehicle = Command("""
             INSERT INTO vehicles (id, plate_country, plate_normalized, vehicle_type, fuel_type, is_active)
             VALUES (gen_random_uuid(), 'VN', @plate, @type, 'GASOLINE', true)
             ON CONFLICT (plate_country, plate_normalized) DO UPDATE SET is_active=true
-            RETURNING id;
+            RETURNING id, vehicle_type;
             """))
         {
-            vehicleId = (Guid)(await ensureVehicle.ExecuteScalarAsync(ct))!;
+            await using var reader = await ensureVehicle.ExecuteReaderAsync(ct);
+            await reader.ReadAsync(ct);
+            vehicleId = reader.GetGuid(0);
+            storedVehicleType = reader.GetString(1);
         }
+
+        if (!string.Equals(storedVehicleType, vehicleType, StringComparison.OrdinalIgnoreCase))
+            throw new ServiceException(409, $"Registered vehicle plate belongs to vehicle type {storedVehicleType}, not {vehicleType}.");
 
         await using (var vehicleLock = Command("SELECT lock_parking_resource('VEHICLE', @vehicle)"))
         {
@@ -371,16 +482,26 @@ public sealed partial class ParkingRepository
                 throw new ServiceException(409, "Vehicle already has an active parking session.");
         }
 
-        // 7. Thuật toán AUTO_SLOT: Tìm và khóa ô đỗ tối ưu nhất (SKIP LOCKED)
+        // 7. Thuật toán AUTO_SLOT: Tìm và khóa ô đỗ tối ưu nhất (FOR UPDATE OF s SKIP LOCKED trên map PUBLISHED)
         Guid slotId;
         string slotCode;
         await using (var slotSearch = Command("""
+            WITH published_map AS (
+                SELECT id
+                FROM map_versions
+                WHERE lot_id = @lot AND status = 'PUBLISHED'
+                ORDER BY version_no DESC
+                LIMIT 1
+            )
             SELECT s.id, s.code
             FROM parking_slots s
             JOIN parking_levels lvl ON lvl.id = s.level_id AND lvl.lot_id = s.lot_id
             JOIN slot_vehicle_types svt ON svt.slot_id = s.id AND svt.lot_id = s.lot_id
-            LEFT JOIN map_objects mo_slot ON mo_slot.slot_id = s.id AND mo_slot.lot_id = s.lot_id
-            LEFT JOIN map_objects mo_gate ON mo_gate.gate_id = @gate AND mo_gate.lot_id = s.lot_id
+            LEFT JOIN published_map pm ON TRUE
+            LEFT JOIN map_objects mo_slot
+              ON mo_slot.slot_id = s.id AND mo_slot.lot_id = s.lot_id AND mo_slot.map_version_id = pm.id
+            LEFT JOIN map_objects mo_gate
+              ON mo_gate.gate_id = @gate AND mo_gate.lot_id = s.lot_id AND mo_gate.map_version_id = pm.id
             WHERE s.lot_id = @lot
               AND s.operational_status = 'ACTIVE'
               AND svt.vehicle_type = @type
@@ -390,18 +511,24 @@ public sealed partial class ParkingRepository
               )
               AND NOT EXISTS (
                   SELECT 1 FROM slot_reservations sr
+                  JOIN bookings b ON b.id = sr.booking_id
                   WHERE sr.slot_id = s.id
-                    AND sr.status = 'CONFIRMED'
-                    AND tstzrange(sr.starts_at, sr.ends_at) && tstzrange(clock_timestamp(), clock_timestamp() + interval '2 hours')
+                    AND (
+                        sr.status = 'CONFIRMED'
+                        OR (sr.status = 'HELD' AND b.status = 'PENDING_PAYMENT' AND b.hold_expires_at > clock_timestamp())
+                    )
+                    AND tstzrange(sr.starts_at, sr.ends_at, '[)') && tstzrange(@entry, @end, '[)')
               )
             ORDER BY
               COALESCE(SQRT(POWER(mo_slot.x - mo_gate.x, 2) + POWER(mo_slot.y - mo_gate.y, 2) + POWER(mo_slot.z - mo_gate.z, 2)), 99999) ASC,
               lvl.display_order ASC,
               s.code ASC
             LIMIT 1
-            FOR UPDATE SKIP LOCKED;
+            FOR UPDATE OF s SKIP LOCKED;
             """))
         {
+            slotSearch.Parameters.AddWithValue("entry", entryAt.UtcDateTime);
+            slotSearch.Parameters.AddWithValue("end", endsAt.UtcDateTime);
             await using var reader = await slotSearch.ExecuteReaderAsync(ct);
             if (!await reader.ReadAsync(ct))
                 throw new ServiceException(409, "No available slots for this vehicle type at this parking lot.");
@@ -415,29 +542,107 @@ public sealed partial class ParkingRepository
             await slotLock.ExecuteNonQueryAsync(ct);
         }
 
-        // 8. Lấy Pricing Snapshot còn hiệu lực
-        Guid snapshotId;
-        await using (var snapshotQuery = Command("""
-            SELECT ps.id FROM pricing_snapshots ps
-            JOIN pricing_plans p ON p.id = ps.plan_id AND p.lot_id = ps.lot_id AND p.vehicle_type = ps.vehicle_type
-            WHERE ps.lot_id = @lot AND ps.vehicle_type = @type AND p.status = 'ACTIVE'
-            ORDER BY ps.created_at DESC LIMIT 1;
+        // Xác nhận lại dưới khóa SLOT rằng chưa có session/reservation nào vừa chen vào trước khi lock SLOT.
+        await using (var slotDoubleCheck = Command("""
+            SELECT
+                EXISTS (
+                    SELECT 1 FROM session_slot_assignments a
+                    WHERE a.slot_id = @slot AND a.vacated_at IS NULL
+                )
+                OR EXISTS (
+                    SELECT 1 FROM slot_reservations sr
+                    JOIN bookings b ON b.id = sr.booking_id
+                    WHERE sr.slot_id = @slot
+                      AND (
+                          sr.status = 'CONFIRMED'
+                          OR (sr.status = 'HELD' AND b.status = 'PENDING_PAYMENT' AND b.hold_expires_at > clock_timestamp())
+                      )
+                      AND tstzrange(sr.starts_at, sr.ends_at, '[)') && tstzrange(@entry, @end, '[)')
+                );
             """))
         {
+            slotDoubleCheck.Parameters.AddWithValue("slot", slotId);
+            slotDoubleCheck.Parameters.AddWithValue("entry", entryAt.UtcDateTime);
+            slotDoubleCheck.Parameters.AddWithValue("end", endsAt.UtcDateTime);
+            if ((bool)(await slotDoubleCheck.ExecuteScalarAsync(ct))!)
+                throw new ServiceException(409, "Selected slot is no longer available.");
+        }
+
+        // 8. Lấy Pricing Snapshot từ bảng giá PUBLISHED, hoặc tự tạo snapshot nếu plan PUBLISHED chưa có snapshot nào
+        Guid snapshotId;
+        await using (var snapshotQuery = Command("""
+            SELECT ps.id
+            FROM pricing_snapshots ps
+            JOIN pricing_plans p ON p.id = ps.plan_id AND p.lot_id = ps.lot_id AND p.vehicle_type = ps.vehicle_type
+            WHERE ps.lot_id = @lot AND ps.vehicle_type = @type
+              AND p.status = 'PUBLISHED'
+              AND p.effective_from <= @entry
+              AND (p.effective_until IS NULL OR p.effective_until >= @entry)
+            ORDER BY p.version_no DESC, ps.created_at DESC
+            LIMIT 1;
+            """))
+        {
+            snapshotQuery.Parameters.AddWithValue("entry", entryAt.UtcDateTime);
             var found = await snapshotQuery.ExecuteScalarAsync(ct);
-            if (found is null)
+            if (found is Guid existingSnap)
             {
-                await using var fallbackQuery = Command("SELECT id FROM pricing_snapshots WHERE lot_id=@lot AND vehicle_type=@type ORDER BY created_at DESC LIMIT 1;");
-                found = await fallbackQuery.ExecuteScalarAsync(ct);
+                snapshotId = existingSnap;
             }
-            if (found is not Guid snap)
-                throw new ServiceException(503, "Active pricing snapshot not found for lot and vehicle type.");
-            snapshotId = snap;
+            else
+            {
+                Guid? planId = null;
+                string? rulesJson = null;
+                await using (var planQuery = Command("""
+                    SELECT pp.id, pr.parameters::text
+                    FROM pricing_plans pp
+                    JOIN pricing_rules pr ON pr.plan_id = pp.id AND pr.rule_type = 'FLAT_BLOCK'
+                    WHERE pp.lot_id = @lot AND pp.vehicle_type = @type
+                      AND pp.status = 'PUBLISHED' AND pp.currency = 'VND'
+                      AND pp.effective_from <= @entry
+                      AND (pp.effective_until IS NULL OR pp.effective_until >= @entry)
+                      AND NOT EXISTS (SELECT 1 FROM pricing_rules extra WHERE extra.plan_id = pp.id AND extra.id <> pr.id)
+                    ORDER BY pp.version_no DESC
+                    LIMIT 1;
+                    """))
+                {
+                    planQuery.Parameters.AddWithValue("entry", entryAt.UtcDateTime);
+                    await using var planReader = await planQuery.ExecuteReaderAsync(ct);
+                    if (await planReader.ReadAsync(ct))
+                    {
+                        planId = planReader.GetGuid(0);
+                        rulesJson = planReader.GetString(1);
+                    }
+                }
+
+                if (planId is Guid activePlanId && rulesJson is not null)
+                {
+                    snapshotId = Guid.NewGuid();
+                    await using var createSnapshot = Command("""
+                        INSERT INTO pricing_snapshots(id, lot_id, plan_id, vehicle_type, engine_version, resolved_rules, policy_snapshot, currency, created_at)
+                        VALUES(@snapshot, @lot, @plan, @type, 'block-v1', @rules::jsonb,
+                               jsonb_build_object('holdMinutes', @hold, 'lateArrivalMinutes', @late), 'VND', @entry);
+                        """);
+                    createSnapshot.Parameters.AddWithValue("snapshot", snapshotId);
+                    createSnapshot.Parameters.AddWithValue("plan", activePlanId);
+                    createSnapshot.Parameters.AddWithValue("rules", rulesJson);
+                    createSnapshot.Parameters.AddWithValue("hold", holdMinutes);
+                    createSnapshot.Parameters.AddWithValue("late", lateArrivalMinutes);
+                    createSnapshot.Parameters.AddWithValue("entry", entryAt.UtcDateTime);
+                    await createSnapshot.ExecuteNonQueryAsync(ct);
+                }
+                else
+                {
+                    await using var fallbackQuery = Command("SELECT id FROM pricing_snapshots WHERE lot_id=@lot AND vehicle_type=@type ORDER BY created_at DESC LIMIT 1;");
+                    if (await fallbackQuery.ExecuteScalarAsync(ct) is not Guid fallbackSnap)
+                        throw new ServiceException(503, "Active pricing plan or snapshot not found for lot and vehicle type.");
+                    snapshotId = fallbackSnap;
+                }
+            }
         }
 
         // 9. Tạo ParkingSession mới và gán Chỗ đỗ vật lý (session_slot_assignments)
         var sessionId = Guid.NewGuid();
-        var endsAt = entryAt.AddMinutes(maxBookingMinutes > 0 ? maxBookingMinutes : 1440);
+        var slotChangedEventId = Guid.NewGuid();
         await using (var write = Command("""
             INSERT INTO parking_sessions(id, lot_id, vehicle_id, vehicle_type, booking_id, pricing_snapshot_id,
               plate_snapshot, entry_gate_id, entry_at, expected_exit_at, status, entry_method, entered_by)
@@ -465,6 +670,9 @@ public sealed partial class ParkingRepository
                 'entryAt', @entry,
                 'barrierAction', 'OPEN'
               ), @entry, 0);
+
+            INSERT INTO integration_outbox(event_id, event_type, aggregate_id, payload, occurred_at)
+            VALUES(@slotChangedId, 'SlotStatusChanged.v1', @slot, @slotChangedPayload::jsonb, @entry);
             """))
         {
             write.Parameters.AddWithValue("session", sessionId);
@@ -476,6 +684,8 @@ public sealed partial class ParkingRepository
             write.Parameters.AddWithValue("end", endsAt.UtcDateTime);
             write.Parameters.AddWithValue("entity", sessionId.ToString());
             write.Parameters.AddWithValue("request", requestId.ToString());
+            write.Parameters.AddWithValue("slotChangedId", slotChangedEventId);
+            write.Parameters.AddWithValue("slotChangedPayload", BuildSlotOccupiedEventPayload(slotChangedEventId, request.LotId, slotId, entryAt));
             await write.ExecuteNonQueryAsync(ct);
         }
 
@@ -491,6 +701,66 @@ public sealed partial class ParkingRepository
 
         await transaction.CommitAsync(ct);
         return response;
+    }
+
+    private static string ComputeCheckInFingerprint(CheckInRequestDto request, string normalizedPlate, string? normalizedVehicleType) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+        {
+            request.LotId,
+            request.GateId,
+            request.QrPayload,
+            Plate = normalizedPlate,
+            VehicleType = normalizedVehicleType,
+            request.AllowMismatchOverride,
+            OverrideReason = request.OverrideReason?.Trim()
+        }))));
+
+    private static string BuildSlotOccupiedEventPayload(Guid eventId, Guid lotId, Guid slotId, DateTimeOffset observedAt) =>
+        JsonSerializer.Serialize(new
+        {
+            eventId,
+            parkingLotId = lotId,
+            slotId,
+            status = "OCCUPIED",
+            observedAt
+        });
+
+    /// <summary>Ghi nhận sự cố lệch biển số bên ngoài transaction bị rollback để không mất vết cảnh báo tại cổng.</summary>
+    private static async Task RecordRejectedPlateMismatchIncidentAsync(
+        NpgsqlConnection connection,
+        Guid lotId,
+        Guid bookingId,
+        Guid actorId,
+        string observedPlate,
+        string slotCode,
+        string reason,
+        string description,
+        CancellationToken ct)
+    {
+        var incidentId = Guid.NewGuid();
+        await using var cmd = new NpgsqlCommand("""
+            INSERT INTO parking_issues(
+                id, lot_id, booking_id, issue_type, status, reason, reported_by,
+                title, severity, description, detected_at, related_plate, related_slot_code,
+                version, created_at, updated_at)
+            VALUES(
+                @incidentId, @lot, @booking, 'INCIDENT_0482_PLATE_MISMATCH', 'Open', @reason, @actor,
+                'Cảnh báo lệch biển số khi check-in', 'High', @description, clock_timestamp(), @plate, @slotCode,
+                1, clock_timestamp(), clock_timestamp());
+            INSERT INTO incident_history(
+                id, incident_id, lot_id, action, from_status, to_status, performed_by_user_id, reason, performed_at)
+            VALUES(
+                gen_random_uuid(), @incidentId, @lot, 'CREATED', NULL, 'Open', @actor, @reason, clock_timestamp());
+            """, connection);
+        cmd.Parameters.AddWithValue("incidentId", incidentId);
+        cmd.Parameters.AddWithValue("lot", lotId);
+        cmd.Parameters.AddWithValue("booking", bookingId);
+        cmd.Parameters.AddWithValue("reason", reason);
+        cmd.Parameters.AddWithValue("actor", actorId);
+        cmd.Parameters.AddWithValue("description", description);
+        cmd.Parameters.AddWithValue("plate", observedPlate);
+        cmd.Parameters.AddWithValue("slotCode", slotCode);
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 }
 

@@ -30,8 +30,9 @@ public sealed class AuthorizeCheckOutCommandHandler(IParkingRepository repositor
         var lot=await repository.GetSessionLotIdAsync(command.Request.SessionId,ct)
             ?? throw new NotFoundException("Parking session not found.");
         await access.RequireAsync(command.ActorId,lot,"GATE",ct);
-        var replay=await repository.ClaimCheckOutAuthorizationAsync(command.ActorId,command.Request,command.IdempotencyKey,ct);
+        var replay=await repository.GetCheckOutAuthorizationReplayAsync(command.ActorId,command.Request,command.IdempotencyKey,ct);
         if(replay is not null)return replay;
+
         var proof=tokens.ValidateQuote(command.Request.QuoteToken);
         if(proof.ActorId!=command.ActorId||proof.SessionId!=command.Request.SessionId||proof.LotId!=lot||proof.GateId!=command.Request.GateId)
             throw new ConflictException("Checkout quote belongs to another actor/session/gate.");
@@ -44,14 +45,28 @@ public sealed class AuthorizeCheckOutCommandHandler(IParkingRepository repositor
         if(!current.IsPlateMatched||current.SlotId!=proof.SlotId||current.PricingSnapshotId!=proof.PricingSnapshotId||
             current.OvertimeAmount!=proof.GrossAmount)
             throw new ConflictException("Checkout context changed. Request a new quote.");
-        var payment=proof.GrossAmount==0&&command.Request.PaymentMethod=="NONE"
-            ?new CheckOutPaymentEvidence(null,proof.SessionId,lot,0,"VND","NONE")
-            :await payments.SettleAsync(proof,command.Request,ct);
-        var verification=new CheckOutVerification(proof,payment);
-        var permit=tokens.SignExitPermit(verification);
-        // Validate the trusted payment reply before permitting the gate operator to act.
-        tokens.ValidateExitPermit(permit);
-        return await repository.SaveCheckOutAuthorizationAsync(command.ActorId,command.Request,command.IdempotencyKey,
-            new(proof.SessionId,permit,proof.ExpiresAt,payment.AmountPaid,payment.PaymentId),ct);
+
+        // Claim idempotency only after all validations succeed so bad requests do not leave PENDING claims.
+        var claimedReplay=await repository.ClaimCheckOutAuthorizationAsync(command.ActorId,command.Request,command.IdempotencyKey,ct);
+        if(claimedReplay is not null)return claimedReplay;
+
+        try
+        {
+            var payment=proof.GrossAmount==0&&command.Request.PaymentMethod=="NONE"
+                ?new CheckOutPaymentEvidence(null,proof.SessionId,lot,0,"VND","NONE")
+                :await payments.SettleAsync(proof,command.Request,ct);
+            var verification=new CheckOutVerification(proof,payment);
+            var permit=tokens.SignExitPermit(verification);
+            // Validate the trusted payment reply before permitting the gate operator to act.
+            tokens.ValidateExitPermit(permit);
+            return await repository.SaveCheckOutAuthorizationAsync(command.ActorId,command.Request,command.IdempotencyKey,
+                new(proof.SessionId,permit,proof.ExpiresAt,payment.AmountPaid,payment.PaymentId),ct);
+        }
+        catch
+        {
+            try { await repository.ReleaseCheckOutAuthorizationClaimAsync(command.ActorId,command.IdempotencyKey,CancellationToken.None); }
+            catch { /* Best-effort cleanup of the in-flight PENDING claim so transient failures remain retryable. */ }
+            throw;
+        }
     }
 }

@@ -7,15 +7,18 @@ namespace Parking.Parking.Infrastructure.Repositories;
 public class ParkingLotRepository : IParkingLotRepository
 {
     private readonly NpgsqlDataSource _db;
+    private readonly TimeProvider _clock;
 
-    public ParkingLotRepository(NpgsqlDataSource db)
+    public ParkingLotRepository(NpgsqlDataSource db, TimeProvider? timeProvider = null)
     {
         _db = db;
+        _clock = timeProvider ?? TimeProvider.System;
     }
 
     public async Task<List<ParkingLot>> GetAvailableLotsAsync(string vehicleType, CancellationToken cancellationToken = default)
     {
         var normalizedType = vehicleType.Trim().ToUpperInvariant();
+        var now = _clock.GetUtcNow().UtcDateTime;
 
         // Truy vấn danh sách bãi ACTIVE có chính sách cho loại xe này và đếm slot khả dụng thực tế
         const string sql = """
@@ -42,14 +45,16 @@ public class ParkingLotRepository : IParkingLotRepository
                       SELECT 1 FROM session_slot_assignments sa 
                       WHERE sa.slot_id = s.id AND sa.vacated_at IS NULL
                   )
-                  -- Loại bỏ slot đang có đơn giữ chỗ còn hiệu lực
+                  -- Loại bỏ slot đang có đơn giữ chỗ còn hiệu lực hoặc booking đã xác nhận/đang gửi
                   AND NOT EXISTS (
                       SELECT 1 FROM slot_reservations sr
                       JOIN bookings b ON b.id = sr.booking_id
                       WHERE sr.slot_id = s.id 
-                        AND sr.status IN ('HELD', 'CONFIRMED')
-                        AND b.status IN ('PENDING_PAYMENT', 'CONFIRMED')
-                        AND sr.ends_at > now() AND sr.starts_at <= now()
+                        AND (
+                            (sr.status = 'HELD' AND b.status = 'PENDING_PAYMENT' AND b.hold_expires_at > @now)
+                            OR (sr.status = 'CONFIRMED' AND b.status IN ('CONFIRMED', 'CHECKED_IN'))
+                        )
+                        AND sr.ends_at > @now AND sr.starts_at <= @now
                   )
                 GROUP BY s.lot_id
             ) slots_stat ON slots_stat.lot_id = l.id
@@ -58,6 +63,7 @@ public class ParkingLotRepository : IParkingLotRepository
 
         await using var cmd = _db.CreateCommand(sql);
         cmd.Parameters.AddWithValue("vehicleType", normalizedType);
+        cmd.Parameters.AddWithValue("now", now);
 
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         var result = new List<ParkingLot>();

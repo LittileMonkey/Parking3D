@@ -48,8 +48,19 @@ public sealed class IssueBookingQrCommandHandler(
                 "Chỉ booking CONFIRMED mới được cấp QR.");
         }
 
-        // 4. Không cấp QR khi đã quá hạn đến check-in.
-        if (booking.ArrivalDeadline <= clock.GetUtcNow())
+        // 4. Không cấp QR khi đã quá hạn đến check-in hoặc quá giờ kết thúc booking.
+        var now = clock.GetUtcNow();
+        if (booking.EndsAt is { } bookingEndsAt && bookingEndsAt <= now)
+        {
+            throw new ConflictException(
+                "Booking đã hết thời gian đỗ.");
+        }
+
+        var qrExpiry = booking.EndsAt is { } endsAt && endsAt < booking.ArrivalDeadline
+            ? endsAt
+            : booking.ArrivalDeadline;
+
+        if (qrExpiry <= now)
         {
             throw new ConflictException(
                 "Booking đã quá hạn đến check-in.");
@@ -60,7 +71,7 @@ public sealed class IssueBookingQrCommandHandler(
             booking.BookingId,
             booking.LotId,
             booking.VehicleId,
-            booking.ArrivalDeadline);
+            qrExpiry);
 
         // 6. Repository kiểm tra lại dưới khóa và lưu nguyên tử.
         await repository.SaveIssuedQrTokenAsync(

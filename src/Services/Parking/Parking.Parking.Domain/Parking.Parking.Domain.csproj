@@ -1,5 +1,2 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <ItemGroup>
-    <ProjectReference Include="../../../BuildingBlocks/Parking.PricingEngine/Parking.PricingEngine.csproj" />
-  </ItemGroup>
 </Project>

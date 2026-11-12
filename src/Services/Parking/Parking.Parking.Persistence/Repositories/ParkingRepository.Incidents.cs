@@ -4,6 +4,7 @@ using System.Text.Json;
 using Npgsql;
 using NpgsqlTypes;
 using Parking.Parking.Application.DTOs;
+using Parking.Parking.Application.Features.Incidents;
 using Parking.ServiceDefaults;
 
 namespace Parking.Parking.Persistence.Repositories;
@@ -16,8 +17,135 @@ public sealed partial class ParkingRepository
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
+    private static readonly Dictionary<string, string> CanonicalIncidentSeverities = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Low"] = "Low",
+        ["Medium"] = "Medium",
+        ["High"] = "High",
+        ["Critical"] = "Critical"
+    };
+
+    private static readonly Dictionary<string, string> CanonicalIncidentTargetStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["InProgress"] = "InProgress",
+        ["Escalated"] = "Escalated",
+        ["Resolved"] = "Resolved"
+    };
+
+    private static readonly Dictionary<string, HashSet<string>> AllowedIncidentTransitions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Open"] = new(StringComparer.OrdinalIgnoreCase) { "InProgress", "Escalated", "Resolved" },
+        ["InProgress"] = new(StringComparer.OrdinalIgnoreCase) { "Escalated", "Resolved" },
+        ["Escalated"] = new(StringComparer.OrdinalIgnoreCase) { "InProgress", "Resolved" }
+    };
+
+    private static async Task<(bool Replayed, T? Outcome, Guid? RequestId, string? Fingerprint)> TryReplayScrum99InboxAsync<T>(
+        NpgsqlConnection conn,
+        NpgsqlTransaction tx,
+        string scopePrefix,
+        string eventType,
+        object payloadForHash,
+        string? key,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            return (false, default, null, null);
+
+        var trimmedKey = key.Trim();
+        if (trimmedKey.Length > 128)
+            throw new ServiceException(400, "Idempotency-Key must not exceed 128 characters.");
+
+        var scopeKey = $"{scopePrefix}:{trimmedKey}";
+        var requestId = new Guid(SHA256.HashData(Encoding.UTF8.GetBytes(scopeKey)).AsSpan(0, 16));
+        var fingerprint = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(
+            JsonSerializer.Serialize(payloadForHash, JsonOptions))));
+
+        await using (var lockCmd = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended(@key,0))", conn, tx))
+        {
+            lockCmd.Parameters.AddWithValue("key", scopeKey);
+            await lockCmd.ExecuteNonQueryAsync(ct);
+        }
+
+        await using var inboxCmd = new NpgsqlCommand(
+            "SELECT event_type, payload_hash, outcome FROM integration_inbox WHERE event_id = @id", conn, tx);
+        inboxCmd.Parameters.AddWithValue("id", requestId);
+        await using var reader = await inboxCmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct))
+            return (false, default, requestId, fingerprint);
+
+        if (reader.GetString(0) != eventType || reader.GetString(1) != fingerprint)
+            throw new ServiceException(409, "Idempotency key reused for a different request payload.");
+
+        return (true, JsonSerializer.Deserialize<T>(reader.GetString(2), JsonOptions), requestId, fingerprint);
+    }
+
+    private static async Task SaveScrum99InboxAsync(
+        NpgsqlConnection conn,
+        NpgsqlTransaction tx,
+        Guid? requestId,
+        string eventType,
+        string? fingerprint,
+        object outcome,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        if (!requestId.HasValue || fingerprint is null)
+            return;
+
+        await using var saveInbox = new NpgsqlCommand("""
+            INSERT INTO integration_inbox(event_id, event_type, payload_hash, outcome, received_at)
+            VALUES (@id, @eventType, @hash, @outcome, @now)
+            ON CONFLICT (event_id) DO NOTHING
+            """, conn, tx);
+        saveInbox.Parameters.AddWithValue("id", requestId.Value);
+        saveInbox.Parameters.AddWithValue("eventType", eventType);
+        saveInbox.Parameters.AddWithValue("hash", fingerprint);
+        saveInbox.Parameters.AddWithValue("outcome", JsonSerializer.Serialize(outcome, JsonOptions));
+        saveInbox.Parameters.AddWithValue("now", now);
+        await saveInbox.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task AppendScrum99AuditLogAsync(
+        NpgsqlConnection conn,
+        NpgsqlTransaction tx,
+        Guid lotId,
+        Guid actorId,
+        string action,
+        string entityType,
+        string entityId,
+        string? reason,
+        string? requestId,
+        object? oldValues,
+        object? newValues,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        await using var auditCmd = new NpgsqlCommand("""
+            INSERT INTO audit_logs (
+                id, lot_id, actor_user_id, actor_type, action, entity_type, entity_id,
+                reason, request_id, old_values, new_values, created_at
+            ) VALUES (
+                gen_random_uuid(), @lotId, @actorId, 'STAFF', @action, @entityType, @entityId,
+                @reason, @requestId, @oldValues, @newValues, @now
+            )
+            """, conn, tx);
+        auditCmd.Parameters.AddWithValue("lotId", lotId);
+        auditCmd.Parameters.AddWithValue("actorId", actorId);
+        auditCmd.Parameters.AddWithValue("action", action);
+        auditCmd.Parameters.AddWithValue("entityType", entityType);
+        auditCmd.Parameters.AddWithValue("entityId", entityId);
+        auditCmd.Parameters.Add("reason", NpgsqlDbType.Text).Value = (object?)reason ?? DBNull.Value;
+        auditCmd.Parameters.Add("requestId", NpgsqlDbType.Text).Value = (object?)requestId ?? DBNull.Value;
+        auditCmd.Parameters.Add("oldValues", NpgsqlDbType.Jsonb).Value =
+            oldValues is null ? DBNull.Value : JsonSerializer.Serialize(oldValues, JsonOptions);
+        auditCmd.Parameters.Add("newValues", NpgsqlDbType.Jsonb).Value =
+            newValues is null ? DBNull.Value : JsonSerializer.Serialize(newValues, JsonOptions);
+        auditCmd.Parameters.AddWithValue("now", now);
+        await auditCmd.ExecuteNonQueryAsync(ct);
+    }
+
     /// <summary>
-    /// Ghi nhận sự cố mới: kiểm tra thời điểm phát hiện, khóa advisory lock và lưu outcome vào integration_inbox.
+    /// Ghi nhận sự cố mới: kiểm tra thời điểm phát hiện, khóa advisory lock, audit log và lưu outcome vào integration_inbox.
     /// </summary>
     public async Task<IncidentDto> CreateIncidentAsync(
         Guid lotId,
@@ -34,11 +162,16 @@ public sealed partial class ParkingRepository
         if (string.IsNullOrWhiteSpace(request.Description) || request.Description.Length > 4000)
             throw new ServiceException(400, "Description is required and must not exceed 4000 characters.");
 
-        var validSeverities = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Low", "Medium", "High", "Critical" };
-        if (!validSeverities.Contains(request.Severity))
+        if (!CanonicalIncidentSeverities.TryGetValue(request.Severity.Trim(), out var severity))
             throw new ServiceException(400, "Severity must be one of: Low, Medium, High, Critical.");
 
+        var evidenceList = request.Evidence ?? (IReadOnlyList<IncidentEvidenceDto>)Array.Empty<IncidentEvidenceDto>();
+        if (!IncidentEvidenceRules.AreAllItemsValid(evidenceList))
+            throw new ServiceException(400, "Each evidence item must specify a valid kind and a safe non-base64 reference (max 2048 chars).");
+
         var now = clock.GetUtcNow();
+        if (request.DetectedAt > now.AddMinutes(5))
+            throw new ServiceException(400, "DetectedAt cannot be more than 5 minutes in the future.");
         if (now - request.DetectedAt > TimeSpan.FromMinutes(10) && string.IsNullOrWhiteSpace(request.LateReportReason))
         {
             throw new ServiceException(400, "Lý do báo muộn (lateReportReason) là bắt buộc khi báo sự cố muộn hơn 10 phút tính từ thời điểm phát hiện.");
@@ -47,32 +180,35 @@ public sealed partial class ParkingRepository
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
 
-        // Idempotency check via integration_inbox
-        Guid? requestId = null;
-        string? fingerprint = null;
-        if (!string.IsNullOrWhiteSpace(key))
+        var (replayed, existingOutcome, requestId, fingerprint) = await TryReplayScrum99InboxAsync<IncidentDto>(
+            conn, tx, $"CreateIncident:{lotId}:{actorId}", "CreateIncident", request, key, ct);
+        if (replayed)
         {
-            if (key.Length > 128) throw new ServiceException(400, "Idempotency-Key must not exceed 128 characters.");
-            requestId = new Guid(SHA256.HashData(Encoding.UTF8.GetBytes(actorId + ":incident:" + key)).AsSpan(0, 16));
-            fingerprint = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request, JsonOptions))));
+            await tx.CommitAsync(ct);
+            return existingOutcome!;
+        }
 
-            await using var lockCmd = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended(@key,0))", conn, tx);
-            lockCmd.Parameters.AddWithValue("key", actorId + ":incident:" + key);
-            await lockCmd.ExecuteNonQueryAsync(ct);
+        if (request.RelatedBookingId.HasValue)
+        {
+            await using var bookingCheck = new NpgsqlCommand(
+                "SELECT EXISTS(SELECT 1 FROM bookings WHERE id = @bookingId AND lot_id = @lotId)", conn, tx);
+            bookingCheck.Parameters.AddWithValue("bookingId", request.RelatedBookingId.Value);
+            bookingCheck.Parameters.AddWithValue("lotId", lotId);
+            if (!(bool)(await bookingCheck.ExecuteScalarAsync(ct))!)
+                throw new ServiceException(404, "Related booking does not exist in this parking lot.");
+        }
 
-            await using var inboxCmd = new NpgsqlCommand("SELECT payload_hash, outcome FROM integration_inbox WHERE event_id=@id AND event_type='CreateIncident'", conn, tx);
-            inboxCmd.Parameters.AddWithValue("id", requestId.Value);
-            await using var r = await inboxCmd.ExecuteReaderAsync(ct);
-            if (await r.ReadAsync(ct))
-            {
-                if (r.GetString(0) != fingerprint)
-                    throw new ServiceException(409, "Idempotency key reused for a different incident payload.");
-                return JsonSerializer.Deserialize<IncidentDto>(r.GetString(1), JsonOptions)!;
-            }
+        if (request.RelatedSessionId.HasValue)
+        {
+            await using var sessionCheck = new NpgsqlCommand(
+                "SELECT EXISTS(SELECT 1 FROM parking_sessions WHERE id = @sessionId AND lot_id = @lotId)", conn, tx);
+            sessionCheck.Parameters.AddWithValue("sessionId", request.RelatedSessionId.Value);
+            sessionCheck.Parameters.AddWithValue("lotId", lotId);
+            if (!(bool)(await sessionCheck.ExecuteScalarAsync(ct))!)
+                throw new ServiceException(404, "Related parking session does not exist in this parking lot.");
         }
 
         var incidentId = Guid.NewGuid();
-        var evidenceList = request.Evidence ?? (IReadOnlyList<IncidentEvidenceDto>)Array.Empty<IncidentEvidenceDto>();
         var evidenceJson = JsonSerializer.Serialize(evidenceList, JsonOptions);
 
         await using (var insertCmd = new NpgsqlCommand("""
@@ -93,17 +229,17 @@ public sealed partial class ParkingRepository
             insertCmd.Parameters.AddWithValue("lotId", lotId);
             insertCmd.Parameters.Add("sessionId", NpgsqlDbType.Uuid).Value = (object?)request.RelatedSessionId ?? DBNull.Value;
             insertCmd.Parameters.Add("bookingId", NpgsqlDbType.Uuid).Value = (object?)request.RelatedBookingId ?? DBNull.Value;
-            insertCmd.Parameters.AddWithValue("issueType", request.Type);
-            insertCmd.Parameters.AddWithValue("reason", request.Description);
+            insertCmd.Parameters.AddWithValue("issueType", request.Type.Trim());
+            insertCmd.Parameters.AddWithValue("reason", request.Description.Trim());
             insertCmd.Parameters.AddWithValue("reportedBy", actorId);
             insertCmd.Parameters.AddWithValue("title", request.Title.Trim());
-            insertCmd.Parameters.AddWithValue("severity", request.Severity);
+            insertCmd.Parameters.AddWithValue("severity", severity);
             insertCmd.Parameters.AddWithValue("description", request.Description.Trim());
             insertCmd.Parameters.AddWithValue("detectedAt", request.DetectedAt);
-            insertCmd.Parameters.Add("lateReportReason", NpgsqlDbType.Text).Value = (object?)request.LateReportReason ?? DBNull.Value;
-            insertCmd.Parameters.Add("relatedPlate", NpgsqlDbType.Text).Value = (object?)request.RelatedPlate ?? DBNull.Value;
-            insertCmd.Parameters.Add("relatedSlotCode", NpgsqlDbType.Text).Value = (object?)request.RelatedSlotCode ?? DBNull.Value;
-            insertCmd.Parameters.Add("relatedGate", NpgsqlDbType.Text).Value = (object?)request.RelatedGate ?? DBNull.Value;
+            insertCmd.Parameters.Add("lateReportReason", NpgsqlDbType.Text).Value = (object?)request.LateReportReason?.Trim() ?? DBNull.Value;
+            insertCmd.Parameters.Add("relatedPlate", NpgsqlDbType.Text).Value = (object?)request.RelatedPlate?.Trim() ?? DBNull.Value;
+            insertCmd.Parameters.Add("relatedSlotCode", NpgsqlDbType.Text).Value = (object?)request.RelatedSlotCode?.Trim() ?? DBNull.Value;
+            insertCmd.Parameters.Add("relatedGate", NpgsqlDbType.Text).Value = (object?)request.RelatedGate?.Trim() ?? DBNull.Value;
             insertCmd.Parameters.AddWithValue("evidence", evidenceJson);
             insertCmd.Parameters.AddWithValue("now", now);
             await insertCmd.ExecuteNonQueryAsync(ct);
@@ -125,12 +261,23 @@ public sealed partial class ParkingRepository
             await historyCmd.ExecuteNonQueryAsync(ct);
         }
 
+        await AppendScrum99AuditLogAsync(
+            conn, tx, lotId, actorId,
+            action: "CREATE_INCIDENT",
+            entityType: "PARKING_ISSUE",
+            entityId: incidentId.ToString(),
+            reason: request.LateReportReason?.Trim(),
+            requestId: requestId?.ToString(),
+            oldValues: null,
+            newValues: new { title = request.Title.Trim(), type = request.Type.Trim(), severity, status = "Open", version = 1 },
+            now: now, ct: ct);
+
         var result = new IncidentDto(
             IncidentId: incidentId,
             LotId: lotId,
             Title: request.Title.Trim(),
-            Type: request.Type,
-            Severity: request.Severity,
+            Type: request.Type.Trim(),
+            Severity: severity,
             Description: request.Description.Trim(),
             Status: "Open",
             ReportedByUserId: actorId,
@@ -138,10 +285,10 @@ public sealed partial class ParkingRepository
             ReportedAt: now,
             UpdatedAt: now,
             ResolvedAt: null,
-            LateReportReason: request.LateReportReason,
-            RelatedPlate: request.RelatedPlate,
-            RelatedSlotCode: request.RelatedSlotCode,
-            RelatedGate: request.RelatedGate,
+            LateReportReason: request.LateReportReason?.Trim(),
+            RelatedPlate: request.RelatedPlate?.Trim(),
+            RelatedSlotCode: request.RelatedSlotCode?.Trim(),
+            RelatedGate: request.RelatedGate?.Trim(),
             RelatedBookingId: request.RelatedBookingId,
             RelatedSessionId: request.RelatedSessionId,
             Evidence: evidenceList,
@@ -149,19 +296,7 @@ public sealed partial class ParkingRepository
             Version: 1
         );
 
-        if (requestId.HasValue && fingerprint is not null)
-        {
-            await using var saveInbox = new NpgsqlCommand("""
-                INSERT INTO integration_inbox(event_id, event_type, payload_hash, outcome, received_at)
-                VALUES (@id, 'CreateIncident', @hash, @outcome, @now)
-                ON CONFLICT (event_id) DO NOTHING
-                """, conn, tx);
-            saveInbox.Parameters.AddWithValue("id", requestId.Value);
-            saveInbox.Parameters.AddWithValue("hash", fingerprint);
-            saveInbox.Parameters.AddWithValue("outcome", JsonSerializer.Serialize(result, JsonOptions));
-            saveInbox.Parameters.AddWithValue("now", now);
-            await saveInbox.ExecuteNonQueryAsync(ct);
-        }
+        await SaveScrum99InboxAsync(conn, tx, requestId, "CreateIncident", fingerprint, result, now, ct);
 
         await tx.CommitAsync(ct);
         return result;
@@ -170,7 +305,7 @@ public sealed partial class ParkingRepository
     /// <summary>
     /// Lấy danh sách tóm tắt các sự cố tại bãi đỗ xe theo bộ lọc trạng thái, mức độ nghiêm trọng và từ khóa tìm kiếm.
     /// </summary>
-    public async Task<PagedResult<IncidentSummaryDto>> ListIncidentsAsync(
+    public Task<PagedResult<IncidentSummaryDto>> ListIncidentsAsync(
         Guid lotId,
         string? status,
         string? severity,
@@ -178,7 +313,25 @@ public sealed partial class ParkingRepository
         int page,
         int pageSize,
         CancellationToken ct)
+        => ListIncidentsAsync(lotId, status, severity, query, null, null, page, pageSize, ct);
+
+    /// <summary>
+    /// Lấy danh sách tóm tắt các sự cố tại bãi đỗ xe theo bộ lọc trạng thái, mức độ nghiêm trọng, khoảng thời gian [from, to) và phân trang.
+    /// </summary>
+    public async Task<PagedResult<IncidentSummaryDto>> ListIncidentsAsync(
+        Guid lotId,
+        string? status,
+        string? severity,
+        string? query,
+        DateTimeOffset? from,
+        DateTimeOffset? to,
+        int page,
+        int pageSize,
+        CancellationToken ct)
     {
+        if (from.HasValue && to.HasValue && from.Value >= to.Value)
+            throw new ServiceException(400, "Filter 'from' must be earlier than 'to'.");
+
         if (page < 1) page = 1;
         if (pageSize < 1) pageSize = 25;
         if (pageSize > 100) pageSize = 100;
@@ -187,30 +340,41 @@ public sealed partial class ParkingRepository
         await using var conn = await db.OpenConnectionAsync(ct);
 
         var whereClause = new StringBuilder("WHERE lot_id = @lotId");
-        if (!string.IsNullOrWhiteSpace(status) && !string.Equals(status, "All", StringComparison.OrdinalIgnoreCase))
-        {
-            whereClause.Append(" AND status = @status");
-        }
-        if (!string.IsNullOrWhiteSpace(severity) && !string.Equals(severity, "All", StringComparison.OrdinalIgnoreCase))
-        {
-            whereClause.Append(" AND severity = @severity");
-        }
-        if (!string.IsNullOrWhiteSpace(query))
-        {
+        var hasStatus = !string.IsNullOrWhiteSpace(status) && !string.Equals(status.Trim(), "All", StringComparison.OrdinalIgnoreCase);
+        var hasSeverity = !string.IsNullOrWhiteSpace(severity) && !string.Equals(severity.Trim(), "All", StringComparison.OrdinalIgnoreCase);
+        var hasQuery = !string.IsNullOrWhiteSpace(query);
+
+        if (hasStatus)
+            whereClause.Append(" AND LOWER(status) = LOWER(@status)");
+        if (hasSeverity)
+            whereClause.Append(" AND LOWER(severity) = LOWER(@severity)");
+        if (from.HasValue)
+            whereClause.Append(" AND detected_at >= @from");
+        if (to.HasValue)
+            whereClause.Append(" AND detected_at < @to");
+        if (hasQuery)
             whereClause.Append(" AND (title ILIKE @query OR related_plate ILIKE @query OR related_slot_code ILIKE @query)");
+
+        void BindFilterParameters(NpgsqlCommand cmd)
+        {
+            cmd.Parameters.AddWithValue("lotId", lotId);
+            if (hasStatus)
+                cmd.Parameters.AddWithValue("status", status!.Trim());
+            if (hasSeverity)
+                cmd.Parameters.AddWithValue("severity", severity!.Trim());
+            if (from.HasValue)
+                cmd.Parameters.AddWithValue("from", from.Value);
+            if (to.HasValue)
+                cmd.Parameters.AddWithValue("to", to.Value);
+            if (hasQuery)
+                cmd.Parameters.AddWithValue("query", $"%{query!.Trim()}%");
         }
 
         var countSql = $"SELECT COUNT(*) FROM parking_issues {whereClause}";
         int totalCount;
         await using (var countCmd = new NpgsqlCommand(countSql, conn))
         {
-            countCmd.Parameters.AddWithValue("lotId", lotId);
-            if (!string.IsNullOrWhiteSpace(status) && !string.Equals(status, "All", StringComparison.OrdinalIgnoreCase))
-                countCmd.Parameters.AddWithValue("status", status);
-            if (!string.IsNullOrWhiteSpace(severity) && !string.Equals(severity, "All", StringComparison.OrdinalIgnoreCase))
-                countCmd.Parameters.AddWithValue("severity", severity);
-            if (!string.IsNullOrWhiteSpace(query))
-                countCmd.Parameters.AddWithValue("query", $"%{query.Trim()}%");
+            BindFilterParameters(countCmd);
             totalCount = Convert.ToInt32(await countCmd.ExecuteScalarAsync(ct));
         }
 
@@ -226,13 +390,7 @@ public sealed partial class ParkingRepository
         var items = new List<IncidentSummaryDto>();
         await using (var listCmd = new NpgsqlCommand(listSql, conn))
         {
-            listCmd.Parameters.AddWithValue("lotId", lotId);
-            if (!string.IsNullOrWhiteSpace(status) && !string.Equals(status, "All", StringComparison.OrdinalIgnoreCase))
-                listCmd.Parameters.AddWithValue("status", status);
-            if (!string.IsNullOrWhiteSpace(severity) && !string.Equals(severity, "All", StringComparison.OrdinalIgnoreCase))
-                listCmd.Parameters.AddWithValue("severity", severity);
-            if (!string.IsNullOrWhiteSpace(query))
-                listCmd.Parameters.AddWithValue("query", $"%{query.Trim()}%");
+            BindFilterParameters(listCmd);
             listCmd.Parameters.AddWithValue("limit", pageSize);
             listCmd.Parameters.AddWithValue("offset", offset);
 
@@ -264,6 +422,16 @@ public sealed partial class ParkingRepository
     public async Task<IncidentDto?> GetIncidentByIdAsync(Guid lotId, Guid incidentId, CancellationToken ct)
     {
         await using var conn = await db.OpenConnectionAsync(ct);
+        return await ReadIncidentByIdAsync(conn, null, lotId, incidentId, ct);
+    }
+
+    private static async Task<IncidentDto?> ReadIncidentByIdAsync(
+        NpgsqlConnection conn,
+        NpgsqlTransaction? tx,
+        Guid lotId,
+        Guid incidentId,
+        CancellationToken ct)
+    {
         await using var cmd = new NpgsqlCommand("""
             SELECT id, lot_id, title, issue_type, severity, description, status, reported_by,
                    detected_at, created_at, updated_at, resolved_at, late_report_reason,
@@ -271,7 +439,7 @@ public sealed partial class ParkingRepository
                    evidence, exit_decision, version
             FROM parking_issues
             WHERE lot_id = @lotId AND id = @incidentId
-            """, conn);
+            """, conn, tx);
         cmd.Parameters.AddWithValue("lotId", lotId);
         cmd.Parameters.AddWithValue("incidentId", incidentId);
 
@@ -314,6 +482,14 @@ public sealed partial class ParkingRepository
         );
     }
 
+    public Task<IncidentDto> UpdateIncidentStatusAsync(
+        Guid lotId,
+        Guid incidentId,
+        Guid actorId,
+        UpdateIncidentStatusRequestDto request,
+        CancellationToken ct)
+        => UpdateIncidentStatusAsync(lotId, incidentId, actorId, request, null, ct);
+
     /// <summary>
     /// Cập nhật tiến độ xử lý sự cố (InProgress/Escalated/Resolved) dưới khóa FOR UPDATE và kiểm tra expectedVersion.
     /// </summary>
@@ -322,14 +498,27 @@ public sealed partial class ParkingRepository
         Guid incidentId,
         Guid actorId,
         UpdateIncidentStatusRequestDto request,
+        string? key,
         CancellationToken ct)
     {
-        var validStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "InProgress", "Escalated", "Resolved" };
-        if (!validStatuses.Contains(request.Status))
+        if (!CanonicalIncidentTargetStatuses.TryGetValue(request.Status.Trim(), out var targetStatus))
             throw new ServiceException(400, "Status must be one of: InProgress, Escalated, Resolved.");
+        var notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
+        if (targetStatus is "Escalated" or "Resolved" && notes is null)
+            throw new ServiceException(400, "Notes are required when escalating or resolving an incident.");
+        if (notes is not null && notes.Length > 2000)
+            throw new ServiceException(400, "Notes must not exceed 2000 characters.");
 
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
+
+        var (replayed, existingOutcome, requestId, fingerprint) = await TryReplayScrum99InboxAsync<IncidentDto>(
+            conn, tx, $"UpdateIncidentStatus:{lotId}:{incidentId}:{actorId}", "UpdateIncidentStatus", request, key, ct);
+        if (replayed)
+        {
+            await tx.CommitAsync(ct);
+            return existingOutcome!;
+        }
 
         string currentStatus;
         int currentVersion;
@@ -351,11 +540,17 @@ public sealed partial class ParkingRepository
         if (string.Equals(currentStatus, "Cancelled", StringComparison.OrdinalIgnoreCase))
             throw new ServiceException(409, "Không thể cập nhật sự cố đã bị hủy bỏ (Cancelled).");
 
+        if (!AllowedIncidentTransitions.TryGetValue(currentStatus, out var allowedNext) ||
+            !allowedNext.Contains(targetStatus))
+        {
+            throw new ServiceException(409, $"Không thể chuyển trạng thái sự cố từ {currentStatus} sang {targetStatus}.");
+        }
+
         if (currentVersion != request.ExpectedVersion)
             throw new ServiceException(409, $"Xung đột dữ liệu: Phiên bản hiện tại là {currentVersion}, yêu cầu của bạn dựa trên phiên bản {request.ExpectedVersion}. Vui lòng làm mới trang.");
 
         var now = clock.GetUtcNow();
-        var isResolved = string.Equals(request.Status, "Resolved", StringComparison.OrdinalIgnoreCase);
+        var isResolved = targetStatus == "Resolved";
 
         await using (var updateCmd = new NpgsqlCommand("""
             UPDATE parking_issues
@@ -367,9 +562,9 @@ public sealed partial class ParkingRepository
             WHERE lot_id = @lotId AND id = @incidentId
             """, conn, tx))
         {
-            updateCmd.Parameters.AddWithValue("newStatus", request.Status);
+            updateCmd.Parameters.AddWithValue("newStatus", targetStatus);
             updateCmd.Parameters.AddWithValue("isResolved", isResolved);
-            updateCmd.Parameters.Add("notes", NpgsqlDbType.Text).Value = (object?)request.Notes ?? DBNull.Value;
+            updateCmd.Parameters.Add("notes", NpgsqlDbType.Text).Value = (object?)notes ?? DBNull.Value;
             updateCmd.Parameters.AddWithValue("now", now);
             updateCmd.Parameters.AddWithValue("lotId", lotId);
             updateCmd.Parameters.AddWithValue("incidentId", incidentId);
@@ -387,15 +582,29 @@ public sealed partial class ParkingRepository
             histCmd.Parameters.AddWithValue("incidentId", incidentId);
             histCmd.Parameters.AddWithValue("lotId", lotId);
             histCmd.Parameters.AddWithValue("fromStatus", currentStatus);
-            histCmd.Parameters.AddWithValue("toStatus", request.Status);
+            histCmd.Parameters.AddWithValue("toStatus", targetStatus);
             histCmd.Parameters.AddWithValue("actorId", actorId);
-            histCmd.Parameters.Add("reason", NpgsqlDbType.Text).Value = (object?)request.Notes ?? DBNull.Value;
+            histCmd.Parameters.Add("reason", NpgsqlDbType.Text).Value = (object?)notes ?? DBNull.Value;
             histCmd.Parameters.AddWithValue("now", now);
             await histCmd.ExecuteNonQueryAsync(ct);
         }
 
+        await AppendScrum99AuditLogAsync(
+            conn, tx, lotId, actorId,
+            action: "UPDATE_INCIDENT_STATUS",
+            entityType: "PARKING_ISSUE",
+            entityId: incidentId.ToString(),
+            reason: notes,
+            requestId: requestId?.ToString(),
+            oldValues: new { status = currentStatus, version = currentVersion },
+            newValues: new { status = targetStatus, version = currentVersion + 1 },
+            now: now, ct: ct);
+
+        var updated = (await ReadIncidentByIdAsync(conn, tx, lotId, incidentId, ct))!;
+        await SaveScrum99InboxAsync(conn, tx, requestId, "UpdateIncidentStatus", fingerprint, updated, now, ct);
+
         await tx.CommitAsync(ct);
-        return (await GetIncidentByIdAsync(lotId, incidentId, ct))!;
+        return updated;
     }
 
     /// <summary>
@@ -467,18 +676,39 @@ public sealed partial class ParkingRepository
     /// <summary>
     /// Quản lý mở lại sự cố từ trạng thái Resolved về Open kèm lý do ghi vết lịch sử.
     /// </summary>
-    public async Task<IncidentDto> ReopenIncidentAsync(
+    public Task<IncidentDto> ReopenIncidentAsync(
         Guid lotId,
         Guid incidentId,
         Guid actorId,
         ReopenIncidentRequestDto request,
         CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(request.Reason))
-            throw new ServiceException(400, "Lý do mở lại sự cố (reason) là bắt buộc.");
+        => ReopenIncidentAsync(lotId, incidentId, actorId, request, null, ct);
 
+    /// <summary>
+    /// Quản lý mở lại sự cố từ trạng thái Resolved về Open kèm lý do, lưu lịch sử, audit log và idempotency.
+    /// </summary>
+    public async Task<IncidentDto> ReopenIncidentAsync(
+        Guid lotId,
+        Guid incidentId,
+        Guid actorId,
+        ReopenIncidentRequestDto request,
+        string? key,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Trim().Length > 2000)
+            throw new ServiceException(400, "Lý do mở lại sự cố (reason) là bắt buộc và tối đa 2000 ký tự.");
+
+        var reason = request.Reason.Trim();
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
+
+        var (replayed, existingOutcome, requestId, fingerprint) = await TryReplayScrum99InboxAsync<IncidentDto>(
+            conn, tx, $"ReopenIncident:{lotId}:{incidentId}:{actorId}", "ReopenIncident", request, key, ct);
+        if (replayed)
+        {
+            await tx.CommitAsync(ct);
+            return existingOutcome!;
+        }
 
         string currentStatus;
         int currentVersion;
@@ -530,30 +760,62 @@ public sealed partial class ParkingRepository
             histCmd.Parameters.AddWithValue("incidentId", incidentId);
             histCmd.Parameters.AddWithValue("lotId", lotId);
             histCmd.Parameters.AddWithValue("actorId", actorId);
-            histCmd.Parameters.AddWithValue("reason", request.Reason.Trim());
+            histCmd.Parameters.AddWithValue("reason", reason);
             histCmd.Parameters.AddWithValue("now", now);
             await histCmd.ExecuteNonQueryAsync(ct);
         }
 
+        await AppendScrum99AuditLogAsync(
+            conn, tx, lotId, actorId,
+            action: "REOPEN_INCIDENT",
+            entityType: "PARKING_ISSUE",
+            entityId: incidentId.ToString(),
+            reason: reason,
+            requestId: requestId?.ToString(),
+            oldValues: new { status = currentStatus, version = currentVersion },
+            newValues: new { status = "Open", version = currentVersion + 1 },
+            now: now, ct: ct);
+
+        var updated = (await ReadIncidentByIdAsync(conn, tx, lotId, incidentId, ct))!;
+        await SaveScrum99InboxAsync(conn, tx, requestId, "ReopenIncident", fingerprint, updated, now, ct);
+
         await tx.CommitAsync(ct);
-        return (await GetIncidentByIdAsync(lotId, incidentId, ct))!;
+        return updated;
     }
 
+    public Task<IncidentDto> CancelIncidentAsync(
+        Guid lotId,
+        Guid incidentId,
+        Guid actorId,
+        CancelIncidentRequestDto request,
+        CancellationToken ct)
+        => CancelIncidentAsync(lotId, incidentId, actorId, request, null, ct);
+
     /// <summary>
-    /// Hủy sự cố (báo nhầm) và cập nhật trạng thái Cancelled kèm lý do trong lịch sử.
+    /// Hủy sự cố (báo nhầm) và cập nhật trạng thái Cancelled kèm lý do trong lịch sử, audit log và idempotency.
     /// </summary>
     public async Task<IncidentDto> CancelIncidentAsync(
         Guid lotId,
         Guid incidentId,
         Guid actorId,
         CancelIncidentRequestDto request,
+        string? key,
         CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(request.Reason))
-            throw new ServiceException(400, "Lý do hủy báo cáo sự cố (reason) là bắt buộc.");
+        if (string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Trim().Length > 2000)
+            throw new ServiceException(400, "Lý do hủy báo cáo sự cố (reason) là bắt buộc và tối đa 2000 ký tự.");
 
+        var reason = request.Reason.Trim();
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
+
+        var (replayed, existingOutcome, requestId, fingerprint) = await TryReplayScrum99InboxAsync<IncidentDto>(
+            conn, tx, $"CancelIncident:{lotId}:{incidentId}:{actorId}", "CancelIncident", request, key, ct);
+        if (replayed)
+        {
+            await tx.CommitAsync(ct);
+            return existingOutcome!;
+        }
 
         string currentStatus;
         int currentVersion;
@@ -608,43 +870,84 @@ public sealed partial class ParkingRepository
             histCmd.Parameters.AddWithValue("lotId", lotId);
             histCmd.Parameters.AddWithValue("fromStatus", currentStatus);
             histCmd.Parameters.AddWithValue("actorId", actorId);
-            histCmd.Parameters.AddWithValue("reason", request.Reason.Trim());
+            histCmd.Parameters.AddWithValue("reason", reason);
             histCmd.Parameters.AddWithValue("now", now);
             await histCmd.ExecuteNonQueryAsync(ct);
         }
 
+        await AppendScrum99AuditLogAsync(
+            conn, tx, lotId, actorId,
+            action: "CANCEL_INCIDENT",
+            entityType: "PARKING_ISSUE",
+            entityId: incidentId.ToString(),
+            reason: reason,
+            requestId: requestId?.ToString(),
+            oldValues: new { status = currentStatus, version = currentVersion },
+            newValues: new { status = "Cancelled", version = currentVersion + 1 },
+            now: now, ct: ct);
+
+        var updated = (await ReadIncidentByIdAsync(conn, tx, lotId, incidentId, ct))!;
+        await SaveScrum99InboxAsync(conn, tx, requestId, "CancelIncident", fingerprint, updated, now, ct);
+
         await tx.CommitAsync(ct);
-        return (await GetIncidentByIdAsync(lotId, incidentId, ct))!;
+        return updated;
     }
 
+    public Task<IncidentExitDecisionDto> CreateIncidentDecisionAsync(
+        Guid lotId,
+        Guid incidentId,
+        Guid actorId,
+        CreateIncidentDecisionRequestDto request,
+        CancellationToken ct)
+        => CreateIncidentDecisionAsync(lotId, incidentId, actorId, request, null, ct);
+
     /// <summary>
-    /// Ban hành quyết định xử lý ngoại lệ xuất bãi (Approved/Rejected) kèm chứng cứ đối chiếu và tăng version.
+    /// Ban hành quyết định xử lý ngoại lệ xuất bãi (Approved/Rejected) kèm chứng cứ đối chiếu, audit log và idempotency.
     /// </summary>
     public async Task<IncidentExitDecisionDto> CreateIncidentDecisionAsync(
         Guid lotId,
         Guid incidentId,
         Guid actorId,
         CreateIncidentDecisionRequestDto request,
+        string? key,
         CancellationToken ct)
     {
-        var validDecisions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Approved", "Rejected" };
-        if (!validDecisions.Contains(request.Decision))
+        var decision = string.Equals(request.Decision?.Trim(), "Approved", StringComparison.OrdinalIgnoreCase)
+            ? "Approved"
+            : string.Equals(request.Decision?.Trim(), "Rejected", StringComparison.OrdinalIgnoreCase)
+                ? "Rejected"
+                : null;
+        if (decision is null)
             throw new ServiceException(400, "Decision must be either 'Approved' or 'Rejected'.");
-        if (string.IsNullOrWhiteSpace(request.Reason))
-            throw new ServiceException(400, "Reason is required for incident decision.");
+        if (string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Trim().Length > 2000)
+            throw new ServiceException(400, "Reason is required for incident decision and must not exceed 2000 characters.");
 
-        var isApproved = string.Equals(request.Decision, "Approved", StringComparison.OrdinalIgnoreCase);
-        if (isApproved && (request.Evidence is null || request.Evidence.Count == 0))
+        var evidenceList = request.Evidence ?? (IReadOnlyList<IncidentEvidenceDto>)Array.Empty<IncidentEvidenceDto>();
+        if (!IncidentEvidenceRules.AreAllItemsValid(evidenceList))
+            throw new ServiceException(400, "Each evidence item must specify a valid kind and a safe non-base64 reference (max 2048 chars).");
+
+        var isApproved = decision == "Approved";
+        if (isApproved && !IncidentEvidenceRules.HasApprovedExitEvidence(evidenceList))
         {
-            throw new ServiceException(400, "Quyết định phê duyệt ngoại lệ (Approved) bắt buộc phải có chứng cứ kèm theo (camera, giấy tờ xe).");
+            throw new ServiceException(400, "Quyết định phê duyệt ngoại lệ (Approved) bắt buộc phải có chứng cứ camera và giấy tờ xe.");
         }
 
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
 
+        var (replayed, existingOutcome, requestId, fingerprint) = await TryReplayScrum99InboxAsync<IncidentExitDecisionDto>(
+            conn, tx, $"CreateIncidentDecision:{lotId}:{incidentId}:{actorId}", "CreateIncidentDecision", request, key, ct);
+        if (replayed)
+        {
+            await tx.CommitAsync(ct);
+            return existingOutcome!;
+        }
+
+        string currentStatus;
         int currentVersion;
+        bool hasBooking;
         await using (var lockCmd = new NpgsqlCommand("""
-            SELECT version FROM parking_issues
+            SELECT status, version, booking_id FROM parking_issues
             WHERE lot_id = @lotId AND id = @incidentId
             FOR UPDATE
             """, conn, tx))
@@ -654,8 +957,16 @@ public sealed partial class ParkingRepository
             await using var r = await lockCmd.ExecuteReaderAsync(ct);
             if (!await r.ReadAsync(ct))
                 throw new ServiceException(404, "Sự cố không tồn tại.");
-            currentVersion = r.GetInt32(0);
+            currentStatus = r.GetString(0);
+            currentVersion = r.GetInt32(1);
+            hasBooking = !r.IsDBNull(2);
         }
+
+        if (string.Equals(currentStatus, "Cancelled", StringComparison.OrdinalIgnoreCase))
+            throw new ServiceException(409, "Không thể ban hành quyết định cho sự cố đã bị hủy bỏ (Cancelled).");
+
+        if (isApproved && !IncidentEvidenceRules.HasApprovedExitEvidence(evidenceList, requireCameraTimestamp: hasBooking))
+            throw new ServiceException(400, "Sự cố có liên kết booking bắt buộc phải có chứng cứ camera kèm thời điểm chụp (capturedAt).");
 
         if (currentVersion != request.ExpectedVersion)
             throw new ServiceException(409, $"Xung đột dữ liệu: Phiên bản hiện tại là {currentVersion}, mong muốn {request.ExpectedVersion}.");
@@ -663,13 +974,13 @@ public sealed partial class ParkingRepository
         var now = clock.GetUtcNow();
         var newVersion = currentVersion + 1;
         var decisionId = Guid.NewGuid();
-        var evidenceList = request.Evidence ?? (IReadOnlyList<IncidentEvidenceDto>)Array.Empty<IncidentEvidenceDto>();
+        var reason = request.Reason.Trim();
 
         var decisionDto = new IncidentExitDecisionDto(
             DecisionId: decisionId,
             IncidentId: incidentId,
-            Decision: request.Decision,
-            Reason: request.Reason.Trim(),
+            Decision: decision,
+            Reason: reason,
             DecidedByUserId: actorId,
             DecidedAt: now,
             Evidence: evidenceList,
@@ -693,6 +1004,7 @@ public sealed partial class ParkingRepository
             await updateCmd.ExecuteNonQueryAsync(ct);
         }
 
+        var decisionAction = $"DECISION_{decision.ToUpperInvariant()}";
         await using (var histCmd = new NpgsqlCommand("""
             INSERT INTO incident_history (
                 id, incident_id, lot_id, action, from_status, to_status, performed_by_user_id, reason, performed_at
@@ -703,12 +1015,25 @@ public sealed partial class ParkingRepository
         {
             histCmd.Parameters.AddWithValue("incidentId", incidentId);
             histCmd.Parameters.AddWithValue("lotId", lotId);
-            histCmd.Parameters.AddWithValue("action", $"DECISION_{request.Decision.ToUpperInvariant()}");
+            histCmd.Parameters.AddWithValue("action", decisionAction);
             histCmd.Parameters.AddWithValue("actorId", actorId);
-            histCmd.Parameters.AddWithValue("reason", request.Reason.Trim());
+            histCmd.Parameters.AddWithValue("reason", reason);
             histCmd.Parameters.AddWithValue("now", now);
             await histCmd.ExecuteNonQueryAsync(ct);
         }
+
+        await AppendScrum99AuditLogAsync(
+            conn, tx, lotId, actorId,
+            action: $"INCIDENT_{decisionAction}",
+            entityType: "PARKING_ISSUE",
+            entityId: incidentId.ToString(),
+            reason: reason,
+            requestId: requestId?.ToString(),
+            oldValues: new { version = currentVersion },
+            newValues: new { decisionId, decision, evidenceCount = evidenceList.Count, version = newVersion },
+            now: now, ct: ct);
+
+        await SaveScrum99InboxAsync(conn, tx, requestId, "CreateIncidentDecision", fingerprint, decisionDto, now, ct);
 
         await tx.CommitAsync(ct);
         return decisionDto;

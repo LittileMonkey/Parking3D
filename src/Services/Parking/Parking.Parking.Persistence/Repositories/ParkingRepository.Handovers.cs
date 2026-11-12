@@ -40,27 +40,12 @@ public sealed partial class ParkingRepository
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
 
-        Guid? requestId = null;
-        string? fingerprint = null;
-        if (!string.IsNullOrWhiteSpace(key))
+        var (replayed, existingOutcome, requestId, fingerprint) = await TryReplayScrum99InboxAsync<ShiftHandoverDto>(
+            conn, tx, $"CreateShiftHandover:{lotId}:{actorId}", "CreateShiftHandover", request, key, ct);
+        if (replayed)
         {
-            if (key.Length > 128) throw new ServiceException(400, "Idempotency-Key must not exceed 128 characters.");
-            requestId = new Guid(SHA256.HashData(Encoding.UTF8.GetBytes(actorId + ":handover:" + key)).AsSpan(0, 16));
-            fingerprint = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request, JsonOptions))));
-
-            await using var lockCmd = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended(@key,0))", conn, tx);
-            lockCmd.Parameters.AddWithValue("key", actorId + ":handover:" + key);
-            await lockCmd.ExecuteNonQueryAsync(ct);
-
-            await using var inboxCmd = new NpgsqlCommand("SELECT payload_hash, outcome FROM integration_inbox WHERE event_id=@id AND event_type='CreateShiftHandover'", conn, tx);
-            inboxCmd.Parameters.AddWithValue("id", requestId.Value);
-            await using var r = await inboxCmd.ExecuteReaderAsync(ct);
-            if (await r.ReadAsync(ct))
-            {
-                if (r.GetString(0) != fingerprint)
-                    throw new ServiceException(409, "Idempotency key reused for a different handover payload.");
-                return JsonSerializer.Deserialize<ShiftHandoverDto>(r.GetString(1), JsonOptions)!;
-            }
+            await tx.CommitAsync(ct);
+            return existingOutcome!;
         }
 
         var handoverId = Guid.NewGuid();
@@ -111,6 +96,17 @@ public sealed partial class ParkingRepository
             await histCmd.ExecuteNonQueryAsync(ct);
         }
 
+        await AppendScrum99AuditLogAsync(
+            conn, tx, lotId, actorId,
+            action: "CREATE_SHIFT_HANDOVER",
+            entityType: "SHIFT_HANDOVER",
+            entityId: handoverId.ToString(),
+            reason: null,
+            requestId: requestId?.ToString(),
+            oldValues: null,
+            newValues: new { senderShiftId = request.SenderShiftId, receiverShiftId = request.ReceiverShiftId, receiverUserId = request.ReceiverUserId, status = "PendingConfirmation", version = 1 },
+            now: now, ct: ct);
+
         var result = new ShiftHandoverDto(
             HandoverId: handoverId,
             LotId: lotId,
@@ -130,19 +126,7 @@ public sealed partial class ParkingRepository
             Version: 1
         );
 
-        if (requestId.HasValue && fingerprint is not null)
-        {
-            await using var saveInbox = new NpgsqlCommand("""
-                INSERT INTO integration_inbox(event_id, event_type, payload_hash, outcome, received_at)
-                VALUES (@id, 'CreateShiftHandover', @hash, @outcome, @now)
-                ON CONFLICT (event_id) DO NOTHING
-                """, conn, tx);
-            saveInbox.Parameters.AddWithValue("id", requestId.Value);
-            saveInbox.Parameters.AddWithValue("hash", fingerprint);
-            saveInbox.Parameters.AddWithValue("outcome", JsonSerializer.Serialize(result, JsonOptions));
-            saveInbox.Parameters.AddWithValue("now", now);
-            await saveInbox.ExecuteNonQueryAsync(ct);
-        }
+        await SaveScrum99InboxAsync(conn, tx, requestId, "CreateShiftHandover", fingerprint, result, now, ct);
 
         await tx.CommitAsync(ct);
         return result;
@@ -239,13 +223,25 @@ public sealed partial class ParkingRepository
         CancellationToken ct)
     {
         await using var conn = await db.OpenConnectionAsync(ct);
+        return await ReadShiftHandoverByIdAsync(conn, null, lotId, handoverId, actorId, isManager, ct);
+    }
+
+    private static async Task<ShiftHandoverDto?> ReadShiftHandoverByIdAsync(
+        NpgsqlConnection conn,
+        NpgsqlTransaction? tx,
+        Guid lotId,
+        Guid handoverId,
+        Guid actorId,
+        bool isManager,
+        CancellationToken ct)
+    {
         await using var cmd = new NpgsqlCommand("""
             SELECT id, lot_id, sender_shift_id, receiver_shift_id, sender_user_id, receiver_user_id,
                    completed_tasks, unresolved_issues, pending_transactions, equipment_status, notes_for_next,
                    status, created_at, confirmed_at, confirmed_by_user_id, version
             FROM shift_handovers
             WHERE lot_id = @lotId AND id = @handoverId
-            """, conn);
+            """, conn, tx);
         cmd.Parameters.AddWithValue("lotId", lotId);
         cmd.Parameters.AddWithValue("handoverId", handoverId);
 
@@ -281,7 +277,7 @@ public sealed partial class ParkingRepository
     }
 
     /// <summary>
-    /// Nhân viên nhận ca xác nhận hoàn tất nhận ca (Handshake), khóa dòng FOR UPDATE và ghi lịch sử.
+    /// Nhân viên nhận ca xác nhận hoàn tất nhận ca (Handshake), khóa dòng FOR UPDATE, ghi audit log và idempotency.
     /// </summary>
     public async Task<ShiftHandoverDto> ConfirmShiftHandoverAsync(
         Guid lotId,
@@ -293,6 +289,14 @@ public sealed partial class ParkingRepository
     {
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
+
+        var (replayed, existingOutcome, requestId, fingerprint) = await TryReplayScrum99InboxAsync<ShiftHandoverDto>(
+            conn, tx, $"ConfirmShiftHandover:{lotId}:{handoverId}:{actorId}", "ConfirmShiftHandover", request, key, ct);
+        if (replayed)
+        {
+            await tx.CommitAsync(ct);
+            return existingOutcome!;
+        }
 
         Guid receiverUserId;
         string status;
@@ -322,13 +326,16 @@ public sealed partial class ParkingRepository
             throw new ServiceException(403, "Chỉ nhân viên được chỉ định nhận ca mới có quyền xác nhận nhận ca.");
         }
 
+        var now = clock.GetUtcNow();
         if (string.Equals(status, "Confirmed", StringComparison.OrdinalIgnoreCase))
         {
             if (confirmedBy == actorId)
             {
-                // Idempotent retry: return existing confirmed handover
-                await tx.RollbackAsync(ct);
-                return (await GetShiftHandoverByIdAsync(lotId, handoverId, actorId, isManager: true, ct))!;
+                // Idempotent repeat confirmation by same receiver: return existing without changing version or adding audit.
+                var existing = (await ReadShiftHandoverByIdAsync(conn, tx, lotId, handoverId, actorId, isManager: true, ct))!;
+                await SaveScrum99InboxAsync(conn, tx, requestId, "ConfirmShiftHandover", fingerprint, existing, now, ct);
+                await tx.CommitAsync(ct);
+                return existing;
             }
             throw new ServiceException(409, "Biên bản bàn giao ca này đã được xác nhận trước đó.");
         }
@@ -342,8 +349,6 @@ public sealed partial class ParkingRepository
         {
             throw new ServiceException(409, $"Xung đột dữ liệu: Phiên bản hiện tại là {version}, mong muốn {request.ExpectedVersion}.");
         }
-
-        var now = clock.GetUtcNow();
 
         await using (var updateCmd = new NpgsqlCommand("""
             UPDATE shift_handovers
@@ -378,27 +383,59 @@ public sealed partial class ParkingRepository
             await histCmd.ExecuteNonQueryAsync(ct);
         }
 
+        await AppendScrum99AuditLogAsync(
+            conn, tx, lotId, actorId,
+            action: "CONFIRM_SHIFT_HANDOVER",
+            entityType: "SHIFT_HANDOVER",
+            entityId: handoverId.ToString(),
+            reason: null,
+            requestId: requestId?.ToString(),
+            oldValues: new { status = "PendingConfirmation", version },
+            newValues: new { status = "Confirmed", confirmedByUserId = actorId, version = version + 1 },
+            now: now, ct: ct);
+
+        var confirmed = (await ReadShiftHandoverByIdAsync(conn, tx, lotId, handoverId, actorId, isManager: true, ct))!;
+        await SaveScrum99InboxAsync(conn, tx, requestId, "ConfirmShiftHandover", fingerprint, confirmed, now, ct);
+
         await tx.CommitAsync(ct);
-        return (await GetShiftHandoverByIdAsync(lotId, handoverId, actorId, isManager: true, ct))!;
+        return confirmed;
     }
 
+    public Task<ShiftHandoverDto> ReassignReceiverAsync(
+        Guid lotId,
+        Guid handoverId,
+        Guid actorId,
+        ReassignReceiverRequestDto request,
+        CancellationToken ct)
+        => ReassignReceiverAsync(lotId, handoverId, actorId, request, null, ct);
+
     /// <summary>
-    /// Quản lý chỉ định lại nhân viên nhận ca khi người cũ vắng mặt hoặc bị khóa, cập nhật version và lưu lịch sử.
+    /// Quản lý chỉ định lại nhân viên nhận ca khi người cũ vắng mặt hoặc bị khóa, cập nhật version, ghi lịch sử, audit log và idempotency.
     /// </summary>
     public async Task<ShiftHandoverDto> ReassignReceiverAsync(
         Guid lotId,
         Guid handoverId,
         Guid actorId,
         ReassignReceiverRequestDto request,
+        string? key,
         CancellationToken ct)
     {
         if (request.ReceiverUserId == Guid.Empty)
             throw new ServiceException(400, "Valid receiverUserId is required.");
-        if (string.IsNullOrWhiteSpace(request.Reason))
-            throw new ServiceException(400, "Lý do thay đổi người nhận ca (reason) là bắt buộc.");
+        if (string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Trim().Length > 2000)
+            throw new ServiceException(400, "Lý do thay đổi người nhận ca (reason) là bắt buộc và tối đa 2000 ký tự.");
 
+        var reason = request.Reason.Trim();
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
+
+        var (replayed, existingOutcome, requestId, fingerprint) = await TryReplayScrum99InboxAsync<ShiftHandoverDto>(
+            conn, tx, $"ReassignShiftHandoverReceiver:{lotId}:{handoverId}:{actorId}", "ReassignShiftHandoverReceiver", request, key, ct);
+        if (replayed)
+        {
+            await tx.CommitAsync(ct);
+            return existingOutcome!;
+        }
 
         Guid senderUserId;
         Guid oldReceiverUserId;
@@ -473,12 +510,26 @@ public sealed partial class ParkingRepository
             histCmd.Parameters.AddWithValue("oldReceiver", oldReceiverUserId);
             histCmd.Parameters.AddWithValue("newReceiver", request.ReceiverUserId);
             histCmd.Parameters.AddWithValue("actorId", actorId);
-            histCmd.Parameters.AddWithValue("reason", request.Reason.Trim());
+            histCmd.Parameters.AddWithValue("reason", reason);
             histCmd.Parameters.AddWithValue("now", now);
             await histCmd.ExecuteNonQueryAsync(ct);
         }
 
+        await AppendScrum99AuditLogAsync(
+            conn, tx, lotId, actorId,
+            action: "REASSIGN_SHIFT_HANDOVER_RECEIVER",
+            entityType: "SHIFT_HANDOVER",
+            entityId: handoverId.ToString(),
+            reason: reason,
+            requestId: requestId?.ToString(),
+            oldValues: new { receiverUserId = oldReceiverUserId, version },
+            newValues: new { receiverUserId = request.ReceiverUserId, version = version + 1 },
+            now: now, ct: ct);
+
+        var updated = (await ReadShiftHandoverByIdAsync(conn, tx, lotId, handoverId, actorId, isManager: true, ct))!;
+        await SaveScrum99InboxAsync(conn, tx, requestId, "ReassignShiftHandoverReceiver", fingerprint, updated, now, ct);
+
         await tx.CommitAsync(ct);
-        return (await GetShiftHandoverByIdAsync(lotId, handoverId, actorId, isManager: true, ct))!;
+        return updated;
     }
 }

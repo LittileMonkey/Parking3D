@@ -45,8 +45,10 @@ public sealed partial class ParkingRepository
             connection, transaction, lotId, levelId, type, start, end, now, levels, ct);
 
         // Tính trên chính tập ô đã lọc; không dùng tổng sức chứa của toàn bãi.
+        // Khi lọc theo loại xe toàn bãi, ẩn các tầng không có ô khớp để tránh mở nhầm tab rỗng.
         var slots = levels.Values.SelectMany(level => level.Slots).ToArray();
         var resultLevels = levels.Values
+            .Where(level => levelId is not null || type is null || level.Slots.Count > 0)
             .OrderBy(level => level.DisplayOrder)
             .ThenBy(level => level.Code)
             .Select(level => new LevelAvailabilityItemDto(
@@ -280,6 +282,7 @@ public sealed partial class ParkingRepository
                   OR (r.status='CONFIRMED' AND b.status IN ('CONFIRMED','CHECKED_IN'))))
             FROM parking_slots s JOIN zones z ON z.id=s.zone_id AND z.lot_id=s.lot_id
             WHERE s.lot_id=@lot AND (@level IS NULL OR s.level_id=@level)
+              AND (s.operational_status <> 'DISABLED' OR EXISTS(SELECT 1 FROM session_slot_assignments a WHERE a.slot_id=s.id AND a.vacated_at IS NULL))
               AND (@type IS NULL OR EXISTS(SELECT 1 FROM slot_vehicle_types v
                 WHERE v.slot_id=s.id AND v.lot_id=s.lot_id AND v.vehicle_type=@type))
             ORDER BY s.code,s.id

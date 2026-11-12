@@ -7,35 +7,75 @@ using Parking.ServiceDefaults;
 
 namespace Parking.Parking.Infrastructure;
 
-public sealed class OccupancyWorker(NpgsqlDataSource db,OccupancyIngestion.OccupancyIngestionClient client,IConfiguration config,ILogger<OccupancyWorker> logger) : BackgroundService
+public sealed class OccupancyWorker(
+    NpgsqlDataSource db,
+    OccupancyIngestion.OccupancyIngestionClient client,
+    IConfiguration config,
+    ILogger<OccupancyWorker> logger,
+    TimeProvider? timeProvider = null) : BackgroundService
 {
+    private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
+
+    /// <summary>Thu thập snapshot công suất theo thời điểm của TimeProvider và bỏ qua các hold đã hết hạn.</summary>
+    public async Task<IReadOnlyList<OccupancySnapshotRequest>> CollectSnapshotsAsync(CancellationToken ct = default)
+    {
+        var now = _clock.GetUtcNow();
+        var snapshots = new List<OccupancySnapshotRequest>();
+        await using (var cmd = db.CreateCommand("""
+            SELECT p.lot_id, p.vehicle_type, count(s.id)::int,
+            count(s.id) FILTER (WHERE EXISTS (
+                SELECT 1 FROM session_slot_assignments a
+                WHERE a.slot_id = s.id AND a.vacated_at IS NULL))::int,
+            count(s.id) FILTER (WHERE NOT EXISTS (
+                SELECT 1 FROM session_slot_assignments a
+                WHERE a.slot_id = s.id AND a.vacated_at IS NULL)
+              AND EXISTS (
+                SELECT 1 FROM slot_reservations r
+                JOIN bookings b ON b.id = r.booking_id
+                WHERE r.slot_id = s.id
+                  AND r.starts_at <= @now AND @now < r.ends_at
+                  AND (
+                      (r.status = 'HELD' AND b.status = 'PENDING_PAYMENT' AND b.hold_expires_at > @now)
+                      OR (r.status = 'CONFIRMED' AND b.status IN ('CONFIRMED', 'CHECKED_IN'))
+                  )))::int
+            FROM lot_vehicle_policies p
+            LEFT JOIN slot_vehicle_types v ON v.lot_id = p.lot_id AND v.vehicle_type = p.vehicle_type
+            LEFT JOIN parking_slots s ON s.id = v.slot_id AND s.operational_status = 'ACTIVE'
+            GROUP BY p.lot_id, p.vehicle_type
+            """))
+        {
+            cmd.Parameters.AddWithValue("now", now.UtcDateTime);
+            var observedAt = now.ToUnixTimeSeconds();
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                snapshots.Add(new OccupancySnapshotRequest
+                {
+                    LotId = r.GetGuid(0).ToString(),
+                    VehicleType = r.GetString(1),
+                    UsableCapacity = r.GetInt32(2),
+                    OccupiedCount = r.GetInt32(3),
+                    ReservedCount = r.GetInt32(4),
+                    ObservedAtUnixSeconds = observedAt
+                });
+            }
+        }
+        return snapshots;
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer=new PeriodicTimer(TimeSpan.FromSeconds(60));
-        while(await timer.WaitForNextTickAsync(stoppingToken))
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(60));
+        while (await timer.WaitForNextTickAsync(stoppingToken))
         {
             try
             {
-                var snapshots=new List<OccupancySnapshotRequest>();
-                await using(var cmd=db.CreateCommand("""
-                    SELECT p.lot_id,p.vehicle_type,count(s.id)::int,
-                    count(s.id) FILTER(WHERE EXISTS(SELECT 1 FROM session_slot_assignments a WHERE a.slot_id=s.id AND a.vacated_at IS NULL))::int,
-                    count(s.id) FILTER(WHERE NOT EXISTS(SELECT 1 FROM session_slot_assignments a WHERE a.slot_id=s.id AND a.vacated_at IS NULL)
-                      AND EXISTS(SELECT 1 FROM slot_reservations r WHERE r.slot_id=s.id AND r.status IN ('HELD','CONFIRMED')
-                        AND r.starts_at<=now() AND now()<r.ends_at AND (r.status='CONFIRMED' OR EXISTS(SELECT 1 FROM bookings b WHERE b.id=r.booking_id AND b.hold_expires_at>now()))))::int
-                    FROM lot_vehicle_policies p LEFT JOIN slot_vehicle_types v ON v.lot_id=p.lot_id AND v.vehicle_type=p.vehicle_type
-                    LEFT JOIN parking_slots s ON s.id=v.slot_id AND s.operational_status='ACTIVE'
-                    GROUP BY p.lot_id,p.vehicle_type
-                    """))
-                {
-                    await using var r=await cmd.ExecuteReaderAsync(stoppingToken);
-                    while(await r.ReadAsync(stoppingToken))snapshots.Add(new OccupancySnapshotRequest{LotId=r.GetGuid(0).ToString(),VehicleType=r.GetString(1),
-                        UsableCapacity=r.GetInt32(2),OccupiedCount=r.GetInt32(3),ReservedCount=r.GetInt32(4),ObservedAtUnixSeconds=DateTimeOffset.UtcNow.ToUnixTimeSeconds()});
-                }
-                foreach(var snapshot in snapshots)await client.RecordSnapshotAsync(snapshot,headers:GrpcHeaders.For(config),deadline:DateTime.UtcNow.AddSeconds(5),cancellationToken:stoppingToken);
+                var snapshots = await CollectSnapshotsAsync(stoppingToken);
+                foreach (var snapshot in snapshots)
+                    await client.RecordSnapshotAsync(snapshot, headers: GrpcHeaders.For(config), deadline: DateTime.UtcNow.AddSeconds(5), cancellationToken: stoppingToken);
             }
-            catch(OperationCanceledException) when(stoppingToken.IsCancellationRequested){break;}
-            catch(Exception e){logger.LogWarning("Snapshot collection/delivery failed: {Type}",e.GetType().Name);}
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            catch (Exception e) { logger.LogWarning("Snapshot collection/delivery failed: {Type}", e.GetType().Name); }
         }
     }
 }

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Npgsql;
 using NpgsqlTypes;
+using Parking.Parking.Application;
 using Parking.Parking.Application.DTOs;
 using Parking.Parking.Domain;
 using Parking.ServiceDefaults;
@@ -88,35 +89,136 @@ public sealed partial class ParkingRepository
         await command.ExecuteNonQueryAsync(ct);
     }
 
+    private static string ValidateIdempotencyKey(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key) || key.Trim().Length > 128)
+            throw new ServiceException(400, "Valid Idempotency-Key required.");
+        return key.Trim();
+    }
+
     private static string CheckOutFingerprint(ConfirmCheckOutRequestDto request)
         => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request))));
     private static Guid CheckOutRequestId(Guid actor, string key)
-        => new(SHA256.HashData(Encoding.UTF8.GetBytes($"CheckOut:{actor}:{key}")).AsSpan(0,16));
+        => new(SHA256.HashData(Encoding.UTF8.GetBytes($"CheckOut:{actor}:{key.Trim()}")).AsSpan(0,16));
 
     private static Guid AuthorizationRequestId(Guid actor,string key)
-        =>new(SHA256.HashData(Encoding.UTF8.GetBytes($"AuthorizeExit:{actor}:{key}")).AsSpan(0,16));
+        =>new(SHA256.HashData(Encoding.UTF8.GetBytes($"AuthorizeExit:{actor}:{key.Trim()}")).AsSpan(0,16));
+
+    public async Task<AuthorizeCheckOutResultDto?> GetCheckOutAuthorizationReplayAsync(Guid actorId,
+        ConfirmCheckOutRequestDto request, string key, CancellationToken ct)
+    {
+        var normalizedKey = ValidateIdempotencyKey(key);
+        var id = AuthorizationRequestId(actorId, normalizedKey);
+        var fingerprint = CheckOutFingerprint(request);
+        await using var read = db.CreateCommand("""
+            SELECT event_type, payload_hash, outcome,
+                   (received_at <= clock_timestamp() - interval '2 minutes') AS is_stale
+            FROM integration_inbox
+            WHERE event_id = @id;
+            """);
+        read.Parameters.AddWithValue("id", id);
+        await using var reader = await read.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) return null;
+        if (reader.GetString(0) != "CheckOutAuthorization" || reader.GetString(1) != fingerprint)
+            throw new ServiceException(409, "Authorization key reused for another request.");
+        var outcome = reader.GetString(2);
+        if (outcome == "PENDING")
+        {
+            if (!reader.GetBoolean(3))
+                throw new ServiceException(409, "Checkout authorization with this Idempotency-Key is already in progress.");
+            return null;
+        }
+        return JsonSerializer.Deserialize<AuthorizeCheckOutResultDto>(outcome)!;
+    }
 
     public async Task<AuthorizeCheckOutResultDto?> ClaimCheckOutAuthorizationAsync(Guid actorId,
         ConfirmCheckOutRequestDto request,string key,CancellationToken ct)
     {
-        if(string.IsNullOrWhiteSpace(key)||key.Length>128)throw new ServiceException(400,"Valid Idempotency-Key required.");
-        var id=AuthorizationRequestId(actorId,key);var fingerprint=CheckOutFingerprint(request);
-        await using(var insert=db.CreateCommand("INSERT INTO integration_inbox(event_id,event_type,payload_hash,outcome) VALUES(@id,'CheckOutAuthorization',@hash,'PENDING') ON CONFLICT(event_id) DO NOTHING"))
+        var normalizedKey = ValidateIdempotencyKey(key);
+        var id = AuthorizationRequestId(actorId, normalizedKey);
+        var fingerprint = CheckOutFingerprint(request);
+        await using var connection = await db.OpenConnectionAsync(ct);
+        await using var tx = await connection.BeginTransactionAsync(ct);
+        await using (var lockCmd = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended(@lockKey,0))", connection, tx))
         {
-            insert.Parameters.AddWithValue("id",id);insert.Parameters.AddWithValue("hash",fingerprint);
-            await insert.ExecuteNonQueryAsync(ct);
+            lockCmd.Parameters.AddWithValue("lockKey", $"AuthorizeExit:{actorId}:{normalizedKey}");
+            await lockCmd.ExecuteNonQueryAsync(ct);
         }
-        await using var read=db.CreateCommand("SELECT payload_hash,outcome FROM integration_inbox WHERE event_id=@id AND event_type='CheckOutAuthorization'");
-        read.Parameters.AddWithValue("id",id);await using var reader=await read.ExecuteReaderAsync(ct);
-        if(!await reader.ReadAsync(ct)||reader.GetString(0)!=fingerprint)
-            throw new ServiceException(409,"Authorization key reused for another request.");
-        return reader.GetString(1)=="PENDING"?null:JsonSerializer.Deserialize<AuthorizeCheckOutResultDto>(reader.GetString(1))!;
+
+        string? existingType = null;
+        string? existingHash = null;
+        string? existingOutcome = null;
+        bool isStale = false;
+        await using (var read = new NpgsqlCommand("""
+            SELECT event_type, payload_hash, outcome,
+                   (received_at <= clock_timestamp() - interval '2 minutes') AS is_stale
+            FROM integration_inbox
+            WHERE event_id = @id
+            FOR UPDATE;
+            """, connection, tx))
+        {
+            read.Parameters.AddWithValue("id", id);
+            await using var reader = await read.ExecuteReaderAsync(ct);
+            if (await reader.ReadAsync(ct))
+            {
+                existingType = reader.GetString(0);
+                existingHash = reader.GetString(1);
+                existingOutcome = reader.GetString(2);
+                isStale = reader.GetBoolean(3);
+            }
+        }
+
+        if (existingOutcome is null)
+        {
+            await using var insert = new NpgsqlCommand("""
+                INSERT INTO integration_inbox(event_id, event_type, payload_hash, received_at, outcome)
+                VALUES(@id, 'CheckOutAuthorization', @hash, clock_timestamp(), 'PENDING');
+                """, connection, tx);
+            insert.Parameters.AddWithValue("id", id);
+            insert.Parameters.AddWithValue("hash", fingerprint);
+            await insert.ExecuteNonQueryAsync(ct);
+            await tx.CommitAsync(ct);
+            return null;
+        }
+
+        if (existingType != "CheckOutAuthorization" || existingHash != fingerprint)
+            throw new ServiceException(409, "Authorization key reused for another request.");
+
+        if (existingOutcome != "PENDING")
+        {
+            await tx.CommitAsync(ct);
+            return JsonSerializer.Deserialize<AuthorizeCheckOutResultDto>(existingOutcome)!;
+        }
+
+        if (!isStale)
+            throw new ServiceException(409, "Checkout authorization with this Idempotency-Key is already in progress.");
+
+        await using (var refresh = new NpgsqlCommand("UPDATE integration_inbox SET received_at = clock_timestamp() WHERE event_id = @id;", connection, tx))
+        {
+            refresh.Parameters.AddWithValue("id", id);
+            await refresh.ExecuteNonQueryAsync(ct);
+        }
+        await tx.CommitAsync(ct);
+        return null;
+    }
+
+    public async Task ReleaseCheckOutAuthorizationClaimAsync(Guid actorId, string key, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return;
+        var id = AuthorizationRequestId(actorId, key);
+        await using var cmd = db.CreateCommand("""
+            DELETE FROM integration_inbox
+            WHERE event_id = @id AND event_type = 'CheckOutAuthorization' AND outcome = 'PENDING';
+            """);
+        cmd.Parameters.AddWithValue("id", id);
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     public async Task<AuthorizeCheckOutResultDto> SaveCheckOutAuthorizationAsync(Guid actorId,
         ConfirmCheckOutRequestDto request,string key,AuthorizeCheckOutResultDto result,CancellationToken ct)
     {
-        var id=AuthorizationRequestId(actorId,key);
+        var normalizedKey = ValidateIdempotencyKey(key);
+        var id=AuthorizationRequestId(actorId,normalizedKey);
         await using var connection=await db.OpenConnectionAsync(ct);await using var tx=await connection.BeginTransactionAsync(ct);
         await using(var prior=new NpgsqlCommand("SELECT payload_hash,outcome FROM integration_inbox WHERE event_id=@id AND event_type='CheckOutAuthorization' FOR UPDATE",connection,tx))
         {

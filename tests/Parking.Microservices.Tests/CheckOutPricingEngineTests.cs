@@ -1,5 +1,5 @@
 using System;
-using Parking.Parking.Domain;
+using Parking.Parking.Application;
 using Parking.Pricing;
 using Xunit;
 
@@ -256,6 +256,48 @@ public class CheckOutPricingEngineTests
         Assert.Equal(0, fee);
     }
 
+    [Fact]
+    public void PreBooking_ShortBookingLessThanInitialBlock_ChargesSubsequentOvertimeBlocks()
+    {
+        // Đặt chỗ 30 phút (08:00 -> 08:30), nhỏ hơn initialBlockMinutes = 60.
+        // Xuất bãi 09:00 (trễ 30 phút -> 2 block 15p = 10.000đ).
+        var start = DateTimeOffset.Parse("2026-11-01T08:00:00+07:00");
+        var expectedExit = DateTimeOffset.Parse("2026-11-01T08:30:00+07:00");
+        var actualExit = expectedExit.AddMinutes(30);
+
+        var fee = CheckOutFee.Calculate(
+            hasBooking: true,
+            entryAt: start,
+            expectedExitAt: expectedExit,
+            pricedAt: actualExit,
+            rulesJson: FullPolicyJson,
+            timezone: VnTz.Id,
+            bookedStart: start);
+
+        Assert.Equal(10_000, fee);
+    }
+
+    [Fact]
+    public void PreBooking_EarlyMorningShortBookingCrossingMidnight_ChargesSubsequentOvertimeBlocks()
+    {
+        // Đặt chỗ 30 phút đầu ngày (00:10 -> 00:40), lùi 60p sẽ sang ngày hôm trước.
+        // Xuất bãi 00:55 (trễ 15 phút -> 1 block 15p = 5.000đ).
+        var start = DateTimeOffset.Parse("2026-11-01T00:10:00+07:00");
+        var expectedExit = DateTimeOffset.Parse("2026-11-01T00:40:00+07:00");
+        var actualExit = expectedExit.AddMinutes(15);
+
+        var fee = CheckOutFee.Calculate(
+            hasBooking: true,
+            entryAt: start,
+            expectedExitAt: expectedExit,
+            pricedAt: actualExit,
+            rulesJson: FullPolicyJson,
+            timezone: VnTz.Id,
+            bookedStart: start);
+
+        Assert.Equal(5_000, fee);
+    }
+
     #endregion
 
     #region 3. Khả năng tương thích ngược & Phân tích cấu hình (Backward Compatibility)
@@ -270,6 +312,22 @@ public class CheckOutPricingEngineTests
         Assert.Equal(15, policy.SubsequentBlockMinutes);
         Assert.Equal(5000, policy.SubsequentRateVnd);
         Assert.Equal(120_000, policy.DailyCapVnd);
+        Assert.Equal(1.0m, policy.PeakMultiplier);
+    }
+
+    [Fact]
+    public void ParsePolicy_FlatBlockLegacyWithoutMultiplier_DefaultsPeakMultiplierToOne()
+    {
+        const string legacyNoMultiplierJson = """
+            {
+                "blockMinutes": 15,
+                "rateVnd": 5000,
+                "dailyCapVnd": 120000
+            }
+            """;
+
+        var policy = CheckOutFee.ParsePolicy(legacyNoMultiplierJson);
+
         Assert.Equal(1.0m, policy.PeakMultiplier);
     }
 
