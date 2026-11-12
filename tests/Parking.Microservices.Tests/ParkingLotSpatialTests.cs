@@ -300,6 +300,7 @@ public class ParkingLotSpatialTests
         var second = await priceService.CalculateEstimatedFeeAsync(lotId, "CAR", start, 30);
 
         Assert.Equal(10_000, first.TotalFee);
+        Assert.True(first.HasPricing);
         Assert.Equal(first.TotalFee, second.TotalFee);
         Assert.Equal(1, repo.Calls);
 
@@ -309,8 +310,22 @@ public class ParkingLotSpatialTests
         var missing1 = await emptyPriceService.CalculateEstimatedFeeAsync(missingLotId, "CAR", start, 30);
         var missing2 = await emptyPriceService.CalculateEstimatedFeeAsync(missingLotId, "CAR", start, 30);
         Assert.Equal(0, missing1.TotalFee);
+        Assert.False(missing1.HasPricing);
         Assert.Equal(0, missing2.TotalFee);
+        Assert.False(missing2.HasPricing);
         Assert.Equal(2, emptyRepo.Calls);
+
+        var searchRepo = new FakeParkingLotRepository(
+            null,
+            [new ParkingLot { Id = missingLotId, Code = "NO-PRICE", Name = "No Price Lot", Status = "ACTIVE", AvailableSlots = 5 }]);
+        var searchHandler = new SearchParkingLotsQueryHandler(searchRepo, emptyPriceService);
+        var searchResult = await searchHandler.Handle(new SearchParkingLotsQuery
+        {
+            VehicleType = "CAR",
+            ExpectedDuration = 60,
+            SortBy = "CHEAPEST"
+        }, CancellationToken.None);
+        Assert.Empty(searchResult.Items);
     }
 
     // ==========================================
@@ -374,12 +389,14 @@ public class ParkingLotSpatialTests
         public Task SetAsync(string key, byte[] value, DistributedCacheEntryOptions options, CancellationToken token = default) => throw new TimeoutException("Redis down");
     }
 
-    private sealed class FakeParkingLotRepository((string Timezone, string ParametersJson)? config) : IParkingLotRepository
+    private sealed class FakeParkingLotRepository(
+        (string Timezone, string ParametersJson)? config,
+        List<ParkingLot>? lots = null) : IParkingLotRepository
     {
         public int Calls { get; private set; }
 
         public Task<List<ParkingLot>> GetAvailableLotsAsync(string vehicleType, CancellationToken cancellationToken = default)
-            => Task.FromResult(new List<ParkingLot>());
+            => Task.FromResult(lots ?? new List<ParkingLot>());
 
         public Task<(string Timezone, string ParametersJson)?> GetPricingRuleConfigAsync(
             Guid lotId,

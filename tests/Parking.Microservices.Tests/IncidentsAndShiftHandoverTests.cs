@@ -390,6 +390,28 @@ public class IncidentsAndShiftHandoverTests
         Assert.Equal(503, ex.StatusCode);
     }
 
+    [Fact]
+    public async Task GetShiftHandoverHistoryQueryHandler_ShouldRequireHandoverAccess_AndForwardManagerFlag()
+    {
+        var access = new StubFacilityAccess { AllowAccess = true };
+        access.DeniedCapabilities.Add("MANAGER");
+        var repo = new StubIncidentsRepository();
+        var handlers = new ShiftHandoverQueryHandlers(repo, access);
+        var lotId = Guid.NewGuid();
+        var handoverId = Guid.NewGuid();
+        var actorId = Guid.NewGuid();
+
+        var result = await handlers.Handle(
+            new GetShiftHandoverHistoryQuery(lotId, handoverId, actorId, 1, 10),
+            CancellationToken.None);
+
+        Assert.Contains("HANDOVER", access.CheckedCapabilities);
+        Assert.Contains("MANAGER", access.CheckedCapabilities);
+        Assert.False(repo.LastHistoryHandoverIsManager);
+        Assert.Single(result.Items);
+        Assert.Equal(handoverId, result.Items[0].HandoverId);
+    }
+
     // ==========================================
     // TEST DOUBLES / STUBS
     // ==========================================
@@ -421,6 +443,7 @@ public class IncidentsAndShiftHandoverTests
         public bool ConfirmHandoverCalled { get; private set; }
         public bool? LastListHandoversIsManager { get; private set; }
         public bool? LastGetHandoverIsManager { get; private set; }
+        public bool? LastHistoryHandoverIsManager { get; private set; }
 
         public Task<IncidentDto> CreateIncidentAsync(Guid lotId, Guid actorId, CreateIncidentRequestDto request, string? key, CancellationToken ct)
         {
@@ -529,6 +552,21 @@ public class IncidentsAndShiftHandoverTests
                 ConfirmedAt: null,
                 ConfirmedByUserId: null,
                 Version: 1));
+        }
+        public Task<PagedResult<ShiftHandoverHistoryItemDto>> GetShiftHandoverHistoryAsync(Guid lotId, Guid handoverId, Guid actorId, bool isManager, int page, int pageSize, CancellationToken ct)
+        {
+            LastHistoryHandoverIsManager = isManager;
+            var item = new ShiftHandoverHistoryItemDto(
+                Id: Guid.NewGuid(),
+                HandoverId: handoverId,
+                LotId: lotId,
+                Action: "CREATED",
+                OldReceiverUserId: null,
+                NewReceiverUserId: actorId,
+                PerformedByUserId: actorId,
+                Reason: "Khởi tạo biên bản bàn giao ca",
+                PerformedAt: DateTimeOffset.UtcNow.AddMinutes(-15));
+            return Task.FromResult(new PagedResult<ShiftHandoverHistoryItemDto>([item], page, pageSize, 1));
         }
         public Task<ShiftHandoverDto> ReassignReceiverAsync(Guid lotId, Guid handoverId, Guid actorId, ReassignReceiverRequestDto request, CancellationToken ct) => throw new NotImplementedException();
 

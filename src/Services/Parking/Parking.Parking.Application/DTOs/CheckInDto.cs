@@ -20,5 +20,6 @@ public sealed record CheckInResponseDto(
     DateTimeOffset EntryAt,
     string? SlotCode = null,
     string? VehicleType = null,
-    string? EntryMethod = null);
+    string? EntryMethod = null,
+    string? LevelName = null);
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -13,6 +13,7 @@ namespace Parking.Parking.Application.Interfaces
         public decimal TotalFee { get; set; }
         public string Currency { get; set; } = "VND";
         public string Details { get; set; } = string.Empty;
+        public bool HasPricing { get; set; } = true;
     }
     // Hợp đồng dịch vụ tính giá
     public interface IEstimatedPriceService

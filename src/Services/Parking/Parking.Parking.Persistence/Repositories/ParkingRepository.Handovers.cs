@@ -585,4 +585,88 @@ public sealed partial class ParkingRepository
         await tx.CommitAsync(ct);
         return updated;
     }
+
+    /// <summary>
+    /// Lấy lịch sử thao tác trên biên bản bàn giao ca (tạo mới, xác nhận, chỉ định lại người nhận).
+    /// </summary>
+    public async Task<PagedResult<ShiftHandoverHistoryItemDto>> GetShiftHandoverHistoryAsync(
+        Guid lotId,
+        Guid handoverId,
+        Guid actorId,
+        bool isManager,
+        int page,
+        int pageSize,
+        CancellationToken ct)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 25;
+        if (pageSize > 100) pageSize = 100;
+        var offset = (page - 1) * pageSize;
+
+        await using var conn = await db.OpenConnectionAsync(ct);
+
+        await using (var ownerCmd = new NpgsqlCommand("""
+            SELECT sender_user_id, receiver_user_id
+            FROM shift_handovers
+            WHERE lot_id = @lotId AND id = @handoverId
+            """, conn))
+        {
+            ownerCmd.Parameters.AddWithValue("lotId", lotId);
+            ownerCmd.Parameters.AddWithValue("handoverId", handoverId);
+            await using var ownerReader = await ownerCmd.ExecuteReaderAsync(ct);
+            if (!await ownerReader.ReadAsync(ct))
+                throw new ServiceException(404, "Biên bản bàn giao ca không tồn tại.");
+
+            var senderUserId = ownerReader.GetGuid(0);
+            var receiverUserId = ownerReader.GetGuid(1);
+            if (!isManager && actorId != senderUserId && actorId != receiverUserId)
+                throw new ServiceException(403, "Bạn không có quyền xem lịch sử bàn giao ca này.");
+        }
+
+        int totalCount;
+        await using (var countCmd = new NpgsqlCommand("""
+            SELECT COUNT(*)
+            FROM shift_handover_history
+            WHERE lot_id = @lotId AND handover_id = @handoverId
+            """, conn))
+        {
+            countCmd.Parameters.AddWithValue("lotId", lotId);
+            countCmd.Parameters.AddWithValue("handoverId", handoverId);
+            totalCount = Convert.ToInt32(await countCmd.ExecuteScalarAsync(ct));
+        }
+
+        var items = new List<ShiftHandoverHistoryItemDto>();
+        await using (var listCmd = new NpgsqlCommand("""
+            SELECT id, handover_id, lot_id, action, old_receiver_user_id, new_receiver_user_id,
+                   performed_by_user_id, reason, performed_at
+            FROM shift_handover_history
+            WHERE lot_id = @lotId AND handover_id = @handoverId
+            ORDER BY performed_at DESC, id DESC
+            LIMIT @limit OFFSET @offset
+            """, conn))
+        {
+            listCmd.Parameters.AddWithValue("lotId", lotId);
+            listCmd.Parameters.AddWithValue("handoverId", handoverId);
+            listCmd.Parameters.AddWithValue("limit", pageSize);
+            listCmd.Parameters.AddWithValue("offset", offset);
+
+            await using var r = await listCmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                items.Add(new ShiftHandoverHistoryItemDto(
+                    Id: r.GetGuid(0),
+                    HandoverId: r.GetGuid(1),
+                    LotId: r.GetGuid(2),
+                    Action: r.GetString(3),
+                    OldReceiverUserId: r.IsDBNull(4) ? null : r.GetGuid(4),
+                    NewReceiverUserId: r.IsDBNull(5) ? null : r.GetGuid(5),
+                    PerformedByUserId: r.GetGuid(6),
+                    Reason: r.IsDBNull(7) ? null : r.GetString(7),
+                    PerformedAt: r.GetFieldValue<DateTimeOffset>(8)
+                ));
+            }
+        }
+
+        return new PagedResult<ShiftHandoverHistoryItemDto>(items, page, pageSize, totalCount);
+    }
 }

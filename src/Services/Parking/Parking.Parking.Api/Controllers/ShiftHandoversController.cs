@@ -60,6 +60,22 @@ public sealed class ShiftHandoversController(ISender sender) : ControllerBase
     }
 
     /// <summary>
+    /// H3b: Xem lịch sử thao tác trên biên bản bàn giao ca trực (SCRUM-99).
+    /// </summary>
+    [HttpGet("{handoverId:guid}/history")]
+    public async Task<IActionResult> GetShiftHandoverHistory(
+        Guid lotId,
+        Guid handoverId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25,
+        CancellationToken ct = default)
+    {
+        var result = await sender.Send(new GetShiftHandoverHistoryQuery(
+            lotId, handoverId, User.Subject(), page, pageSize), ct);
+        return Ok(new ApiResponse<PagedResult<ShiftHandoverHistoryItemDto>>(result, true, 200, "Đã tải lịch sử bàn giao ca."));
+    }
+
+    /// <summary>
     /// H4: Nhân viên nhận ca xác nhận hoàn tất nhận ca trực (Handshake).
     /// </summary>
     [HttpPost("{handoverId:guid}/confirm")]

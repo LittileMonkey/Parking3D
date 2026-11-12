@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference='Stop'
+$ErrorActionPreference='Stop'
 $OutputEncoding=[System.Text.UTF8Encoding]::new($false)
 Set-Location (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 foreach($migration in @('009_handover_integrity.sql','010_incident_evidence.sql')){
@@ -67,7 +67,7 @@ foreach($lot in $lots | Where-Object code -in @('DEMO-Q1','DEMO-BT','DEMO-Q7','D
     }
     $null=Invoke-Api "/api/v1/parking-lots/$($lot.id)/staff-shifts" 'POST' $null $staffAuth.accessToken
     $null=Invoke-Api "/api/v1/parking-lots/$($lot.id)/staff-shifts" 'POST' $null $auth.accessToken
-    docker compose -f compose.microservices.yml exec -T redis redis-cli DEL "parking:lot_layout_$($lot.id)" | Out-Null
+    docker compose -f compose.microservices.yml exec -T redis redis-cli DEL "parking:lot_layout_$($lot.id)" "parking:pricing_rule:$($lot.id):CAR" "parking:pricing_rule:$($lot.id):MOTORBIKE" | Out-Null
     if($LASTEXITCODE -ne 0){throw 'Could not refresh Redis layout cache after demo seed.'}
 }
 Write-Host 'DEMO READY: đã bổ sung bãi, slot, cổng, biểu giá, bản đồ PUBLISHED, xe customer và hai ca Staff/Manager để bàn giao.'

@@ -96,11 +96,13 @@ public sealed partial class ParkingRepository
         string timezone;
         DateTimeOffset entryAt;
         string slotCode;
+        string levelName;
         await using (var validate = Command("""
             SELECT b.pricing_snapshot_id,b.vehicle_type,b.plate_snapshot,v.plate_normalized,
-              b.starts_at,b.ends_at,b.arrival_deadline,p.early_arrival_minutes,l.timezone,clock_timestamp(),s.code
+              b.starts_at,b.ends_at,b.arrival_deadline,p.early_arrival_minutes,l.timezone,clock_timestamp(),s.code,lvl.name
             FROM bookings b JOIN slot_reservations r ON r.booking_id=b.id
             JOIN parking_slots s ON s.id=r.slot_id AND s.lot_id=b.lot_id
+            JOIN parking_levels lvl ON lvl.id=s.level_id AND lvl.lot_id=s.lot_id
             JOIN parking_lots l ON l.id=b.lot_id
             JOIN vehicles v ON v.id=b.vehicle_id
             JOIN lot_vehicle_policies p ON p.lot_id=b.lot_id AND p.vehicle_type=b.vehicle_type
@@ -128,6 +130,7 @@ public sealed partial class ParkingRepository
             timezone = reader.GetString(8);
             entryAt = reader.GetFieldValue<DateTimeOffset>(9);
             slotCode = reader.GetString(10);
+            levelName = reader.GetString(11);
         }
 
         // Đóng reader của validate trước khi ghi sự cố hoặc rollback transaction (tránh lỗi connection busy).
@@ -284,7 +287,7 @@ public sealed partial class ParkingRepository
             write.Parameters.AddWithValue("slotChangedPayload", BuildSlotOccupiedEventPayload(slotChangedEventId, request.LotId, slotId, entryAt));
             await write.ExecuteNonQueryAsync(ct);
         }
-        var response = new CheckInResponseDto(sessionId, token.BookingId, request.LotId, slotId, "ACTIVE", entryAt, slotCode, vehicleType, "QR");
+        var response = new CheckInResponseDto(sessionId, token.BookingId, request.LotId, slotId, "ACTIVE", entryAt, slotCode, vehicleType, "QR", levelName);
         await using (var outcome = Command("INSERT INTO integration_inbox(event_id,event_type,payload_hash,outcome) VALUES(@id,'CheckInRequest',@hash,@outcome)"))
         {
             outcome.Parameters.AddWithValue("id", requestId);
@@ -497,6 +500,7 @@ public sealed partial class ParkingRepository
         // 7. Thuật toán AUTO_SLOT: Tìm và khóa ô đỗ tối ưu nhất (FOR UPDATE OF s SKIP LOCKED trên map PUBLISHED)
         Guid slotId;
         string slotCode;
+        string levelName;
         await using (var slotSearch = Command("""
             WITH published_map AS (
                 SELECT id
@@ -505,7 +509,7 @@ public sealed partial class ParkingRepository
                 ORDER BY version_no DESC
                 LIMIT 1
             )
-            SELECT s.id, s.code
+            SELECT s.id, s.code, lvl.name
             FROM parking_slots s
             JOIN parking_levels lvl ON lvl.id = s.level_id AND lvl.lot_id = s.lot_id
             JOIN slot_vehicle_types svt ON svt.slot_id = s.id AND svt.lot_id = s.lot_id
@@ -546,6 +550,7 @@ public sealed partial class ParkingRepository
                 throw new ServiceException(409, "No available slots for this vehicle type at this parking lot.");
             slotId = reader.GetGuid(0);
             slotCode = reader.GetString(1);
+            levelName = reader.GetString(2);
         }
 
         await using (var slotLock = Command("SELECT lock_parking_resource('SLOT', @slot)"))
@@ -701,7 +706,7 @@ public sealed partial class ParkingRepository
             await write.ExecuteNonQueryAsync(ct);
         }
 
-        var response = new CheckInResponseDto(sessionId, null, request.LotId, slotId, "ACTIVE", entryAt, slotCode, vehicleType, "WALK_IN");
+        var response = new CheckInResponseDto(sessionId, null, request.LotId, slotId, "ACTIVE", entryAt, slotCode, vehicleType, "WALK_IN", levelName);
 
         await using (var outcome = Command("INSERT INTO integration_inbox(event_id,event_type,payload_hash,outcome) VALUES(@id,'CheckInWalkInRequest',@hash,@outcome)"))
         {

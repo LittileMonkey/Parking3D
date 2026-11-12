@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Npgsql;
+using Parking.Parking.Application.Interfaces;
 using Parking.Parking.Domain;
 using Parking.ServiceDefaults;
 
@@ -9,7 +10,7 @@ public sealed record PublishPricing(string VehicleType, string Name, int Expecte
 public sealed record ChangeSlotOperation(string Status, string ExpectedStatus, string Reason);
 
 /// <summary>Persisted lot-scoped operations. Authorization is enforced by the HTTP boundary.</summary>
-public sealed class OperationsRepository(NpgsqlDataSource db)
+public sealed class OperationsRepository(NpgsqlDataSource db, IParkingCacheService? cache = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -109,6 +110,8 @@ public sealed class OperationsRepository(NpgsqlDataSource db)
             await write.ExecuteNonQueryAsync(ct);
         }
         await tx.CommitAsync(ct);
+        if (cache is not null)
+            await cache.RemoveAsync($"pricing_rule:{lot}:{type}", ct);
         return await PricingAsync(lot, type, ct);
     }
 
@@ -178,6 +181,8 @@ public sealed class OperationsRepository(NpgsqlDataSource db)
             await write.ExecuteNonQueryAsync(ct);
         }
         await tx.CommitAsync(ct);
+        if (cache is not null)
+            await cache.RemoveAsync($"lot_layout_{lot}", ct);
     }
 
     public async Task<JsonElement> AuditAsync(Guid lot, DateTimeOffset from, DateTimeOffset until, CancellationToken ct)

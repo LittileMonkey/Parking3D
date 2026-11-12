@@ -48,7 +48,7 @@ namespace Parking.Parking.Application.Features.ParkingLots.Queries
                     request.VehicleType,
                     start.UtcDateTime,
                     request.ExpectedDuration);
-                if (pricing.TotalFee < 0) continue; // Never advertise missing pricing as free.
+                if (!pricing.HasPricing || pricing.TotalFee < 0) continue; // Never advertise missing pricing as free.
                 // Gom dữ liệu vào DTO
                 resultItems.Add(new ParkingLotItemDto
                 {

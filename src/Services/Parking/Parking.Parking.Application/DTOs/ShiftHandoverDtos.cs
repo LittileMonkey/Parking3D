@@ -52,3 +52,15 @@ public sealed record ReassignReceiverRequestDto(
     string Reason,
     int ExpectedVersion
 );
+
+public sealed record ShiftHandoverHistoryItemDto(
+    Guid Id,
+    Guid HandoverId,
+    Guid LotId,
+    string Action,
+    Guid? OldReceiverUserId,
+    Guid? NewReceiverUserId,
+    Guid PerformedByUserId,
+    string? Reason,
+    DateTimeOffset PerformedAt
+);

@@ -28,6 +28,17 @@ public sealed record GetShiftHandoverByIdQuery(
 ) : IRequest<ShiftHandoverDto>;
 
 /// <summary>
+/// Query lấy lịch sử thao tác trên biên bản bàn giao ca trực theo phân trang và quyền bãi.
+/// </summary>
+public sealed record GetShiftHandoverHistoryQuery(
+    Guid LotId,
+    Guid HandoverId,
+    Guid ActorId,
+    int Page,
+    int PageSize
+) : IRequest<PagedResult<ShiftHandoverHistoryItemDto>>;
+
+/// <summary>
 /// Handler xử lý các Query tra cứu bàn giao ca trực kèm kiểm tra quyền cơ sở HANDOVER.
 /// </summary>
 public sealed class ShiftHandoverQueryHandlers(
@@ -35,7 +46,8 @@ public sealed class ShiftHandoverQueryHandlers(
     IFacilityAccess access
 ) :
     IRequestHandler<ListShiftHandoversQuery, PagedResult<ShiftHandoverSummaryDto>>,
-    IRequestHandler<GetShiftHandoverByIdQuery, ShiftHandoverDto>
+    IRequestHandler<GetShiftHandoverByIdQuery, ShiftHandoverDto>,
+    IRequestHandler<GetShiftHandoverHistoryQuery, PagedResult<ShiftHandoverHistoryItemDto>>
 {
     /// <summary>Xử lý lấy danh sách bàn giao ca có phân quyền (Staff chỉ xem ca liên quan; Manager xem toàn bãi).</summary>
     public async Task<PagedResult<ShiftHandoverSummaryDto>> Handle(ListShiftHandoversQuery query, CancellationToken ct)
@@ -56,5 +68,14 @@ public sealed class ShiftHandoverQueryHandlers(
         if (handover is null)
             throw new NotFoundException("Biên bản bàn giao ca không tồn tại.");
         return handover;
+    }
+
+    /// <summary>Xử lý lấy lịch sử biên bản bàn giao ca kèm kiểm tra quyền truy cập.</summary>
+    public async Task<PagedResult<ShiftHandoverHistoryItemDto>> Handle(GetShiftHandoverHistoryQuery query, CancellationToken ct)
+    {
+        await access.RequireAsync(query.ActorId, query.LotId, "HANDOVER", ct);
+        var isManager = await access.HasCapabilityAsync(query.ActorId, query.LotId, "MANAGER", ct);
+        return await repository.GetShiftHandoverHistoryAsync(
+            query.LotId, query.HandoverId, query.ActorId, isManager, query.Page, query.PageSize, ct);
     }
 }

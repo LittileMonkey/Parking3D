@@ -306,6 +306,19 @@ public interface IParkingRepository
         string? key,
         CancellationToken ct)
         => ReassignReceiverAsync(lotId, handoverId, actorId, request, ct);
+
+    /// <summary>
+    /// Lấy lịch sử thao tác trên biên bản bàn giao ca (tạo mới, xác nhận, chỉ định lại người nhận).
+    /// </summary>
+    Task<PagedResult<ShiftHandoverHistoryItemDto>> GetShiftHandoverHistoryAsync(
+        Guid lotId,
+        Guid handoverId,
+        Guid actorId,
+        bool isManager,
+        int page,
+        int pageSize,
+        CancellationToken ct)
+        => throw new NotImplementedException();
 }
 
 

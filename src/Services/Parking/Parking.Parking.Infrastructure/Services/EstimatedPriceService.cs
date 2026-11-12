@@ -54,7 +54,8 @@ namespace Parking.Parking.Infrastructure.Services
                 {
                     TotalFee = 0,
                     Currency = "VND",
-                    Details = "Chưa có biểu giá hiệu lực cho loại xe này"
+                    Details = "Chưa có biểu giá hiệu lực cho loại xe này",
+                    HasPricing = false
                 };
             }
             // 5. Xác định múi giờ địa phương của bãi xe
