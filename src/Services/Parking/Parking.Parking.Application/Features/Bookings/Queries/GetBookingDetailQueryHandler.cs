@@ -8,9 +8,11 @@ namespace Parking.Parking.Application.Features.Bookings.Queries;
 public sealed class GetBookingDetailQueryHandler(IParkingRepository repository, IFacilityAccess access)
     : IRequestHandler<GetBookingDetailQuery, BookingDetailDto>
 {
-    /// <summary>Đọc booking; cho phép chủ sở hữu hoặc người được Identity cấp LOOKUP tại đúng bãi xem chi tiết.</summary>
+    /// <summary>Xác minh tài khoản còn hoạt động, đọc booking và kiểm tra quyền sở hữu hoặc quyền LOOKUP tại đúng bãi.</summary>
     public async Task<BookingDetailDto> Handle(GetBookingDetailQuery request, CancellationToken cancellationToken)
     {
+        await access.RequireAsync(request.RequestingUserId, Guid.Empty, "USER", cancellationToken);
+
         var record = await repository.GetBookingDetailAsync(request.BookingId, cancellationToken)
             ?? throw new NotFoundException("Booking not found.");
         if (record.CustomerId != request.RequestingUserId)

@@ -10,7 +10,11 @@ public sealed class ParkingArchitectureTests
     [Fact]
     public void DomainDoesNotReferenceApplicationOrInfrastructure()
     {
-        var references = typeof(PlateNumber).Assembly.GetReferencedAssemblies();
+        // Shared pricing is pure domain logic, used by both Parking and Payment.
+        // Inspect its references too so it cannot introduce a transitive infrastructure dependency.
+        var references = typeof(PlateNumber).Assembly.GetReferencedAssemblies()
+            .Where(assembly => assembly.Name != "Parking.PricingEngine")
+            .Concat(typeof(global::Parking.Pricing.PricingEngine).Assembly.GetReferencedAssemblies());
         Assert.DoesNotContain(references, assembly =>
             assembly.Name!.StartsWith("Parking.", StringComparison.Ordinal) ||
             assembly.Name.StartsWith("Microsoft.AspNetCore", StringComparison.Ordinal) ||

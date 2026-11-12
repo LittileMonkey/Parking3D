@@ -1,11 +1,15 @@
 namespace Parking.Parking.Domain;
 
-public sealed record BlockPrice(int BlockMinutes, long RateVnd, long DailyCapVnd, decimal Multiplier)
+public sealed record BlockPrice(int BlockMinutes, long RateVnd, long DailyCapVnd, decimal Multiplier,
+    string? PeakStart = null, string? PeakEnd = null)
 {
     public void Validate()
     {
-        if (BlockMinutes <= 0 || RateVnd < 0 || DailyCapVnd < 0 || Multiplier < 1)
+        if (BlockMinutes <= 0 || BlockMinutes > 1440 || RateVnd < 0 || DailyCapVnd < 0 || Multiplier < 1 || Multiplier > 1.5m)
             throw new ArgumentException("Invalid block price");
+        if ((PeakStart is null) != (PeakEnd is null) ||
+            (PeakStart is not null && (!TimeOnly.TryParse(PeakStart, out _) || !TimeOnly.TryParse(PeakEnd, out _) || PeakStart == PeakEnd)))
+            throw new ArgumentException("Invalid peak window");
     }
 
     public long Estimate(DateTimeOffset start, DateTimeOffset end, TimeZoneInfo timezone)
@@ -21,8 +25,26 @@ public sealed record BlockPrice(int BlockMinutes, long RateVnd, long DailyCapVnd
                 throw new ArgumentException("Unsupported local midnight; pricing timezone requires review");
             var midnight = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(nextDate, timezone));
             var stop = end < midnight ? end : midnight;
-            var blocks = decimal.Ceiling((decimal)(stop - cursor).Ticks / TimeSpan.FromMinutes(BlockMinutes).Ticks);
-            total += Math.Min(blocks * RateVnd * Multiplier, DailyCapVnd);
+            decimal dayAmount = 0;
+            for (var block = cursor; block < stop; block = block.AddMinutes(BlockMinutes))
+            {
+                var blockEnd = block.AddMinutes(BlockMinutes);
+                if (blockEnd > stop) blockEnd = stop;
+                var factor = Multiplier;
+                if (PeakStart is not null)
+                {
+                    var peakStart = TimeOnly.Parse(PeakStart); var peakEnd = TimeOnly.Parse(PeakEnd!);
+                    var localStart = TimeZoneInfo.ConvertTime(block, timezone).TimeOfDay;
+                    var localEnd = TimeZoneInfo.ConvertTime(blockEnd, timezone).TimeOfDay;
+                    if (localEnd == TimeSpan.Zero) localEnd = TimeSpan.FromDays(1);
+                    var overlaps = peakStart < peakEnd
+                        ? localStart < peakEnd.ToTimeSpan() && localEnd > peakStart.ToTimeSpan()
+                        : localStart < peakEnd.ToTimeSpan() || localEnd > peakStart.ToTimeSpan();
+                    factor = overlaps ? Multiplier : 1;
+                }
+                dayAmount += RateVnd * factor;
+            }
+            total += Math.Min(dayAmount, DailyCapVnd);
             cursor = stop;
         }
         return checked((long)decimal.Ceiling(total));

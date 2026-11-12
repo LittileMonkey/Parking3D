@@ -1,0 +1,26 @@
+syntax = "proto3";
+package parking.ai.v1;
+option csharp_namespace = "Parking.Contracts.AI.V1";
+service PlateRecognition {
+  rpc Recognize(RecognitionRequest) returns (RecognitionReply);
+}
+service OccupancyIngestion { rpc RecordSnapshot(OccupancySnapshotRequest) returns (SnapshotReply); }
+message OccupancySnapshotRequest {
+  string lot_id = 1; string vehicle_type = 2; int64 observed_at_unix_seconds = 3;
+  int32 usable_capacity = 4; int32 occupied_count = 5; int32 reserved_count = 6;
+}
+message SnapshotReply { string snapshot_id = 1; }
+message RecognitionRequest {
+  string lot_id = 1;
+  string uploaded_by = 2;
+  string idempotency_key = 3;
+  bytes image = 4;
+  string content_type = 5;
+}
+message RecognitionReply {
+  string recognition_id = 1;
+  string status = 2;
+  string candidate_plate = 3;
+  optional double confidence = 4;
+  string model_version = 5;
+}

@@ -15,7 +15,7 @@ public sealed class CheckInCommandHandler(
     {
         // Hỏi Identity trước khi giữ khóa DB, tránh chờ mạng trong transaction.
         await access.RequireAsync(command.ActorId, command.Request.LotId, "CHECK_IN", ct);
-        if (!string.IsNullOrWhiteSpace(command.Request.QrPayload))
+        if (!string.IsNullOrEmpty(command.Request.QrPayload))
         {
             if (!qrTokens.TryValidateAndExtract(command.Request.QrPayload, out var token) || token is null)
                 throw new ConflictException("QR is invalid or expired.");

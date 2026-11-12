@@ -1,6 +1,11 @@
+import MyAccount from "./pages/MyAccount";
+import PaymentReturn from "./pages/PaymentReturn";
+import GuestLogin from "./pages/GuestLogin";
+import SecurityPage from "./pages/SecurityPage";
 import { Route, Routes, Navigate, useLocation } from "react-router-dom";
 import Home from "./pages/Home";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
+import { useAuth } from "./context/AuthContext";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -30,6 +35,13 @@ import ReportsAuditPage from "./pages/manager/ReportsAuditPage";
 
 const Booking = lazy(() => import("./pages/Booking"));
 
+function RequireRole({ roles, children }: { roles: string[]; children: ReactNode }) {
+  const { user, isAuthenticated, getRedirectPath } = useAuth();
+  if (!isAuthenticated || !user) return <Navigate to="/login" replace />;
+  const actualRoles = [...(user.roles ?? []), user.role ?? ""].map(role => role.trim().toUpperCase());
+  return actualRoles.some(role => roles.includes(role)) ? children : <Navigate to={getRedirectPath()} replace />;
+}
+
 function SearchRedirect() {
   const location = useLocation();
   return <Navigate to={`/booking${location.search}`} replace />;
@@ -38,6 +50,10 @@ function SearchRedirect() {
 export default function App() {
   return (
     <Routes>
+      <Route path="/account" element={<MyAccount />} />
+      <Route path="/payment-return" element={<PaymentReturn />} />
+      <Route path="/guest-login" element={<GuestLogin />} />
+      <Route path="/security" element={<SecurityPage />} />
       {/* Customer / Public Routes */}
       <Route path="/" element={<Home />} />
       <Route path="/booking" element={<Suspense fallback={<p role="status">Đang tải tìm kiếm và đặt chỗ…</p>}><Booking /></Suspense>} />
@@ -53,7 +69,7 @@ export default function App() {
       <Route path="/email-verified" element={<EmailVerified />} />
 
       {/* Staff Operations Portal Routes */}
-      <Route path="/staff" element={<StaffLayout />}>
+      <Route path="/staff" element={<RequireRole roles={["PARKING_STAFF", "PARKING_MANAGER", "ADMIN"]}><StaffLayout /></RequireRole>}>
         <Route index element={<Navigate to="/staff/dashboard" replace />} />
         <Route path="dashboard" element={<StaffDashboard />} />
         <Route path="operations" element={<VehicleOperations />} />
@@ -63,7 +79,7 @@ export default function App() {
       </Route>
 
       {/* Manager & Admin Operations Portal Routes */}
-      <Route path="/manager" element={<ManagerLayout />}>
+      <Route path="/manager" element={<RequireRole roles={["PARKING_MANAGER", "ADMIN"]}><ManagerLayout /></RequireRole>}>
         <Route index element={<Navigate to="/manager/dashboard" replace />} />
         <Route path="dashboard" element={<ManagerDashboard />} />
         <Route path="pricing" element={<PricingPolicyPage />} />

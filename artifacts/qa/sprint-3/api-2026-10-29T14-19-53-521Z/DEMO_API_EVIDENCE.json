@@ -1,0 +1,11 @@
+{
+  "commit": "be3b5f6a9f15ce2def1b65355f1c27a43e755069",
+  "pgVersion": "not-started",
+  "scope": "Isolated native PostgreSQL; actual service APIs and actual CASH/outbox; no VNPay provider, no checkout, no physical barrier",
+  "observations": [
+    {
+      "label": "STOPPED",
+      "message": "Port already used: 50521"
+    }
+  ]
+}

@@ -8,7 +8,8 @@ import "./ManagerDashboard.css";
 export default function ManagerLayout() {
   const location = useLocation();
 
-  const [facilities, setFacilities] = useState<ManagerFacilitySummary[]>([]);
+  const [facilities, setFacilities] = useState<Pick<ManagerFacilitySummary, "lotId" | "code" | "name" | "address">[]>([]);
+  const [facilityError, setFacilityError] = useState("");
   const [selectedLotId, setSelectedLotId] = useState<string>("all");
   const [period, setPeriod] = useState<ReportingPeriod>("today");
   const [refreshKey, setRefreshKey] = useState(0);
@@ -19,12 +20,15 @@ export default function ManagerLayout() {
       try {
         const facs = await managerApi.getManagedFacilities();
         setFacilities(facs);
+        setSelectedLotId(current => current === "all" && facs.length === 1 ? facs[0].lotId : current);
+        setFacilityError("");
       } catch (err) {
-        console.error("ManagerLayout load facilities error:", err);
+        setFacilities([]);
+        setFacilityError(err instanceof Error ? err.message : "Không tải được danh sách bãi.");
       }
     }
     loadFacilities();
-  }, []);
+  }, [refreshKey]);
 
   const handleRefresh = () => {
     setRefreshKey((prev) => prev + 1);
@@ -41,6 +45,7 @@ export default function ManagerLayout() {
 
   return (
     <VisionSpatialWorkspace role="admin" currentTabId={getActiveTab()}>
+      {facilityError && <p role="alert">{facilityError}</p>}
       <Outlet
         context={{
           selectedLotId,

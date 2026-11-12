@@ -66,6 +66,7 @@ public static class ServiceSetup
 
     public static void UseParkingDefaults(this WebApplication app, string serviceName)
     {
+        app.UseTrustedForwarding();
         app.Use(async (context, next) =>
         {
             // gRPC owns its transport status; do not wrap protobuf in HTTP JSON.
@@ -112,6 +113,6 @@ public static class ServiceSetup
     }
 
     public static Guid Subject(this ClaimsPrincipal user) =>
-        Guid.TryParse(user.FindFirstValue("sub"), out var id) && id != Guid.Empty ? id
+        Guid.TryParse(user.FindFirstValue("sub") ?? user.FindFirstValue(ClaimTypes.NameIdentifier), out var id) && id != Guid.Empty ? id
             : throw new ServiceException(401, "Invalid subject");
 }

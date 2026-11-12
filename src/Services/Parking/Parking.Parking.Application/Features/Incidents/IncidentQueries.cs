@@ -1,3 +1,4 @@
+using FluentValidation;
 using MediatR;
 using Parking.Parking.Application.DTOs;
 using Parking.Parking.Application.Exceptions;
@@ -15,8 +16,28 @@ public sealed record ListIncidentsQuery(
     string? Severity,
     string? Query,
     int Page,
-    int PageSize
+    int PageSize,
+    DateTimeOffset? From = null,
+    DateTimeOffset? To = null
 ) : IRequest<PagedResult<IncidentSummaryDto>>;
+
+/// <summary>
+/// Validator kiểm tra khoảng thời gian lọc [from, to) của truy vấn danh sách sự cố.
+/// </summary>
+public sealed class ListIncidentsQueryValidator : AbstractValidator<ListIncidentsQuery>
+{
+    public ListIncidentsQueryValidator()
+    {
+        RuleFor(x => x.LotId).NotEmpty();
+        RuleFor(x => x.ActorId).NotEmpty();
+        When(x => x.From.HasValue && x.To.HasValue, () =>
+        {
+            RuleFor(x => x)
+                .Must(x => x.From!.Value < x.To!.Value)
+                .WithMessage("Filter 'from' must be earlier than 'to'.");
+        });
+    }
+}
 
 /// <summary>
 /// Query lấy chi tiết một sự cố theo mã định danh UUID.
@@ -54,7 +75,7 @@ public sealed class IncidentQueryHandlers(
     {
         await access.RequireAsync(query.ActorId, query.LotId, "INCIDENT_READ", ct);
         return await repository.ListIncidentsAsync(
-            query.LotId, query.Status, query.Severity, query.Query, query.Page, query.PageSize, ct);
+            query.LotId, query.Status, query.Severity, query.Query, query.From, query.To, query.Page, query.PageSize, ct);
     }
 
     /// <summary>Xử lý lấy chi tiết sự cố.</summary>

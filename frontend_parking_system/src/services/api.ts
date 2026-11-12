@@ -157,6 +157,7 @@ export interface LotAvailability {
 }
 
 export interface CreateBookingPayload {
+  mode?: "EXACT_SLOT" | "AUTO_SLOT";
   lotId: string;
   slotId: string;
   vehicleId: string;
@@ -187,12 +188,13 @@ export interface BookingDetail {
   holdExpiresAt?: string | null;
   arrivalDeadline: string;
   status: string;
-  totalAmount?: number | null;
+  estimatedAmount?: number | null;
   qrToken?: string | null;
   createdAt: string;
 }
 
 export interface Payment {
+  paymentUrl?: string | null;
   id: string;
   lotId: string;
   bookingId: string;
@@ -231,7 +233,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
@@ -244,7 +246,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   try {
     response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
   } catch {
-    throw new ApiError("Không kết nối được máy chủ. Hãy kiểm tra API đang chạy tại localhost:5237.", 0);
+    throw new ApiError("Không kết nối được máy chủ. Hãy kiểm tra API đang chạy tại localhost:8080.", 0);
   }
 
   const text = await response.text();
@@ -263,7 +265,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const serverMessage = [body.message, body.detail, body.title]
       .find((value): value is string => typeof value === "string");
     const fallbackMessages: Record<number, string> = {
-      401: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
+      401: path === "/api/v1/auth/login" ? "Email hoặc mật khẩu không đúng." : "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
       403: "Tài khoản hiện tại không có quyền thực hiện thao tác này.",
       404: "API hoặc dữ liệu được yêu cầu hiện chưa có sẵn.",
       409: "Dữ liệu vừa thay đổi hoặc không còn khả dụng. Hãy tải lại và thử lại.",
@@ -271,7 +273,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     };
     const message = serverMessage
       ?? (response.status >= 500
-        ? "Máy chủ API đang gặp lỗi hoặc chưa sẵn sàng. Kiểm tra backend tại localhost:5237 rồi thử lại."
+        ? "Máy chủ API đang gặp lỗi hoặc chưa sẵn sàng. Kiểm tra backend tại localhost:8080 rồi thử lại."
         : fallbackMessages[response.status] ?? `Yêu cầu thất bại (${response.status}).`);
     throw new ApiError(message, response.status);
   }
@@ -297,6 +299,41 @@ export const api = {
     return request<ParkingLot[]>("/api/v1/parking-lots");
   },
 
+  async getEntryGates(lotId: string): Promise<{ id: string; lotId: string; code: string }[]> {
+    return request("/api/v1/parking-lots/" + encodeURIComponent(lotId) + "/entry-gates");
+  },
+
+  async getExitGates(lotId: string): Promise<{ id: string; lotId: string; code: string }[]> {
+    return request("/api/v1/parking-lots/" + encodeURIComponent(lotId) + "/exit-gates");
+  },
+
+  async getStaffSessions(lotId: string): Promise<StaffSessionRow[]> {
+    return request("/api/v1/parking-lots/" + encodeURIComponent(lotId) + "/sessions");
+  },
+
+  async getCheckoutQuote(lotId: string, gateId: string, detectedPlate: string) {
+    return request<{
+      sessionId: string; entryPlate: string; slotCode: string; entryAt: string;
+      totalDurationMinutes: number; totalAmountDue: number; paymentRequired: boolean;
+      isPlateMatched: boolean; quoteToken?: string;
+    }>("/api/v1/check-out/quote", {
+      method: "POST", body: JSON.stringify({ lotId, gateId, detectedPlate }),
+    });
+  },
+
+  async authorizeCheckout(payload: CheckoutRequest, key: string) {
+    return request<{ exitPermitToken: string }>("/api/v1/check-out/authorize-exit", {
+      method: "POST", headers: { "Idempotency-Key": key }, body: JSON.stringify(payload),
+    });
+  },
+
+  async confirmCheckout(payload: CheckoutRequest, exitPermitToken: string, key: string) {
+    return request<{ sessionId: string; paymentId?: string }>("/api/v1/check-out", {
+      method: "POST", headers: { "Idempotency-Key": key },
+      body: JSON.stringify({ ...payload, exitPermitToken, staffObservedExit: true }),
+    });
+  },
+
   async getUserVehicles(): Promise<UserVehicle[]> {
     return request<UserVehicle[]>("/api/v1/user-vehicles");
   },
@@ -313,6 +350,12 @@ export const api = {
     );
   },
 
+  async cancelBooking(id: string, reason: string): Promise<{ refund_eligible: boolean; refund_status: string }> {
+    return request('/api/v1/bookings/' + encodeURIComponent(id) + '/cancel', { method: 'POST', body: JSON.stringify({ reason }) });
+  },
+  async getBookingCancellation(id: string): Promise<{ refund_eligible: boolean; refund_status: string }> {
+    return request('/api/v1/bookings/' + encodeURIComponent(id) + '/cancellation');
+  },
   async createBooking(payload: CreateBookingPayload, idempotencyKey: string): Promise<Booking> {
     return request<Booking>("/api/v1/bookings", {
       method: "POST",
@@ -325,12 +368,27 @@ export const api = {
     return request<BookingDetail>(`/api/v1/bookings/${encodeURIComponent(bookingId)}`);
   },
 
+  async getBookingCashRequest(bookingId: string, lotId: string): Promise<Payment> {
+    return request("/api/v1/payments/" + encodeURIComponent(bookingId) + "/cash-request?" + new URLSearchParams({ lotId }));
+  },
+
+  async confirmBookingCash(payment: Payment, reason: string): Promise<Payment> {
+    const { id, lotId, version } = payment;
+    return request("/api/v1/parking-lots/" + encodeURIComponent(lotId) + "/payments/" + encodeURIComponent(id) + "/cash-confirmation", {
+      method: "POST", body: JSON.stringify({ version, reason }),
+    });
+  },
+
   async createCashPayment(bookingId: string, idempotencyKey: string): Promise<Payment> {
     return request<Payment>("/api/v1/payments", {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify({ bookingId, method: "CASH" }),
     });
+  },
+
+  async createVnPayPayment(bookingId: string, idempotencyKey: string): Promise<Payment> {
+    return request<Payment>("/api/v1/payments", {method:"POST",headers:{"Idempotency-Key":idempotencyKey},body:JSON.stringify({bookingId,method:"VNPAY"})});
   },
 
   async askApprovedFaq(lotId: string, question: string): Promise<ApprovedFaqResponse> {
@@ -365,10 +423,13 @@ export const api = {
     })));
   },
 
-  async login(userName: string, password: string): Promise<AuthTokens> {
+  async guestLogin(email: string, code: string, mfaCode?: string): Promise<AuthTokens> {
+    return request('/api/v1/auth/guest/verify',{method:'POST',body:JSON.stringify({email,code,mfaCode})});
+  },
+  async login(userName: string, password: string, mfaCode?: string): Promise<AuthTokens> {
     return request<AuthTokens>("/api/v1/auth/login", {
       method: "POST",
-      body: JSON.stringify({ email: userName, password }),
+      body: JSON.stringify({ email: userName, password, mfaCode }),
     });
   },
 
@@ -394,7 +455,8 @@ export const api = {
   },
 
   async logout(): Promise<void> {
-    await request<void>("/api/v1/auth/logout", { method: "POST" });
+    const refreshToken = sessionStorage.getItem("parking.refreshToken");
+    if (refreshToken) await request<void>("/api/v1/auth/logout", { method: "POST", body: JSON.stringify({ refreshToken }) });
   },
 
   async checkHealth(): Promise<boolean> {
@@ -407,29 +469,7 @@ export const api = {
   },
 
   async getBuildingEnvironment(): Promise<BuildingEnvironment> {
-    try {
-      const res = await request<BuildingEnvironment>("/api/v1/telemetry/environment");
-      if (res && res.temperature) return res;
-    } catch {
-      // Fallback mock API simulation with live jitter
-    }
-    const smokeVal = Number((0.012 + Math.random() * 0.006).toFixed(3));
-    const aqiVal = Math.floor(38 + Math.random() * 8);
-    const tempVal = Math.floor(28 + Math.random() * 3);
-    const humidityVal = Math.floor(62 + Math.random() * 8);
-
-    return {
-      smokeDensity: `${smokeVal} mg/m³`,
-      smokeStatus: smokeVal < 0.05 ? "AN TOÀN" : "CẢNH BÁO",
-      airQualityIndex: aqiVal,
-      airQualityStatus: aqiVal <= 50 ? "TỐT (AQI)" : "TRUNG BÌNH",
-      co2Level: "415 ppm",
-      temperature: `${tempVal}°C`,
-      weatherCondition: "Nắng nhẹ • Gió 8 km/h",
-      humidity: `${humidityVal}%`,
-      city: "TP. HỒ CHÍ MINH",
-      updatedAt: new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-    };
+    return request<BuildingEnvironment>("/api/v1/telemetry/environment");
   },
 
   async confirmCashPayment(bookingId: string, reason: string = "Thu tiền mặt tại cổng", version: number = 1): Promise<{
@@ -821,8 +861,9 @@ export interface CalculateFeeResponse {
 export interface BackendCheckInPayload {
   lotId: string;
   gateId: string;
-  qrPayload: string;
+  qrPayload?: string;
   detectedPlate: string;
+  vehicleType?: string;
 }
 
 export interface BackendCheckInResponse {
@@ -832,12 +873,15 @@ export interface BackendCheckInResponse {
   slotId: string;
   status: string;
   entryAt: string;
+  slotCode?: string;
+  vehicleType?: string;
 }
 
 export interface BookingQrResponse {
   bookingId: string;
   qrToken?: string;
   token?: string;
+  qrPayload?: string;
   qrTokenPayload?: {
     bookingId: string;
     nonce: string;
@@ -854,4 +898,25 @@ export interface StaffAssignmentItem {
   validFrom: string;
   validUntil?: string | null;
   canManageStaffAssignments: boolean;
+}
+export interface CheckoutRequest {
+  sessionId: string;
+  gateId: string;
+  detectedPlate: string;
+  quoteToken: string;
+  paymentMethod: 'NONE' | 'CASH';
+  cashReceived: number;
+  staffNotes?: string;
+}
+
+export interface StaffSessionRow {
+  sessionId: string;
+  lotId: string;
+  licensePlate: string;
+  vehicleType: string;
+  checkinAt: string;
+  checkoutAt?: string;
+  status: "ACTIVE" | "EXIT_PENDING" | "COMPLETED";
+  slotCode: string;
+  levelName: string;
 }

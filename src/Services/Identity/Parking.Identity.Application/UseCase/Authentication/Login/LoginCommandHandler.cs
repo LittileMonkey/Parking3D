@@ -10,15 +10,17 @@ namespace Parking.Identity.Application.UseCase.Authentication.Login
 {
     public class LoginCommandHandler : IRequestHandler<LoginCommand, AuthenticationResponseDto>
     {
+        private readonly IMfaVerifier mfa;
         private readonly IAccountRepository accountRepository;
         private readonly IAccessTokenService tokenService;
         private readonly IAuthTokenRepository authTokenRepository;
         private readonly IPasswordHasherService hasherService;
 
-        public LoginCommandHandler(IAccountRepository repository, IAccessTokenService tokenService, IAuthTokenRepository authTokenRepository, IPasswordHasherService hasherService)
+        public LoginCommandHandler(IAccountRepository repository, IAccessTokenService tokenService, IAuthTokenRepository authTokenRepository, IPasswordHasherService hasherService, IMfaVerifier mfa)
         {
             this.accountRepository = repository;
             this.tokenService = tokenService;
+            this.mfa = mfa;
             this.authTokenRepository = authTokenRepository;
             this.hasherService = hasherService;
         }
@@ -54,6 +56,8 @@ namespace Parking.Identity.Application.UseCase.Authentication.Login
                 throw new AppException(ErrorCode.InvalidCredentials, "The email address or password is incorrect.");
             }
 
+            if(user.LockedUntil.HasValue && user.LockedUntil.Value > DateTime.UtcNow) throw new AppException(ErrorCode.AccountLocked,"Account temporarily locked");
+            await mfa.RequireAsync(user.Id,request.MfaCode,cancellationToken);
             var accessToken = tokenService.GenerateAccessToken(user);
 
             var refreshToken = tokenService.GenerateRefreshToken();

@@ -96,6 +96,12 @@ public sealed partial class ParkingWorkflowTests
     // Identity is a test double here; JWT validation, Parking HTTP, gRPC transport and PostgreSQL are real.
     public sealed class HoldAuthorizationStub(string serviceKey) : FacilityAuthorization.FacilityAuthorizationBase
     {
+        public override Task<RegisteredVehicleReply> GetRegisteredVehicle(RegisteredVehicleRequest request, ServerCallContext context)
+        {
+            if(context.RequestHeaders.GetValue("x-service-key")!=serviceKey || request.UserId!=Customer.ToString() || request.VehicleId!=Vehicle.ToString())
+                throw new RpcException(new Status(StatusCode.PermissionDenied,"Fixture vehicle scope denied"));
+            return Task.FromResult(new RegisteredVehicleReply{VehicleId=Vehicle.ToString(),Plate="51A12345",VehicleType="CAR",IsPrimary=true,FuelType="PETROL"});
+        }
         public override Task<AccessReply> CheckAccess(AccessRequest request, ServerCallContext context) =>
             Task.FromResult(new AccessReply
             {

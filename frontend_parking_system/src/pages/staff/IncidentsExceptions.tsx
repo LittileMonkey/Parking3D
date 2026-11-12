@@ -11,6 +11,7 @@ import {
   Check,
   AlertOctagon,
 } from "lucide-react";
+import { api, type ParkingLot } from "../../services/api";
 import { staffApi } from "../../services/staff/staffApi";
 import type {
   Incident,
@@ -23,6 +24,18 @@ export default function IncidentsExceptions() {
   const prefillSlot = searchParams.get("slot") || "";
   const prefillPlate = searchParams.get("plate") || "";
 
+  const [lots, setLots] = useState<ParkingLot[]>([]);
+  const [lotId, setLotId] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    Promise.all([api.getParkingLots(), api.getStaffAssignmentsMe()]).then(([catalog, assignments]) => {
+      const assigned = new Set(assignments.map(item => item.lotId));
+      const allowed = catalog.filter(item => assigned.has(item.id));
+      setLots(allowed);
+      setLotId(allowed[0]?.id ?? "");
+      if (!allowed.length) { setError("Tài khoản chưa được phân công bãi xe."); setLoading(false); }
+    }).catch(err => { setError(err.message); setLoading(false); });
+  }, []);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -50,63 +63,20 @@ export default function IncidentsExceptions() {
 
   const loadIncidents = async () => {
     try {
-      const data = await staffApi.getIncidents();
-      // Ensure at least 3 realistic incidents if store is empty
-      if (data.length === 0) {
-        setIncidents([
-          {
-            incidentId: "INC-2026-001",
-            title: "Barrier Cổng Vào G1 kẹt cảm biến an toàn",
-            type: "Thiết bị cổng",
-            severity: "Medium",
-            status: "InProgress",
-            description: "Cần gạt barrier không tự hạ sau khi xe qua. Đang dùng điều khiển tay.",
-            relatedGate: "Cổng Vào G1",
-            reportedBy: "Nguyễn Văn Hùng",
-            assignedTo: "Kỹ thuật trực ca",
-            detectedAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-            notes: "Kỹ thuật đang kiểm tra motor giảm tốc.",
-            updatedAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-          },
-          {
-            incidentId: "INC-2026-002",
-            title: "Xe đỗ lệch vạch chiếm ô lân cận",
-            type: "Sai quy định đỗ",
-            severity: "High",
-            status: "Open",
-            description: "Xe SUV đậu chèn sang vạch ô bên cạnh, gây cản trở phương tiện lùi vào.",
-            relatedLicensePlate: "51K-892.45",
-            relatedSlotCode: "B1-A04",
-            reportedBy: "Nguyễn Văn Hùng",
-            detectedAt: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
-            updatedAt: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
-          },
-          {
-            incidentId: "INC-2026-003",
-            title: "Camera ANPR Cổng Ra chớp nháy nguồn",
-            type: "Nhận diện biển số",
-            severity: "Critical",
-            status: "Open",
-            description: "Màn hình quan sát cổng ra chập chờn, tỷ lệ nhận diện giảm còn 60%.",
-            relatedGate: "Cổng Ra G3",
-            reportedBy: "Nguyễn Văn Hùng",
-            detectedAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
-            updatedAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
-          },
-        ]);
-      } else {
-        setIncidents(data);
-      }
-    } catch (err) {
-      console.error("Load incidents error:", err);
+      const data = await staffApi.getIncidents(lotId);
+      setIncidents(data);
+      setError("");
+    } catch (err: any) {
+      setIncidents([]);
+      setError(err.message || "Không tải được sự cố từ máy chủ.");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadIncidents();
-  }, []);
+    if (lotId) { setLoading(true); loadIncidents(); }
+  }, [lotId]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,7 +92,7 @@ export default function IncidentsExceptions() {
         relatedGate: relatedGate || undefined,
         detectedAt: new Date().toISOString(),
       };
-      await staffApi.createIncident(payload);
+      await staffApi.createIncident(payload, lotId);
       setShowCreateModal(false);
       setTitle("");
       setDescription("");
@@ -142,7 +112,7 @@ export default function IncidentsExceptions() {
     notes?: string,
   ) => {
     try {
-      await staffApi.updateIncidentStatus(incidentId, newStatus, notes);
+      await staffApi.updateIncidentStatus(incidentId, newStatus, notes, lotId, incidents.find(item => item.incidentId === incidentId)!.version!);
       setResolvingId(null);
       setResolveNote("");
       loadIncidents();
@@ -228,6 +198,11 @@ export default function IncidentsExceptions() {
 
   return (
     <div className="pm-incidents-container">
+      <label>Bãi xe <select value={lotId} onChange={e => setLotId(e.target.value)}>
+        {lots.map(lot => <option key={lot.id} value={lot.id}>{lot.name}</option>)}
+      </select></label>
+      {error && <p role="alert">{error}</p>}
+
       {/* ─── 1. Page Header & Theme Consistency ───────────────────────────── */}
       <div className="pm-header-row">
         <div>

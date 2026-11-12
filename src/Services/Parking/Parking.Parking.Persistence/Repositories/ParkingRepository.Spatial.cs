@@ -1,3 +1,4 @@
+using System.Data;
 using Npgsql;
 using Parking.Parking.Application.DTOs;
 
@@ -10,13 +11,23 @@ public sealed partial class ParkingRepository
     /// </summary>
     public async Task<ParkingLotDetailDto?> GetParkingLotDetailAsync(Guid lotId, CancellationToken ct)
     {
+        await using var conn = await db.OpenConnectionAsync(ct);
+        return await ReadParkingLotDetailAsync(conn, tx: null, lotId, ct);
+    }
+
+    private static async Task<ParkingLotDetailDto?> ReadParkingLotDetailAsync(
+        NpgsqlConnection conn,
+        NpgsqlTransaction? tx,
+        Guid lotId,
+        CancellationToken ct)
+    {
         const string sql = """
             SELECT id, code, name, address, latitude, longitude, timezone, status, created_at
             FROM parking_lots
             WHERE id = @lotId
             """;
 
-        await using var cmd = db.CreateCommand(sql);
+        await using var cmd = new NpgsqlCommand(sql, conn, tx);
         cmd.Parameters.AddWithValue("lotId", lotId);
         await using var reader = await cmd.ExecuteReaderAsync(ct);
 
@@ -40,8 +51,11 @@ public sealed partial class ParkingRepository
     /// </summary>
     public async Task<LotLayout3DDto?> GetLotLayout3DAsync(Guid lotId, CancellationToken ct)
     {
+        await using var conn = await db.OpenConnectionAsync(ct);
+        await using var tx = await conn.BeginTransactionAsync(IsolationLevel.RepeatableRead, ct);
+
         // 1. Kiểm tra bãi xe có tồn tại không
-        var lot = await GetParkingLotDetailAsync(lotId, ct);
+        var lot = await ReadParkingLotDetailAsync(conn, tx, lotId, ct);
         if (lot is null)
             return null;
 
@@ -54,7 +68,7 @@ public sealed partial class ParkingRepository
             ORDER BY display_order ASC
             """;
 
-        await using (var cmdLevels = db.CreateCommand(sqlLevels))
+        await using (var cmdLevels = new NpgsqlCommand(sqlLevels, conn, tx))
         {
             cmdLevels.Parameters.AddWithValue("lotId", lotId);
             await using var readerLevels = await cmdLevels.ExecuteReaderAsync(ct);
@@ -83,7 +97,7 @@ public sealed partial class ParkingRepository
             ORDER BY code ASC
             """;
 
-        await using (var cmdZones = db.CreateCommand(sqlZones))
+        await using (var cmdZones = new NpgsqlCommand(sqlZones, conn, tx))
         {
             cmdZones.Parameters.AddWithValue("lotId", lotId);
             await using var readerZones = await cmdZones.ExecuteReaderAsync(ct);
@@ -105,18 +119,29 @@ public sealed partial class ParkingRepository
             }
         }
 
-        // 4. Đọc Slots kèm tọa độ 3D từ map_objects (LEFT JOIN)
+        // 4. Đọc Slots kèm tọa độ 3D từ map_objects thuộc bản PUBLISHED mới nhất (LEFT JOIN)
         var slotsByZone = new Dictionary<Guid, List<SlotSpatialDto>>();
         const string sqlSlots = """
+            WITH published_map AS (
+                SELECT id
+                FROM map_versions
+                WHERE lot_id = @lotId AND status = 'PUBLISHED'
+                ORDER BY version_no DESC
+                LIMIT 1
+            )
             SELECT s.id, s.zone_id, s.code, s.operational_status::text, s.width_m, s.length_m,
                    m.x, m.y, m.z, m.rotation_y, m.size_x, m.size_y, m.size_z
             FROM parking_slots s
-            LEFT JOIN map_objects m ON m.slot_id = s.id AND m.lot_id = @lotId
+            LEFT JOIN published_map pm ON TRUE
+            LEFT JOIN map_objects m
+              ON m.map_version_id = pm.id
+             AND m.slot_id = s.id
+             AND m.lot_id = @lotId
             WHERE s.lot_id = @lotId
             ORDER BY s.code ASC
             """;
 
-        await using (var cmdSlots = db.CreateCommand(sqlSlots))
+        await using (var cmdSlots = new NpgsqlCommand(sqlSlots, conn, tx))
         {
             cmdSlots.Parameters.AddWithValue("lotId", lotId);
             await using var readerSlots = await cmdSlots.ExecuteReaderAsync(ct);
@@ -150,6 +175,8 @@ public sealed partial class ParkingRepository
                 slotList.Add(new SlotSpatialDto(slotId, slotCode, status, widthM, lengthM, position, rotationY, size));
             }
         }
+
+        await tx.CommitAsync(ct);
 
         // 5. Ráp cây cấu trúc: Gắn Slots vào Zones, gắn Zones vào Levels
         var assembledLevels = levels.Select(lvl =>

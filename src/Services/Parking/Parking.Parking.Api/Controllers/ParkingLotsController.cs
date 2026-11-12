@@ -1,14 +1,8 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
-using Parking.Parking.Api.Common;
 using Parking.Parking.Application.DTOs;
 using Parking.Parking.Application.Features.ParkingLots.Queries;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
+using Parking.ServiceDefaults;
 
 namespace Parking.Parking.Api.Controllers
 {
@@ -31,7 +25,7 @@ namespace Parking.Parking.Api.Controllers
             // Nếu qua ải Validator, Pipeline tự động dẫn tiếp vào file Handler để chạy thuật toán.
             var resultDto = await _mediator.Send(query, cancellationToken);
             // 2. Bọc kết quả DTO vào "lớp vỏ" chuẩn của công ty (ApiResponse)
-            var response = new ApiResponse<SearchParkingLotsResultDto>(resultDto, "Search completed successfully.");
+            var response = new ApiResponse<SearchParkingLotsResultDto>(resultDto, true, 200, "Search completed successfully.");
             // 3. Trả về HTTP 200 OK
             return Ok(response);
         }
@@ -56,7 +50,7 @@ namespace Parking.Parking.Api.Controllers
                 LevelId = levelId
             };
             var result = await _mediator.Send(query, cancellationToken);
-            return Ok(new ApiResponse<LotAvailabilityDto>(result, "Lot availability retrieved successfully."));
+            return Ok(new ApiResponse<LotAvailabilityDto>(result, true, 200, "Lot availability retrieved successfully."));
         }
 
         /// <summary>Lấy chi tiết thông tin bãi đỗ xe theo ID.</summary>
@@ -64,7 +58,7 @@ namespace Parking.Parking.Api.Controllers
         public async Task<IActionResult> GetById([FromRoute] Guid lotId, CancellationToken cancellationToken)
         {
             var result = await _mediator.Send(new GetParkingLotDetailQuery(lotId), cancellationToken);
-            return Ok(new ApiResponse<ParkingLotDetailDto>(result, "Lấy thông tin bãi đỗ xe thành công."));
+            return Ok(new ApiResponse<ParkingLotDetailDto>(result, true, 200, "Lấy thông tin bãi đỗ xe thành công."));
         }
 
         /// <summary>Lấy toàn bộ cây cấu trúc không gian 3D của bãi xe (Level -> Zone -> Slot kèm tọa độ 3D) có hỗ trợ Cache.</summary>
@@ -72,7 +66,7 @@ namespace Parking.Parking.Api.Controllers
         public async Task<IActionResult> GetLayout([FromRoute] Guid lotId, CancellationToken cancellationToken)
         {
             var result = await _mediator.Send(new GetLotLayout3DQuery(lotId), cancellationToken);
-            return Ok(new ApiResponse<LotLayout3DDto>(result, "Lấy sơ đồ cấu trúc không gian 3D thành công."));
+            return Ok(new ApiResponse<LotLayout3DDto>(result, true, 200, "Lấy sơ đồ cấu trúc không gian 3D thành công."));
         }
     }
 }

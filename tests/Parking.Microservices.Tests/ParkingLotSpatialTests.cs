@@ -1,13 +1,19 @@
 using FluentValidation.TestHelper;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Parking.Parking.Application;
 using Parking.Parking.Application.DTOs;
 using Parking.Parking.Application.Exceptions;
 using Parking.Parking.Application.Features.ParkingLots.Queries;
 using Parking.Parking.Application.Interfaces;
 using Parking.Parking.Domain;
+using Parking.Parking.Domain.Entities;
 using Parking.Parking.Infrastructure.Cache;
+using Parking.Parking.Infrastructure.Services;
 using Xunit;
 
 namespace Parking.Microservices.Tests;
@@ -60,11 +66,17 @@ public class ParkingLotSpatialTests
     // 2. CACHE SERVICE TESTS (TTL 12H)
     // ==========================================
 
+    private static (MemoryDistributedCache Cache, ParkingCacheService Service) CreateDistributedCacheService()
+    {
+        var distributedCache = new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions()));
+        var cacheService = new ParkingCacheService(distributedCache, NullLogger<ParkingCacheService>.Instance);
+        return (distributedCache, cacheService);
+    }
+
     [Fact]
     public async Task ParkingCacheService_ShouldCacheValue_AndAvoidSecondDbCall()
     {
-        using var memoryCache = new MemoryCache(new MemoryCacheOptions());
-        var cacheService = new ParkingCacheService(memoryCache, NullLogger<ParkingCacheService>.Instance);
+        var (_, cacheService) = CreateDistributedCacheService();
 
         var key = "test_key_01";
         var callCount = 0;
@@ -80,7 +92,7 @@ public class ParkingLotSpatialTests
         Assert.Equal("DatabaseResult", firstResult);
         Assert.Equal(1, callCount);
 
-        // Lần 2: Cache Hit -> Lấy từ RAM, KHÔNG gọi lại DB
+        // Lần 2: Cache Hit -> Lấy từ Distributed Cache, KHÔNG gọi lại DB
         var secondResult = await cacheService.GetOrSetAsync(key, Factory, TimeSpan.FromHours(12));
         Assert.Equal("DatabaseResult", secondResult);
         Assert.Equal(1, callCount); // Vẫn chỉ là 1
@@ -115,16 +127,190 @@ public class ParkingLotSpatialTests
         var sampleLayout = new LotLayout3DDto(lotId, "LOT-01", "Bãi xe mẫu", []);
         var stubRepo = new FakeSpatialRepository(lotDetail: null, layout: sampleLayout);
 
-        using var memoryCache = new MemoryCache(new MemoryCacheOptions());
-        var cacheService = new ParkingCacheService(memoryCache, NullLogger<ParkingCacheService>.Instance);
-
+        var (_, cacheService) = CreateDistributedCacheService();
         var handler = new GetLotLayout3DQueryHandler(stubRepo, cacheService);
 
-        var result = await handler.Handle(new GetLotLayout3DQuery(lotId), CancellationToken.None);
+        var firstResult = await handler.Handle(new GetLotLayout3DQuery(lotId), CancellationToken.None);
+        var secondResult = await handler.Handle(new GetLotLayout3DQuery(lotId), CancellationToken.None);
 
-        Assert.NotNull(result);
-        Assert.Equal(lotId, result.LotId);
-        Assert.Equal("LOT-01", result.Code);
+        Assert.NotNull(firstResult);
+        Assert.Equal(lotId, firstResult.LotId);
+        Assert.Equal("LOT-01", firstResult.Code);
+        Assert.Equal(firstResult.LotId, secondResult.LotId);
+        Assert.Equal(firstResult.Code, secondResult.Code);
+        Assert.Equal(1, stubRepo.LayoutCallCount); // Lần 2 phải ăn cache, không gọi lại DB
+    }
+
+    [Fact]
+    public async Task GetLotLayout3DQueryHandler_RoundTripsComplexLayoutThroughDistributedCache()
+    {
+        var lotId = Guid.NewGuid();
+        var slotId = Guid.NewGuid();
+        var sampleLayout = new LotLayout3DDto(
+            lotId,
+            "LOT-3D",
+            "Bãi 3D",
+            [
+                new LevelSpatialDto(
+                    Guid.NewGuid(),
+                    "B1",
+                    "Tầng Hầm 1",
+                    "UNDERGROUND",
+                    -3.5m,
+                    1,
+                    [
+                        new ZoneSpatialDto(
+                            Guid.NewGuid(),
+                            "Z-A",
+                            "Khu A",
+                            [
+                                new SlotSpatialDto(
+                                    slotId,
+                                    "A01",
+                                    "AVAILABLE",
+                                    2.5m,
+                                    5.0m,
+                                    new Vector3Dto(1.5m, 0m, 4.25m),
+                                    90m,
+                                    new Vector3Dto(2.5m, 0.2m, 5.0m))
+                            ])
+                    ])
+            ]);
+
+        var stubRepo = new FakeSpatialRepository(lotDetail: null, layout: sampleLayout);
+        var (_, cacheService) = CreateDistributedCacheService();
+        var handler = new GetLotLayout3DQueryHandler(stubRepo, cacheService);
+
+        var first = await handler.Handle(new GetLotLayout3DQuery(lotId), CancellationToken.None);
+        var second = await handler.Handle(new GetLotLayout3DQuery(lotId), CancellationToken.None);
+
+        Assert.Equal(1, stubRepo.LayoutCallCount);
+        Assert.Equal(slotId, second.Levels[0].Zones[0].Slots[0].Id);
+        Assert.Equal(4.25m, second.Levels[0].Zones[0].Slots[0].Position!.Z);
+        Assert.Equal(first.Name, second.Name);
+    }
+
+    [Fact]
+    public async Task GetLotLayout3DQueryHandler_ShouldThrowNotFound_AndNotCacheNull_WhenLotMissing()
+    {
+        var lotId = Guid.NewGuid();
+        var stubRepo = new FakeSpatialRepository(lotDetail: null, layout: null);
+
+        var (_, cacheService) = CreateDistributedCacheService();
+        var handler = new GetLotLayout3DQueryHandler(stubRepo, cacheService);
+
+        await Assert.ThrowsAsync<NotFoundException>(() =>
+            handler.Handle(new GetLotLayout3DQuery(lotId), CancellationToken.None));
+        await Assert.ThrowsAsync<NotFoundException>(() =>
+            handler.Handle(new GetLotLayout3DQuery(lotId), CancellationToken.None));
+
+        Assert.Equal(2, stubRepo.LayoutCallCount); // Không cache kết quả null
+    }
+
+    [Fact]
+    public async Task ParkingCacheService_ShouldCallFactoryOnce_WhenConcurrentMissesOccur()
+    {
+        var (_, cacheService) = CreateDistributedCacheService();
+
+        var callCount = 0;
+        async Task<string?> SlowFactory()
+        {
+            Interlocked.Increment(ref callCount);
+            await Task.Delay(50);
+            return "LayoutData";
+        }
+
+        var tasks = Enumerable.Range(0, 10)
+            .Select(_ => cacheService.GetOrSetAsync("stampede_key", SlowFactory, TimeSpan.FromHours(12)));
+
+        var results = await Task.WhenAll(tasks);
+
+        Assert.All(results, r => Assert.Equal("LayoutData", r));
+        Assert.Equal(1, callCount);
+    }
+
+    [Fact]
+    public async Task ParkingCacheService_ShouldFallbackToFactory_WhenDistributedCacheThrows()
+    {
+        var failingDistributedCache = new FailingDistributedCache();
+        var cacheService = new ParkingCacheService(failingDistributedCache, NullLogger<ParkingCacheService>.Instance);
+
+        var value = await cacheService.GetOrSetAsync(
+            "resilient_key",
+            () => Task.FromResult<string?>("DbFallbackValue"),
+            TimeSpan.FromHours(12));
+
+        Assert.Equal("DbFallbackValue", value);
+    }
+
+    [Fact]
+    public async Task ParkingCacheService_ShouldEvictAndRecompute_WhenCachedJsonIsCorrupted()
+    {
+        var (distributedCache, cacheService) = CreateDistributedCacheService();
+        await distributedCache.SetStringAsync("corrupt_key", "{invalid-json");
+
+        var value = await cacheService.GetOrSetAsync(
+            "corrupt_key",
+            () => Task.FromResult<string?>("RecoveredValue"),
+            TimeSpan.FromHours(12));
+
+        Assert.Equal("RecoveredValue", value);
+        Assert.Equal("\"RecoveredValue\"", await distributedCache.GetStringAsync("corrupt_key"));
+    }
+
+    [Fact]
+    public void AddParkingCaching_RegistersRedisWhenConfigured_AndMemoryFallbackWhenEmpty()
+    {
+        var redisServices = new ServiceCollection();
+        var redisConfig = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:Redis"] = "localhost:6379",
+                ["Redis:InstanceName"] = "parking-test:"
+            })
+            .Build();
+        redisServices.AddLogging();
+        redisServices.AddParkingCaching(redisConfig);
+
+        using var redisProvider = redisServices.BuildServiceProvider();
+        var redisCache = redisProvider.GetRequiredService<IDistributedCache>();
+        Assert.Contains("Redis", redisCache.GetType().Name, StringComparison.OrdinalIgnoreCase);
+
+        var fallbackServices = new ServiceCollection();
+        var emptyConfig = new ConfigurationBuilder().Build();
+        fallbackServices.AddLogging();
+        fallbackServices.AddParkingCaching(emptyConfig);
+
+        using var fallbackProvider = fallbackServices.BuildServiceProvider();
+        var fallbackCache = fallbackProvider.GetRequiredService<IDistributedCache>();
+        Assert.IsType<MemoryDistributedCache>(fallbackCache);
+    }
+
+    [Fact]
+    public async Task EstimatedPriceService_ShouldCachePricingRule_ViaDistributedCache_AndSkipNullRule()
+    {
+        var lotId = Guid.NewGuid();
+        var (_, cacheService) = CreateDistributedCacheService();
+        var repo = new FakeParkingLotRepository(
+            ("Asia/Ho_Chi_Minh", "{\"blockMinutes\":15,\"rateVnd\":5000,\"dailyCapVnd\":120000,\"multiplier\":1.0}"));
+        var priceService = new EstimatedPriceService(repo, cacheService);
+
+        var start = new DateTime(2026, 11, 1, 8, 0, 0, DateTimeKind.Utc);
+        var first = await priceService.CalculateEstimatedFeeAsync(lotId, "car", start, 30);
+        var second = await priceService.CalculateEstimatedFeeAsync(lotId, "CAR", start, 30);
+
+        Assert.Equal(10_000, first.TotalFee);
+        Assert.Equal(first.TotalFee, second.TotalFee);
+        Assert.Equal(1, repo.Calls);
+
+        var emptyRepo = new FakeParkingLotRepository(null);
+        var emptyPriceService = new EstimatedPriceService(emptyRepo, cacheService);
+        var missingLotId = Guid.NewGuid();
+        var missing1 = await emptyPriceService.CalculateEstimatedFeeAsync(missingLotId, "CAR", start, 30);
+        var missing2 = await emptyPriceService.CalculateEstimatedFeeAsync(missingLotId, "CAR", start, 30);
+        Assert.Equal(0, missing1.TotalFee);
+        Assert.Equal(0, missing2.TotalFee);
+        Assert.Equal(2, emptyRepo.Calls);
     }
 
     // ==========================================
@@ -133,9 +319,15 @@ public class ParkingLotSpatialTests
 
     private sealed class FakeSpatialRepository(ParkingLotDetailDto? lotDetail, LotLayout3DDto? layout) : IParkingRepository
     {
-        public Task<ParkingLotDetailDto?> GetParkingLotDetailAsync(Guid lotId, CancellationToken ct) => Task.FromResult(lotDetail);
-        public Task<LotLayout3DDto?> GetLotLayout3DAsync(Guid lotId, CancellationToken ct) => Task.FromResult(layout);
+        public int LayoutCallCount { get; private set; }
 
+        public Task<ParkingLotDetailDto?> GetParkingLotDetailAsync(Guid lotId, CancellationToken ct) => Task.FromResult(lotDetail);
+
+        public Task<LotLayout3DDto?> GetLotLayout3DAsync(Guid lotId, CancellationToken ct)
+        {
+            LayoutCallCount++;
+            return Task.FromResult(layout);
+        }
         public Task<IReadOnlyList<LotView>> ListLotsAsync(CancellationToken ct) => throw new NotImplementedException();
         public Task<bool> LotExistsAsync(Guid lotId, CancellationToken ct) => throw new NotImplementedException();
         public Task<BookingView> CreateBookingAsync(Guid customerId, BookingRequest request, string key, CancellationToken ct) => throw new NotImplementedException();
@@ -168,5 +360,35 @@ public class ParkingLotSpatialTests
         public Task<ShiftHandoverDto?> GetShiftHandoverByIdAsync(Guid lotId, Guid handoverId, Guid actorId, bool isManager, CancellationToken ct) => throw new NotImplementedException();
         public Task<ShiftHandoverDto> ConfirmShiftHandoverAsync(Guid lotId, Guid handoverId, Guid actorId, ConfirmShiftHandoverRequestDto request, string? key, CancellationToken ct) => throw new NotImplementedException();
         public Task<ShiftHandoverDto> ReassignReceiverAsync(Guid lotId, Guid handoverId, Guid actorId, ReassignReceiverRequestDto request, CancellationToken ct) => throw new NotImplementedException();
+    }
+
+    private sealed class FailingDistributedCache : IDistributedCache
+    {
+        public byte[]? Get(string key) => throw new TimeoutException("Redis down");
+        public Task<byte[]?> GetAsync(string key, CancellationToken token = default) => throw new TimeoutException("Redis down");
+        public void Refresh(string key) => throw new TimeoutException("Redis down");
+        public Task RefreshAsync(string key, CancellationToken token = default) => throw new TimeoutException("Redis down");
+        public void Remove(string key) => throw new TimeoutException("Redis down");
+        public Task RemoveAsync(string key, CancellationToken token = default) => throw new TimeoutException("Redis down");
+        public void Set(string key, byte[] value, DistributedCacheEntryOptions options) => throw new TimeoutException("Redis down");
+        public Task SetAsync(string key, byte[] value, DistributedCacheEntryOptions options, CancellationToken token = default) => throw new TimeoutException("Redis down");
+    }
+
+    private sealed class FakeParkingLotRepository((string Timezone, string ParametersJson)? config) : IParkingLotRepository
+    {
+        public int Calls { get; private set; }
+
+        public Task<List<ParkingLot>> GetAvailableLotsAsync(string vehicleType, CancellationToken cancellationToken = default)
+            => Task.FromResult(new List<ParkingLot>());
+
+        public Task<(string Timezone, string ParametersJson)?> GetPricingRuleConfigAsync(
+            Guid lotId,
+            string vehicleType,
+            DateTime startTime,
+            CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            return Task.FromResult(config);
+        }
     }
 }

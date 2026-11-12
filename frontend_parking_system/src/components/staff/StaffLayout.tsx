@@ -21,7 +21,7 @@ export default function StaffLayout() {
         if (facilityList.length > 0 && !selectedLotId) {
           setSelectedLotId(facilityList[0].lotId);
         }
-        const incidents: Incident[] = await staffApi.getIncidents();
+        const incidents: Incident[] = selectedLotId || facilityList[0]?.lotId ? await staffApi.getIncidents(selectedLotId || facilityList[0].lotId) : [];
         const active = incidents.filter((i) => i.status === "Open" || i.status === "InProgress");
         setOpenIncidentCount(active.length);
       } catch (err) {

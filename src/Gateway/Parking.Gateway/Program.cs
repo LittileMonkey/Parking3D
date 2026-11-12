@@ -18,7 +18,7 @@ builder.Services.AddRateLimiter(options=>
         await context.HttpContext.Response.WriteAsJsonAsync(new ApiResponse<object>(null,false,429,"Too many requests"),ct);
     };
 });
-var app=builder.Build();app.UseCors();
+var app=builder.Build();app.UseTrustedForwarding();app.UseCors();
 app.UseRateLimiter();
 app.UseStatusCodePages(async c=>
 {

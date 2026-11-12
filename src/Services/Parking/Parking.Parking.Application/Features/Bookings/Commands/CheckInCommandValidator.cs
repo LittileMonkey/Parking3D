@@ -19,9 +19,18 @@ public sealed class CheckInCommandValidator : AbstractValidator<CheckInCommand>
             RuleFor(x => x.Request.DetectedPlate)
                 .Must(value => PlateNumber.TryNormalize(value, out _))
                 .WithMessage("A valid observed vehicle plate is required.");
-            When(x => !string.IsNullOrWhiteSpace(x.Request.QrPayload), () =>
+            When(x => !string.IsNullOrEmpty(x.Request.QrPayload), () =>
             {
-                RuleFor(x => x.Request.QrPayload!).MaximumLength(2048);
+                RuleFor(x => x.Request.QrPayload!)
+                    .Must(payload => !string.IsNullOrWhiteSpace(payload))
+                    .WithMessage("QR payload cannot be whitespace.")
+                    .MaximumLength(2048);
+            });
+            When(x => !string.IsNullOrWhiteSpace(x.Request.VehicleType), () =>
+            {
+                RuleFor(x => x.Request.VehicleType!)
+                    .Must(type => type.Trim().ToUpperInvariant() is "CAR" or "MOTORBIKE")
+                    .WithMessage("VehicleType must be CAR or MOTORBIKE.");
             });
             When(x => x.Request.AllowMismatchOverride, () =>
             {

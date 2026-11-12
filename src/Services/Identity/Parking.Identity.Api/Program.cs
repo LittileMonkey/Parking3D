@@ -24,16 +24,10 @@ namespace Parking.Identity.Api
 
             builder.WebHost.ConfigureKestrel(k =>
                     {
-                        // 1. Cổng REST HTTP (cho bạn của bạn test nhanh không cần chứng chỉ SSL)
-                        k.Listen(IPAddress.Loopback, 5041, o => o.Protocols = HttpProtocols.Http1);
-                        // 2. Cổng REST HTTPS (cho bạn của bạn hoặc Frontend gọi qua HTTPS)
-                        k.Listen(IPAddress.Loopback, 7023, o =>
-                        {
-                            o.Protocols = HttpProtocols.Http1;
-                            o.UseHttps(); // Kích hoạt chứng chỉ bảo mật HTTPS của .NET
-                        });
-                        // 3. Cổng gRPC chuyên dụng (cho Payment gọi sang nội bộ bằng HTTP/2)
-                        k.Listen(IPAddress.Loopback, 5042, o => o.Protocols = HttpProtocols.Http2);
+                        var bind = builder.Configuration["Ports:Bind"] == "0.0.0.0" ? IPAddress.Any : IPAddress.Loopback;
+                        k.Listen(bind, builder.Configuration.GetValue("Ports:Http", 5041), o => o.Protocols = HttpProtocols.Http1);
+                        k.Listen(bind, builder.Configuration.GetValue("Ports:Grpc", 5042), o => o.Protocols = HttpProtocols.Http2);
+                        // Local Docker uses HTTP internally. Public TLS terminates at a reverse proxy.
                     });
                     // Rate Limiting (Tính năng mới của đồng đội)
             builder.Services.AddRateLimiter(options =>
@@ -90,6 +84,10 @@ namespace Parking.Identity.Api
             builder.Services.AddApplicationDependencyInjection(
                 builder.Configuration);
 
+            builder.Services.AddSingleton(_ => Npgsql.NpgsqlDataSource.Create(builder.Configuration.GetConnectionString("Service") ?? builder.Configuration.GetConnectionString("DefaultConnectionString") ?? throw new InvalidOperationException("Identity DB required")));
+            builder.Services.AddScoped<MfaService>();
+            builder.Services.AddScoped<Parking.Identity.Application.Common.Interface.IMfaVerifier>(sp => sp.GetRequiredService<MfaService>());
+
             // gRPC
             builder.Services.AddGrpc(o =>
             {
@@ -114,6 +112,7 @@ namespace Parking.Identity.Api
             builder.Services.AddAuthorization();
 
             var app = builder.Build();
+            app.UseTrustedForwarding();
 
             // Initialize database data
             await using (var scope = app.Services.CreateAsyncScope())
@@ -122,7 +121,7 @@ namespace Parking.Identity.Api
                     scope.ServiceProvider.GetRequiredService<DbInitializer>();
 
                 await initializer.SeedAdminAsync();
-                await initializer.SeedParkingStaff();
+                if(app.Environment.IsDevelopment()) await initializer.SeedParkingStaff();
             }
 
             // Configure the HTTP request pipeline.

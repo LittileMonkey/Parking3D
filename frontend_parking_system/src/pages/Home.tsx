@@ -137,44 +137,20 @@ export default function Home() {
     });
   };
 
-  const [envData, setEnvData] = useState<BuildingEnvironment>({
-    smokeDensity: "0.014 mg/m³",
-    smokeStatus: "AN TOÀN",
-    airQualityIndex: 42,
-    airQualityStatus: "TỐT (AQI)",
-    co2Level: "415 ppm",
-    temperature: "29°C",
-    weatherCondition: "Nắng nhẹ • Gió 8 km/h",
-    humidity: "65%",
-    city: "TP. HỒ CHÍ MINH",
-    updatedAt: "15:20",
-  });
-
+  const [envData, setEnvData] = useState<BuildingEnvironment | null>(null);
   useEffect(() => {
     let active = true;
-    Promise.all([api.checkHealth(), api.getSlots(), api.getBuildingEnvironment()])
-      .then(([healthy, items, env]) => {
-        if (!active) return;
-        setSlots(items);
-        setApiState(healthy ? "online" : "offline");
-        if (env) setEnvData(env);
-      })
-      .catch(() => {
-        if (!active) return;
-        setApiState("offline");
-      });
-
-    // định kỳ 15s cập nhật telemetry mock
-    const timer = setInterval(() => {
-      api.getBuildingEnvironment().then((env) => {
-        if (active && env) setEnvData(env);
-      });
-    }, 15000);
-
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
+    Promise.all([api.checkHealth(), api.getSlots()]).then(([healthy, items]) => {
+      if (!active) return;
+      setSlots(items); setApiState(healthy ? "online" : "offline");
+    }).catch(() => { if (active) setApiState("offline"); });
+    async function loadEnvironment() {
+      try { const value = await api.getBuildingEnvironment(); if (active) setEnvData(value); }
+      catch { if (active) setEnvData(null); }
+    }
+    void loadEnvironment();
+    const timer = setInterval(loadEnvironment, 15000);
+    return () => { active = false; clearInterval(timer); };
   }, []);
 
   const handleLogout = async () => {
@@ -182,7 +158,7 @@ export default function Home() {
     setShowLogout(false);
   };
 
-  const marqueeTelemetryItems = (
+  const marqueeTelemetryItems = envData ? (
     <>
       <span className="telemetry-item">
         <span className="live-dot-green" /> <strong>{t("topbar.infra")}</strong> {t("topbar.active")}
@@ -213,7 +189,7 @@ export default function Home() {
       </span>
       <span className="bar-divider">•</span>
     </>
-  );
+  ) : <span className="telemetry-item">Chưa có dữ liệu cảm biến được xác nhận.</span>;
 
   return (
     <CustomerLayout

@@ -12,6 +12,16 @@ public sealed class BookingPaymentQueryGrpc(NpgsqlDataSource db,IFacilityAccess 
 {
     private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
 
+    public override async Task<RefundEligibilityReply> GetRefundEligibility(BookingQuoteRequest request,ServerCallContext context)
+    {
+        if(!Guid.TryParse(request.BookingId,out var id)||!Guid.TryParse(request.UserId,out var actor))throw new RpcException(new Status(StatusCode.InvalidArgument,"IDs required"));
+        await using var cmd=db.CreateCommand("SELECT b.lot_id,b.customer_id,(b.status='EXPIRED' OR (b.status='CANCELLED' AND coalesce(c.refund_eligible,false))) FROM bookings b LEFT JOIN booking_cancellations c ON c.booking_id=b.id WHERE b.id=@id");
+        cmd.Parameters.AddWithValue("id",id);Guid lot;Guid? owner;bool eligible;
+        await using(var r=await cmd.ExecuteReaderAsync(context.CancellationToken)){if(!await r.ReadAsync(context.CancellationToken))throw new RpcException(new Status(StatusCode.NotFound,"Booking not found"));lot=r.GetGuid(0);owner=r.IsDBNull(1)?null:r.GetGuid(1);eligible=r.GetBoolean(2);}
+        await access.RequireAsync(actor,owner==actor?Guid.Empty:lot,owner==actor?"USER":"MANAGER",context.CancellationToken);
+        return new RefundEligibilityReply{Eligible=eligible,LotId=lot.ToString(),CustomerId=owner?.ToString()??""};
+    }
+
     public override async Task<BookingQuoteReply> GetQuote(BookingQuoteRequest request,ServerCallContext context)
     {
         if(!Guid.TryParse(request.BookingId,out var booking)||!Guid.TryParse(request.UserId,out var user))
@@ -68,15 +78,13 @@ public sealed class BookingPaymentQueryGrpc(NpgsqlDataSource db,IFacilityAccess 
                 await access.RequireAsync(user,lot,"CASH",context.CancellationToken);
 
             } 
-            catch(global::Parking.ServiceDefaults.ServiceException)
+            catch(global::Parking.ServiceDefaults.ServiceException ex)
             {
 
-                throw new RpcException(new Status(StatusCode.PermissionDenied,"Booking owner or assigned Staff required"));
+                throw new RpcException(new Status(
+                    ex.StatusCode == 503 ? StatusCode.Unavailable : StatusCode.PermissionDenied,
+                    ex.StatusCode == 503 ? "Authorization service unavailable" : "Booking owner or assigned Staff required"));
 
-            }
-            catch(Grpc.Core.RpcException ex) when (ex.StatusCode == Grpc.Core.StatusCode.DeadlineExceeded || ex.StatusCode == Grpc.Core.StatusCode.Unavailable)
-            {
-                // Fallback nếu Identity gRPC bận hoặc timeout khi test nội bộ
             }
         }
 
@@ -98,6 +106,17 @@ public sealed class BookingPaymentQueryGrpc(NpgsqlDataSource db,IFacilityAccess 
 public sealed class PaymentEventsGrpc(NpgsqlDataSource db,TimeProvider? timeProvider = null) : ParkingPaymentEvents.ParkingPaymentEventsBase
 {
     private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
+
+    public override async Task<DeliveryReply> DeliverRefundSucceeded(RefundSucceeded request,ServerCallContext context)
+    {
+        if(!Guid.TryParse(request.RefundId,out var refund)||!Guid.TryParse(request.BookingId,out var booking)||request.AmountMinor<=0)throw new RpcException(new Status(StatusCode.InvalidArgument,"Invalid refund event"));
+        await using var cmd=db.CreateCommand("""
+            INSERT INTO user_notifications(user_id,booking_id,kind,message,dedupe_key)
+            SELECT customer_id,id,'REFUND_SUCCEEDED','Đã hoàn '||@amount::text||' VND cho booking '||code,@key FROM bookings WHERE id=@booking AND customer_id IS NOT NULL
+            ON CONFLICT(dedupe_key) DO NOTHING
+            """);cmd.Parameters.AddWithValue("amount",request.AmountMinor);cmd.Parameters.AddWithValue("key","refund:"+refund);cmd.Parameters.AddWithValue("booking",booking);await cmd.ExecuteNonQueryAsync(context.CancellationToken);
+        return new DeliveryReply{Outcome="RECORDED"};
+    }
 
     public override async Task<DeliveryReply> DeliverPaymentSucceeded(PaymentSucceeded request,ServerCallContext context)
     {

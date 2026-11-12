@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -13,15 +12,6 @@ namespace Parking.Parking.Api.Controllers;
 [Route("api/v1/parking-lots/{lotId:guid}/shift-handovers")]
 public sealed class ShiftHandoversController(ISender sender) : ControllerBase
 {
-    private bool IsManagerUser()
-    {
-        return User.IsInRole("PARKING_MANAGER") ||
-               User.IsInRole("ADMIN") ||
-               User.IsInRole("PARKING_ADMIN") ||
-               User.HasClaim(c => c.Type == ClaimTypes.Role &&
-                   (c.Value == "PARKING_MANAGER" || c.Value == "ADMIN" || c.Value == "PARKING_ADMIN"));
-    }
-
     /// <summary>
     /// H1: Nhân viên giao ca tạo biên bản bàn giao ca trực mới (PendingConfirmation).
     /// </summary>
@@ -31,9 +21,9 @@ public sealed class ShiftHandoversController(ISender sender) : ControllerBase
         [FromBody] CreateShiftHandoverRequestDto request,
         CancellationToken ct)
     {
-        var key = Request.Headers["Idempotency-Key"].ToString();
+        var key = Request.ReadOptionalIdempotencyKey();
         var result = await sender.Send(new CreateShiftHandoverCommand(
-            lotId, User.Subject(), request, string.IsNullOrWhiteSpace(key) ? null : key), ct);
+            lotId, User.Subject(), request, key), ct);
         return StatusCode(201, new ApiResponse<ShiftHandoverDto>(result, true, 201, "Đã gửi biên bản bàn giao, chờ người nhận xác nhận."));
     }
 
@@ -48,8 +38,9 @@ public sealed class ShiftHandoversController(ISender sender) : ControllerBase
         [FromQuery] int pageSize = 25,
         CancellationToken ct = default)
     {
+        // Authoritative facility-scoped MANAGER resolution happens inside ShiftHandoverQueryHandlers.
         var result = await sender.Send(new ListShiftHandoversQuery(
-            lotId, User.Subject(), IsManagerUser(), status, page, pageSize), ct);
+            lotId, User.Subject(), IsManager: false, status, page, pageSize), ct);
         return Ok(new ApiResponse<PagedResult<ShiftHandoverSummaryDto>>(result, true, 200, "Đã tải danh sách bàn giao ca."));
     }
 
@@ -62,8 +53,9 @@ public sealed class ShiftHandoversController(ISender sender) : ControllerBase
         Guid handoverId,
         CancellationToken ct)
     {
+        // Authoritative facility-scoped MANAGER resolution happens inside ShiftHandoverQueryHandlers.
         var result = await sender.Send(new GetShiftHandoverByIdQuery(
-            lotId, handoverId, User.Subject(), IsManagerUser()), ct);
+            lotId, handoverId, User.Subject(), IsManager: false), ct);
         return Ok(new ApiResponse<ShiftHandoverDto>(result, true, 200, "Đã lấy chi tiết biên bản bàn giao ca."));
     }
 
@@ -77,9 +69,9 @@ public sealed class ShiftHandoversController(ISender sender) : ControllerBase
         [FromBody] ConfirmShiftHandoverRequestDto request,
         CancellationToken ct)
     {
-        var key = Request.Headers["Idempotency-Key"].ToString();
+        var key = Request.ReadOptionalIdempotencyKey();
         var result = await sender.Send(new ConfirmShiftHandoverCommand(
-            lotId, handoverId, User.Subject(), request, string.IsNullOrWhiteSpace(key) ? null : key), ct);
+            lotId, handoverId, User.Subject(), request, key), ct);
         return Ok(new ApiResponse<ShiftHandoverDto>(result, true, 200, "Xác nhận nhận ca trực thành công."));
     }
 
@@ -93,8 +85,9 @@ public sealed class ShiftHandoversController(ISender sender) : ControllerBase
         [FromBody] ReassignReceiverRequestDto request,
         CancellationToken ct)
     {
+        var key = Request.ReadOptionalIdempotencyKey();
         var result = await sender.Send(new ReassignReceiverCommand(
-            lotId, handoverId, User.Subject(), request), ct);
+            lotId, handoverId, User.Subject(), request, key), ct);
         return Ok(new ApiResponse<ShiftHandoverDto>(result, true, 200, "Đã chỉ định lại người nhận ca thành công."));
     }
 }

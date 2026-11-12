@@ -109,3 +109,6 @@ docs/*Giai_Thich*.md
 DEMO_SCRIPT.md
 docs/DEMO_SQL_QUERIES.sql
 FE_IDEMPOTENCY_HANDOVER.md
+
+.env.production
+backups/

@@ -209,7 +209,7 @@ export default function SearchPage() {
           : result.levels[0]?.levelCode ?? "");
         setSelectedSlotId(current => result.levels.some(level =>
           level.slots.some(slot => slot.slotId === current && slot.status.toUpperCase() === "AVAILABLE"
-            && slot.supportedVehicleTypes.includes(vehicleType))) ? current : "");
+            && slot.supportedVehicleTypes.some(type => normalizeVehicleType(type) === vehicleType))) ? current : "");
       }
     } catch (cause) {
       if (requestId === availabilityRequestId.current) setAvailabilityError(getErrorMessage(cause));
@@ -340,6 +340,8 @@ export default function SearchPage() {
     );
   };
 
+  const [bookingMode, setBookingMode] = useState<"EXACT_SLOT" | "AUTO_SLOT">("EXACT_SLOT");
+
   const createBooking = async () => {
     setBookingError("");
     if (!isAuthenticated) {
@@ -350,7 +352,7 @@ export default function SearchPage() {
       setBookingError("Khung giờ đã thay đổi; hãy tải lại tình trạng chỗ trước khi đặt.");
       return;
     }
-    if (!selectedLot || !selectedSlotId || !selectedVehicle) {
+    if (!selectedLot || (bookingMode === "EXACT_SLOT" && !selectedSlotId) || !selectedVehicle) {
       setBookingError("Vui lòng chọn ô đỗ và phương tiện.");
       return;
     }
@@ -364,7 +366,8 @@ export default function SearchPage() {
       const start = new Date(startsAt);
       const payload = {
         lotId: selectedLot.parkingLotId,
-        slotId: selectedSlotId,
+        mode: bookingMode,
+        slotId: bookingMode === "AUTO_SLOT" ? "00000000-0000-0000-0000-000000000000" : selectedSlotId,
         vehicleId: selectedVehicle.id,
         startsAt: start.toISOString(),
         endsAt: new Date(start.getTime() + duration * 60_000).toISOString(),
@@ -388,7 +391,7 @@ export default function SearchPage() {
     [availability, selectedLevelCode],
   );
   const levelSlots = useMemo(() => selectedLevel?.slots
-    .filter(slot => slot.supportedVehicleTypes.includes(vehicleType))
+    .filter(slot => slot.supportedVehicleTypes.some(type => normalizeVehicleType(type) === vehicleType))
     .map(slot => ({
       ...slot,
       floorCode: selectedLevel.levelCode,
@@ -400,7 +403,7 @@ export default function SearchPage() {
       levelCode: level.levelCode,
       levelName: level.levelName,
       slots: level.slots
-        .filter(slot => slot.supportedVehicleTypes.includes(vehicleType))
+        .filter(slot => slot.supportedVehicleTypes.some(type => normalizeVehicleType(type) === vehicleType))
         .map(slot => ({
           slotId: slot.slotId,
           slotCode: slot.slotCode,
@@ -435,7 +438,7 @@ export default function SearchPage() {
         slots: applySlotStatusChanges(level.slots, changes, current.lotId),
       }));
       const slots = levels.flatMap(level => level.slots)
-        .filter(slot => slot.supportedVehicleTypes.includes(vehicleType));
+        .filter(slot => slot.supportedVehicleTypes.some(type => normalizeVehicleType(type) === vehicleType));
       return {
         ...current,
         levels,
@@ -686,6 +689,11 @@ export default function SearchPage() {
                   </>
                 ) : <p>Chọn một ô trên sơ đồ 3D hoặc danh sách để xem chi tiết.</p>}
 
+                <label className="customer-field"><span>Cách chọn ô</span>
+                  <select value={bookingMode} disabled={isCreatingBooking} onChange={e => { setBookingMode(e.target.value as "EXACT_SLOT" | "AUTO_SLOT"); renewBookingKey(); }}>
+                    <option value="EXACT_SLOT">Chọn ô trên sơ đồ</option><option value="AUTO_SLOT">Hệ thống chọn ô còn trống</option>
+                  </select>
+                </label>
                 <label className="customer-field booking-vehicle-picker">
                   <span>Phương tiện trong tài khoản</span>
                   <select value={selectedVehicle?.id ?? ""} onChange={event => setVehicleId(event.target.value)}
@@ -720,7 +728,7 @@ export default function SearchPage() {
                   </div>
                 )}
                 <button className="customer-button primary" type="button" onClick={() => void createBooking()}
-                  disabled={!selectedSlot || selectedSlot.status.toUpperCase() !== "AVAILABLE" || !selectedVehicle
+                  disabled={(bookingMode === "EXACT_SLOT" && (!selectedSlot || selectedSlot.status.toUpperCase() !== "AVAILABLE")) || !selectedVehicle
                     || !availabilityIsCurrent || isCreatingBooking}>
                   {isCreatingBooking ? "Đang giữ chỗ..." : "Giữ chỗ và tiếp tục thanh toán"}
                 </button>

@@ -3,6 +3,7 @@ package parking.identity.v1;
 option csharp_namespace = "Parking.Contracts.Identity.V1";
 service FacilityAuthorization {
   rpc CheckAccess(AccessRequest) returns (AccessReply);
+  rpc GetRegisteredVehicle(RegisteredVehicleRequest) returns (RegisteredVehicleReply);
 }
 message AccessRequest {
   string user_id = 1;
@@ -13,3 +14,6 @@ message AccessReply {
   bool allowed = 1;
   string reason_code = 2;
 }
+
+message RegisteredVehicleRequest { string user_id = 1; string vehicle_id = 2; }
+message RegisteredVehicleReply { string vehicle_id = 1; string plate = 2; string vehicle_type = 3; bool is_primary = 4; string fuel_type = 5; }

@@ -92,7 +92,7 @@ public sealed partial class ParkingWorkflowTests
         using var http = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{ports[2]}"), Timeout = TimeSpan.FromSeconds(10) };
         async Task<string> Login(string email)
         {
-            using var response = await identityHttp.PostAsJsonAsync("/api/v1/auth/login", new { emailNormalized = email, password });
+            using var response = await identityHttp.PostAsJsonAsync("/api/v1/auth/login", new { email, password });
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
             return json.RootElement.GetProperty("result").GetProperty("accessToken").GetString()!;

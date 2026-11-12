@@ -1,4 +1,4 @@
-using Npgsql;
+﻿using Npgsql;
 using Parking.Parking.Application.Interfaces;
 using Parking.Parking.Domain.Entities;
 
@@ -7,15 +7,21 @@ namespace Parking.Parking.Infrastructure.Repositories;
 public class ParkingLotRepository : IParkingLotRepository
 {
     private readonly NpgsqlDataSource _db;
+    private readonly TimeProvider _clock;
 
-    public ParkingLotRepository(NpgsqlDataSource db)
+    public ParkingLotRepository(NpgsqlDataSource db, TimeProvider? timeProvider = null)
     {
         _db = db;
+        _clock = timeProvider ?? TimeProvider.System;
     }
 
-    public async Task<List<ParkingLot>> GetAvailableLotsAsync(string vehicleType, CancellationToken cancellationToken = default)
+    public Task<List<ParkingLot>> GetAvailableLotsAsync(string vehicleType, CancellationToken cancellationToken = default)
+        => GetAvailableLotsAsync(vehicleType, _clock.GetUtcNow(), _clock.GetUtcNow().AddHours(1), cancellationToken);
+
+    public async Task<List<ParkingLot>> GetAvailableLotsAsync(string vehicleType, DateTimeOffset startsAt, DateTimeOffset endsAt, CancellationToken cancellationToken = default)
     {
         var normalizedType = vehicleType.Trim().ToUpperInvariant();
+        var now = _clock.GetUtcNow().UtcDateTime;
 
         // Truy vấn danh sách bãi ACTIVE có chính sách cho loại xe này và đếm slot khả dụng thực tế
         const string sql = """
@@ -42,22 +48,37 @@ public class ParkingLotRepository : IParkingLotRepository
                       SELECT 1 FROM session_slot_assignments sa 
                       WHERE sa.slot_id = s.id AND sa.vacated_at IS NULL
                   )
-                  -- Loại bỏ slot đang có đơn giữ chỗ còn hiệu lực
+                  -- Loại bỏ slot đang có đơn giữ chỗ còn hiệu lực hoặc booking đã xác nhận
                   AND NOT EXISTS (
                       SELECT 1 FROM slot_reservations sr
                       JOIN bookings b ON b.id = sr.booking_id
                       WHERE sr.slot_id = s.id 
-                        AND sr.status IN ('HELD', 'CONFIRMED')
-                        AND b.status IN ('PENDING_PAYMENT', 'CONFIRMED')
-                        AND sr.ends_at > now() AND sr.starts_at <= now()
+                        AND (
+                            (sr.status = 'HELD' AND b.status = 'PENDING_PAYMENT' AND b.hold_expires_at > @now)
+                            OR (sr.status = 'CONFIRMED' AND b.status IN ('CONFIRMED', 'CHECKED_IN'))
+                        )
+                        AND tstzrange(sr.starts_at, sr.ends_at, '[)') && tstzrange(@start, @end, '[)')
                   )
                 GROUP BY s.lot_id
             ) slots_stat ON slots_stat.lot_id = l.id
-            WHERE l.status = 'ACTIVE';
+            WHERE l.status = 'ACTIVE'
+              AND NOT EXISTS(SELECT 1 FROM lot_closures c WHERE c.lot_id=l.id
+                AND tstzrange(c.starts_at,c.ends_at,'[)') && tstzrange(@start,@end,'[)'))
+              AND NOT EXISTS (
+                SELECT 1 FROM generate_series(date_trunc('minute',@start::timestamptz),@end::timestamptz-interval '1 microsecond',interval '1 minute') t(at)
+                WHERE NOT EXISTS(SELECT 1 FROM lot_opening_intervals o WHERE o.lot_id=l.id
+                  AND ((extract(isodow FROM t.at AT TIME ZONE l.timezone)-1)*1440
+                    + extract(hour FROM t.at AT TIME ZONE l.timezone)*60 + extract(minute FROM t.at AT TIME ZONE l.timezone)) >= o.start_minute
+                  AND ((extract(isodow FROM t.at AT TIME ZONE l.timezone)-1)*1440
+                    + extract(hour FROM t.at AT TIME ZONE l.timezone)*60 + extract(minute FROM t.at AT TIME ZONE l.timezone)) < o.end_minute)
+              );
             """;
 
         await using var cmd = _db.CreateCommand(sql);
         cmd.Parameters.AddWithValue("vehicleType", normalizedType);
+        cmd.Parameters.AddWithValue("now", now);
+        cmd.Parameters.AddWithValue("start", startsAt.ToUniversalTime());
+        cmd.Parameters.AddWithValue("end", endsAt.ToUniversalTime());
 
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         var result = new List<ParkingLot>();
@@ -79,8 +100,6 @@ public class ParkingLotRepository : IParkingLotRepository
 
         return result;
     }
-
-
 
     /// <summary>
     /// Thực hiện câu lệnh SQL đọc cấu hình biểu giá hiệu lực (FLAT_BLOCK) từ bảng pricing_plans và pricing_rules.

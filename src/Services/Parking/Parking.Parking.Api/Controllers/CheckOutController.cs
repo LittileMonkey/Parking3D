@@ -22,7 +22,7 @@ public sealed class CheckOutController(ISender sender) : ControllerBase
     public async Task<IActionResult> AuthorizeExit([FromBody] ConfirmCheckOutRequestDto request,CancellationToken ct)
     {
         var result=await sender.Send(new AuthorizeCheckOutCommand(User.Subject(),request,
-            Request.Headers["Idempotency-Key"].ToString()),ct);
+            Request.ReadIdempotencyKeyOrEmpty()),ct);
         return Ok(new ApiResponse<AuthorizeCheckOutResultDto>(result,true,200,
             "Payment verified. Staff may operate the exit gate; slot remains occupied until physical exit confirmation."));
     }
@@ -51,7 +51,7 @@ public sealed class CheckOutController(ISender sender) : ControllerBase
     [HttpPost]
     public async Task<IActionResult> ConfirmCheckOut([FromBody] ConfirmCheckOutRequestDto request, CancellationToken ct)
     {
-        var key = Request.Headers["Idempotency-Key"].ToString();
+        var key = Request.ReadIdempotencyKeyOrEmpty();
         var result = await sender.Send(new ConfirmCheckOutCommand(User.Subject(), request, key), ct);
         return Ok(new ApiResponse<ConfirmCheckOutResultDto>(result, true, 200, "Staff confirmed physical exit. Parking slot released."));
     }

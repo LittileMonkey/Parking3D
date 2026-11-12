@@ -1,3 +1,4 @@
+import BookingRefunds from "../components/customer/BookingRefunds";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
@@ -56,6 +57,14 @@ export default function BookingStatusPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [error, setError] = useState("");
+  const [issuedQr, setIssuedQr] = useState<{ bookingId: string; payload: string; expiresAt: string } | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrError, setQrError] = useState("");
+
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancellation, setCancellation] = useState<{ refund_eligible: boolean; refund_status: string } | null>(null);
+  const [cancelError, setCancelError] = useState("");
   const [paymentError, setPaymentError] = useState("");
   const [now, setNow] = useState(Date.now());
 
@@ -74,6 +83,24 @@ export default function BookingStatusPage() {
       setRefreshing(false);
     }
   }, [bookingId, isAuthenticated]);
+
+  useEffect(() => {
+    let current = true;
+    setCancellation(null);
+    if (booking?.status.toUpperCase() === "CANCELLED") {
+      api.getBookingCancellation(bookingId).then(value => { if (current) { setCancellation(value); setCancelError(""); } })
+        .catch(cause => { if (current) setCancelError(errorMessage(cause)); });
+    }
+    return () => { current = false; };
+  }, [bookingId, booking?.status]);
+  const cancelBooking = async () => {
+    setCancelling(true); setCancelError("");
+    try {
+      const result = await api.cancelBooking(bookingId, cancelReason);
+      setCancellation(result); setIssuedQr(null); await loadBooking();
+    } catch (cause) { setCancelError(errorMessage(cause)); }
+    finally { setCancelling(false); }
+  };
 
   const pending = booking?.status.toUpperCase() === "PENDING_PAYMENT";
   const holdExpired = pending && remainingHoldSeconds(booking?.holdExpiresAt, now) === 0;
@@ -110,6 +137,28 @@ export default function BookingStatusPage() {
       if (cause instanceof ApiError && cause.status === 409) void loadBooking(false);
     } finally {
       setPaymentLoading(false);
+    }
+  };
+
+  const beginVnPay = async () => {
+    setPaymentError('');setPaymentLoading(true);
+    try {const result=await api.createVnPayPayment(bookingId,paymentKey+'-vnpay');setPayment(result);
+      if(!result.paymentUrl)throw new Error('Không có liên kết VNPay hợp lệ. Kiểm tra trạng thái thanh toán trước khi thử lại.');
+      const url=new URL(result.paymentUrl);if(url.protocol!=='https:')throw new Error('Liên kết thanh toán không an toàn.');window.location.assign(url.href);
+    }catch(e){setPaymentError(errorMessage(e));}finally{setPaymentLoading(false);}
+  };
+
+  const issueQr = async () => {
+    setQrError("");
+    setQrLoading(true);
+    try {
+      const result = await api.issueBookingQr(bookingId);
+      if (!result.qrPayload || !result.expiresAt) throw new Error("Máy chủ chưa trả mã QR hợp lệ.");
+      setIssuedQr({ bookingId, payload: result.qrPayload, expiresAt: result.expiresAt });
+    } catch (cause) {
+      setQrError(cause instanceof Error ? cause.message : "Không cấp được mã QR.");
+    } finally {
+      setQrLoading(false);
     }
   };
 
@@ -152,13 +201,14 @@ export default function BookingStatusPage() {
             <span className={`booking-status-badge ${safeStatus.toLowerCase()}`}>{statusText(booking.status)}</span>
           </div>
           <dl className="booking-facts">
+            <div><dt>ID đặt chỗ</dt><dd>{booking.bookingId}</dd></div>
             <div><dt>Ô đỗ</dt><dd>{booking.slotCode || "Chờ hệ thống xác nhận"}</dd></div>
             <div><dt>Loại xe</dt><dd>{booking.vehicleType}</dd></div>
             <div><dt>Bắt đầu</dt><dd>{new Date(booking.startsAt).toLocaleString("vi-VN")}</dd></div>
             <div><dt>Kết thúc</dt><dd>{new Date(booking.endsAt).toLocaleString("vi-VN")}</dd></div>
             <div><dt>Giá ước tính từ máy chủ</dt><dd>
-              {typeof booking.totalAmount === "number" && Number.isFinite(booking.totalAmount)
-                ? formatMoney(booking.totalAmount, "VND")
+              {typeof booking.estimatedAmount === "number" && Number.isFinite(booking.estimatedAmount)
+                ? formatMoney(booking.estimatedAmount, "VND")
                 : "Chưa có giá"}
             </dd></div>
           </dl>
@@ -173,13 +223,14 @@ export default function BookingStatusPage() {
           {pending && (
             <section className="cash-payment-panel">
               <div>
-                <h3>Thanh toán tiền mặt (CASH)</h3>
+                <h3>Thanh toán đặt chỗ</h3>
                 <p>Tạo yêu cầu thanh toán và thanh toán với nhân viên tại bãi. Nhân viên mới có quyền xác nhận đã thu tiền.</p>
               </div>
               <button className="customer-button primary" type="button" onClick={() => void beginCashPayment()}
                 disabled={paymentLoading || holdExpired || payment?.status.toUpperCase() === "PENDING"}>
-                {paymentLoading ? "Đang gửi yêu cầu..." : holdExpired ? "Thời gian giữ chỗ đã hết" : payment ? "Đã gửi yêu cầu CASH" : "Chọn thanh toán CASH"}
+                {paymentLoading ? "Đang gửi yêu cầu..." : holdExpired ? "Thời gian giữ chỗ đã hết" : payment?.method === "CASH" ? "Đã gửi yêu cầu CASH" : "Chọn thanh toán CASH"}
               </button>
+              <button className="customer-button secondary" disabled={paymentLoading || holdExpired || (payment?.method === "CASH" && payment.status === "PENDING")} onClick={() => void beginVnPay()}>Thanh toán VNPay</button>
               {payment && (
                 <div className="cash-payment-result" role="status">
                   Yêu cầu thanh toán: {payment.status} · {
@@ -187,7 +238,6 @@ export default function BookingStatusPage() {
                       ? formatMoney(payment.amount, payment.currency)
                       : "Chưa có giá"
                   }. Trạng thái booking vẫn được đọc từ máy chủ.
-                  <small>API tra cứu trạng thái payment riêng chưa có; trạng thái trên là phản hồi khởi tạo và có thể chưa cập nhật.</small>
                 </div>
               )}
               {paymentError && (
@@ -198,19 +248,35 @@ export default function BookingStatusPage() {
             </section>
           )}
 
-          {safeStatus === "CONFIRMED" && booking.qrToken && (
+          {safeStatus === "CONFIRMED" && (
             <section className="booking-qr">
               <h3>Mã QR booking</h3>
-              <p>Mã được cấp bởi hệ thống sau khi xác nhận. Không chia sẻ ảnh chụp mã này.</p>
-              <QRCodeSVG value={booking.qrToken} size={192} level="M" title={`QR booking ${booking.bookingCode}`} />
+              {issuedQr?.bookingId === bookingId ? (
+                <>
+                  <QRCodeSVG value={issuedQr.payload} size={192} level="M" title={booking.bookingCode} />
+                  <p>Hạn dùng đến {new Date(issuedQr.expiresAt).toLocaleString("vi-VN")}.</p>
+                  <details>
+                    <summary>Mã để nhập tại cổng demo</summary>
+                    <textarea readOnly value={issuedQr.payload} aria-label="Token QR check-in" />
+                  </details>
+                </>
+              ) : (
+                <button type="button" className="customer-button primary" onClick={() => void issueQr()} disabled={qrLoading}>
+                  {qrLoading ? "Đang cấp mã…" : "Lấy mã QR check-in"}
+                </button>
+              )}
+              {qrError && <p role="alert">{qrError}</p>}
             </section>
           )}
-
-          {safeStatus === "CONFIRMED" && !booking.qrToken && (
-            <div className="customer-alert warning" role="status">
-              Booking đã được backend xác nhận nhưng chưa có mã QR trong phản hồi. Không tạo mã thay thế ở trình duyệt.
-            </div>
-          )}
+          {(pending || booking.status.toUpperCase() === "CONFIRMED") && <section className="cash-payment-panel">
+            <h3>Hủy đặt chỗ</h3>
+            <p>Hủy trước mốc quy định của bãi mới đủ điều kiện hoàn tiền. Hủy không đồng nghĩa đã nhận tiền hoàn.</p>
+            <label>Lý do hủy<textarea maxLength={2000} value={cancelReason} onChange={e => setCancelReason(e.target.value)} disabled={cancelling} /></label>
+            <button className="customer-button secondary" disabled={cancelling || !cancelReason.trim()} onClick={() => void cancelBooking()}>{cancelling ? "Đang hủy…" : "Xác nhận hủy đặt chỗ"}</button>
+          </section>}
+          {cancellation && <p role="status">{cancellation.refund_eligible ? "Đủ điều kiện xét hoàn tiền. Xem và gửi yêu cầu trong phần hoàn tiền bên dưới." : "Hủy trong khoảng không được hoàn tiền theo chính sách bãi."}</p>}
+          {["CANCELLED","EXPIRED"].includes(booking.status.toUpperCase()) && <BookingRefunds key={bookingId} bookingId={bookingId} />}
+          {cancelError && <p role="alert">{cancelError}</p>}
           {refreshing && <p className="customer-help-text" role="status">Đang đồng bộ trạng thái với máy chủ...</p>}
           <button className="customer-button secondary" type="button" onClick={() => void loadBooking(false)} disabled={refreshing}>
             Làm mới trạng thái

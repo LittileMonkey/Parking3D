@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using MediatR;
 using Parking.Identity.Application.Common.AppException;
 using Parking.Identity.Application.Common.Enum;
@@ -12,9 +13,11 @@ namespace Parking.Identity.Application.UseCase.UserVehicleUseCase.CreateUserVehi
         private readonly IUserVehicleRepository userVehicleRepository;
         private readonly IAccountRepository accountRepository;
         private readonly IUnitOfWork unitOfWork;
-        private const int MaxVehiclePerUser = 5;
-        public CreateVehicleCommandHandler(IUserVehicleRepository userVehicleRepository, IUnitOfWork unitOfWork, IAccountRepository accountRepository)
+        private readonly int maxVehicles;
+        public CreateVehicleCommandHandler(IUserVehicleRepository userVehicleRepository, IUnitOfWork unitOfWork, IAccountRepository accountRepository, IConfiguration configuration)
         {
+            if (!int.TryParse(configuration["Vehicles:MaxPerUser"] ?? "10", out maxVehicles) || maxVehicles < 1 || maxVehicles > 100)
+                throw new InvalidOperationException("Vehicles:MaxPerUser must be between 1 and 100.");
             this.userVehicleRepository = userVehicleRepository;
             this.unitOfWork = unitOfWork;
             this.accountRepository = accountRepository;
@@ -28,7 +31,7 @@ namespace Parking.Identity.Application.UseCase.UserVehicleUseCase.CreateUserVehi
             }
             var normalizedPlate = request.LicensePlate
                 .Trim()
-                .Replace(" ", string.Empty)
+                .Replace(" ", string.Empty).Replace("-", string.Empty).Replace(".", string.Empty)
                 .ToUpperInvariant();
 
             // 2. Normalize vehicle type
@@ -44,6 +47,9 @@ namespace Parking.Identity.Application.UseCase.UserVehicleUseCase.CreateUserVehi
                 throw new AppException(ErrorCode.InvalidVehicleType, "Vehicle type must be Car, EV, or Bike.");
             }
 
+            await using var transaction = await unitOfWork.BeginTransactionAsync(cancellationToken);
+            await unitOfWork.AcquireLockAsync("vehicles:" + request.UserId, cancellationToken);
+
             // 3. Check whether the account exists
             var user = await accountRepository.GetUserByIdAsync(request.UserId, cancellationToken);
             if (user == null)
@@ -58,12 +64,12 @@ namespace Parking.Identity.Application.UseCase.UserVehicleUseCase.CreateUserVehi
                 throw new AppException(ErrorCode.VehicleAlreadyExists, "This license plate is already registered.");
             }
 
-            // 5. Enforce maximum 5 vehicles
+            // 5. Enforce configured vehicle limit
             var vehicleCount = await userVehicleRepository.CountByUserIdAsync(user.Id, cancellationToken);
 
-            if (vehicleCount >= MaxVehiclePerUser)
+            if (vehicleCount >= maxVehicles)
             {
-                throw new AppException(ErrorCode.VehicleLimitExceeded, "A user can register a maximum of 5 vehicles.");
+                throw new AppException(ErrorCode.VehicleLimitExceeded, $"A user can register a maximum of {maxVehicles} vehicles.");
             }
 
             // 6. Determine default vehicle
@@ -94,6 +100,7 @@ namespace Parking.Identity.Application.UseCase.UserVehicleUseCase.CreateUserVehi
             await userVehicleRepository.AddVehicleAsync(userVehicle, cancellationToken);
 
             await unitOfWork.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
 
             return new UserVehicleDto
             {

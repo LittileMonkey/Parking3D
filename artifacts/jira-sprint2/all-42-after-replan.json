@@ -1,0 +1,380 @@
+[
+  {
+    "key": "SCRUM-17",
+    "title": "[THAM CHIẾU] Customer Authentication Specification",
+    "owner": "Lương Công Phát",
+    "epic": "SCRUM-7 Project Initiation & Requirements Gathering",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-18",
+    "title": "[THAM CHIẾU] Customer Search & Booking Specification",
+    "owner": "Lương Công Phát",
+    "epic": "SCRUM-7 Project Initiation & Requirements Gathering",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-21",
+    "title": "[THAM CHIẾU] Customer Test Cases Create",
+    "owner": "Lương Công Phát",
+    "epic": "SCRUM-11 Integration & Testing",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-22",
+    "title": "[THAM CHIẾU] Set up Postman Collection Customer API",
+    "owner": "Lương Công Phát",
+    "epic": "SCRUM-11 Integration & Testing",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-23",
+    "title": "[THAM CHIẾU] Customer E2E Testing",
+    "owner": "Lương Công Phát",
+    "epic": "SCRUM-11 Integration & Testing",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-24",
+    "title": "[THAM CHIẾU] Test Booking Conflict/Hold",
+    "owner": "Lương Công Phát",
+    "epic": "SCRUM-11 Integration & Testing",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-25",
+    "title": "[THAM CHIẾU] Parking Scope Policy Specification",
+    "owner": "vonhatquang817",
+    "epic": "SCRUM-7 Project Initiation & Requirements Gathering",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-26",
+    "title": "[THAM CHIẾU] Test Authorization",
+    "owner": "vonhatquang817",
+    "epic": "SCRUM-11 Integration & Testing",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-27",
+    "title": "[THAM CHIẾU] Test Pricing & Payment Scope",
+    "owner": "vonhatquang817",
+    "epic": "SCRUM-11 Integration & Testing",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-28",
+    "title": "[THAM CHIẾU] Regression Test Authorization",
+    "owner": "vonhatquang817",
+    "epic": "SCRUM-11 Integration & Testing",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-29",
+    "title": "[THAM CHIẾU] Pricing Engine",
+    "owner": "Sơn Phạm",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-30",
+    "title": "[THAM CHIẾU] Price Snapshot",
+    "owner": "Sơn Phạm",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-31",
+    "title": "[THAM CHIẾU] Haversine Distance",
+    "owner": "Sơn Phạm",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-32",
+    "title": "[THAM CHIẾU] Cheapest Parking Search",
+    "owner": "Sơn Phạm",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-33",
+    "title": "[THAM CHIẾU] Nearest Parking Search",
+    "owner": "Sơn Phạm",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-34",
+    "title": "[THAM CHIẾU] VNPay Sandbox Integration",
+    "owner": "Sơn Phạm",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-35",
+    "title": "[THAM CHIẾU] Payment Callback Idempotency",
+    "owner": "Sơn Phạm",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-36",
+    "title": "[THAM CHIẾU] Search + Payment Integration",
+    "owner": "Sơn Phạm",
+    "epic": "SCRUM-11 Integration & Testing",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-37",
+    "title": "[THAM CHIẾU] Booking & Reservation State Machine",
+    "owner": "lexuanhan105",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": false,
+    "reference": true,
+    "status": "Đang Làm"
+  },
+  {
+    "key": "SCRUM-38",
+    "title": "[THAM CHIẾU] AI Feature",
+    "owner": "Thiên Nhật Lương",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": false,
+    "reference": true,
+    "status": "Đang Làm"
+  },
+  {
+    "key": "SCRUM-39",
+    "title": "[THAM CHIẾU] Slot Availability Verification Service",
+    "owner": "lexuanhan105",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": false,
+    "reference": true,
+    "status": "Đang Xem"
+  },
+  {
+    "key": "SCRUM-40",
+    "title": "[THAM CHIẾU] ExactSlot Booking with PostgreSQL Advisory Lock",
+    "owner": "lexuanhan105",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-41",
+    "title": "[THAM CHIẾU] Booking Hold Expiration Worker",
+    "owner": "lexuanhan105",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-42",
+    "title": "[THAM CHIẾU] Booking Payment Confirmation Flow",
+    "owner": "lexuanhan105",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-43",
+    "title": "[THAM CHIẾU] Booking One-Time QR Token Service",
+    "owner": "lexuanhan105",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-44",
+    "title": "[THAM CHIẾU] Staff Check-in & Parking Session Creation",
+    "owner": "lexuanhan105",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": false,
+    "reference": true,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-45",
+    "title": "[S2-01][TV8 Nhật][P0] Review microservices, Docker CI và seed 3 bãi",
+    "owner": "Thiên Nhật Lương",
+    "epic": "SCRUM-11 Integration & Testing",
+    "inSprint": true,
+    "reference": false,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-46",
+    "title": "[S2-02][TV5 N.Đức][P0] Quyền theo bãi, xe Customer và cấu trúc bãi",
+    "owner": "Ngọc Đức",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": true,
+    "reference": false,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-47",
+    "title": "[S2-03][TV7 Sơn][P0] Search NEAREST CHEAPEST và quote toàn thời lượng",
+    "owner": "Sơn Phạm",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": true,
+    "reference": false,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-48",
+    "title": "[S2-04][TV6 Hàn][P0] Availability booking lookup và hold expiry worker",
+    "owner": "lexuanhan105",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": true,
+    "reference": false,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-49",
+    "title": "[S2-05][TV6 Hàn][P0] QR một lần và Staff check-in tạo parking session",
+    "owner": "lexuanhan105",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": true,
+    "reference": false,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-50",
+    "title": "[S2-05B][TV7 Sơn][P0] CASH payment status và outbox confirmation tích hợp UI",
+    "owner": "Sơn Phạm",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": true,
+    "reference": false,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-51",
+    "title": "[S2-07][TV4 Tiến][P0] Staff UI chọn bãi CASH QR check-in và session",
+    "owner": "totrieutien",
+    "epic": "SCRUM-10 Frontend Development",
+    "inSprint": true,
+    "reference": false,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-52",
+    "title": "[S2-08][TV2 Quang][P0] Regression báo cáo evidence và kịch bản demo Sprint 2",
+    "owner": "vonhatquang817",
+    "epic": "SCRUM-11 Integration & Testing",
+    "inSprint": true,
+    "reference": false,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-53",
+    "title": "[S2-09][TV1 Phát][P0] FAQ người mới có nguồn duyệt và kiểm thử fallback",
+    "owner": "Lương Công Phát",
+    "epic": "SCRUM-7 Project Initiation & Requirements Gathering",
+    "inSprint": true,
+    "reference": false,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-54",
+    "title": "[S2-13][TV1 Phát][P0] Acceptance và test Customer auth search booking UI",
+    "owner": "Lương Công Phát",
+    "epic": "SCRUM-11 Integration & Testing",
+    "inSprint": true,
+    "reference": false,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-55",
+    "title": "[S2-14][TV2 Quang][P0] RBAC policy tài chính và test vận hành QR check-in",
+    "owner": "vonhatquang817",
+    "epic": "SCRUM-7 Project Initiation & Requirements Gathering",
+    "inSprint": true,
+    "reference": false,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-56",
+    "title": "[BACKLOG][P1][TV7 Sơn] VNPay sandbox xác minh callback và reconciliation",
+    "owner": "Sơn Phạm",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": false,
+    "reference": false,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-57",
+    "title": "[BACKLOG][P1][TV5 N.Đức] OCR ảnh upload với provider thật và Staff review",
+    "owner": "Ngọc Đức",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": false,
+    "reference": false,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-58",
+    "title": "[BACKLOG][P1][TV8 Nhật] Forecast công suất baseline và đánh giá theo thời gian",
+    "owner": "Thiên Nhật Lương",
+    "epic": "SCRUM-9 Backend Development",
+    "inSprint": false,
+    "reference": false,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-59",
+    "title": "[BACKLOG][P1][TV3 A.Đức] Map 3D đơn giản theo dữ liệu slot và trạng thái",
+    "owner": "Vũ Đức",
+    "epic": "SCRUM-10 Frontend Development",
+    "inSprint": false,
+    "reference": false,
+    "status": "Chưa Làm"
+  },
+  {
+    "key": "SCRUM-60",
+    "title": "[S2-06][TV3 A.Đức][P0] Customer UI auth search booking CASH status QR FAQ",
+    "owner": "Vũ Đức",
+    "epic": "SCRUM-10 Frontend Development",
+    "inSprint": true,
+    "reference": false,
+    "status": "Chưa Làm"
+  }
+]
