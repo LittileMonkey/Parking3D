@@ -1,3 +1,4 @@
+using System.Data;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -31,21 +32,40 @@ public sealed partial class ParkingRepository
             await using var reader = await cmd.ExecuteReaderAsync(ct);
             while (await reader.ReadAsync(ct)) candidates.Add((reader.GetGuid(0), reader.GetGuid(1)));
         }
-        // Mỗi booking có transaction riêng; lỗi hoặc bỏ qua sẽ rollback khi transaction được giải phóng.
+        // Mỗi booking có transaction riêng; khi worker quét nền (vehicleId == null), lỗi DB trên 1 booking sẽ rollback và không chặn các booking còn lại.
         var count = 0;
+        var isolateFailures = vehicleId is null;
         foreach (var candidate in candidates)
         {
-            await using var tx = await conn.BeginTransactionAsync(ct);
+            if (await TryExpireCandidateAsync(conn, candidate.Booking, candidate.Vehicle, isolateFailures, ct))
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private async Task<bool> TryExpireCandidateAsync(
+        NpgsqlConnection conn,
+        Guid bookingId,
+        Guid vehicleId,
+        bool isolateFailures,
+        CancellationToken ct)
+    {
+        NpgsqlTransaction? tx = null;
+        try
+        {
+            tx = await conn.BeginTransactionAsync(ct);
             await using (var cmd = new NpgsqlCommand("SELECT lock_parking_resource('VEHICLE',@vehicle)", conn, tx))
             {
-                cmd.Parameters.AddWithValue("vehicle", candidate.Vehicle);
+                cmd.Parameters.AddWithValue("vehicle", vehicleId);
                 await cmd.ExecuteNonQueryAsync(ct);
             }
             // Sắp xếp slot để mọi luồng lấy khóa cùng thứ tự, giảm nguy cơ deadlock.
             var slots = new SortedSet<Guid>();
             await using (var cmd = new NpgsqlCommand("SELECT slot_id FROM slot_reservations WHERE booking_id=@id AND status IN ('HELD','CONFIRMED')", conn, tx))
             {
-                cmd.Parameters.AddWithValue("id", candidate.Booking);
+                cmd.Parameters.AddWithValue("id", bookingId);
                 await using var reader = await cmd.ExecuteReaderAsync(ct);
                 while (await reader.ReadAsync(ct)) slots.Add(reader.GetGuid(0));
             }
@@ -60,9 +80,13 @@ public sealed partial class ParkingRepository
             await using (var cmd = new NpgsqlCommand("SELECT id FROM bookings WHERE id=@id AND vehicle_id=@vehicle AND status='PENDING_PAYMENT' AND hold_expires_at<=@now FOR UPDATE", conn, tx))
             {
                 cmd.Parameters.AddWithValue("now", clock.GetUtcNow().UtcDateTime);
-                cmd.Parameters.AddWithValue("id", candidate.Booking);
-                cmd.Parameters.AddWithValue("vehicle", candidate.Vehicle);
-                if (await cmd.ExecuteScalarAsync(ct) is null) continue;
+                cmd.Parameters.AddWithValue("id", bookingId);
+                cmd.Parameters.AddWithValue("vehicle", vehicleId);
+                if (await cmd.ExecuteScalarAsync(ct) is null)
+                {
+                    await tx.RollbackAsync(ct);
+                    return false;
+                }
             }
             var currentSlots = new SortedSet<Guid>();
             var protectedResource = false;
@@ -72,7 +96,7 @@ public sealed partial class ParkingRepository
                 FROM slot_reservations r WHERE r.booking_id=@id AND r.status IN ('HELD','CONFIRMED') FOR UPDATE OF r
                 """, conn, tx))
             {
-                cmd.Parameters.AddWithValue("id", candidate.Booking);
+                cmd.Parameters.AddWithValue("id", bookingId);
                 await using var reader = await cmd.ExecuteReaderAsync(ct);
                 while (await reader.ReadAsync(ct))
                 {
@@ -82,7 +106,8 @@ public sealed partial class ParkingRepository
             }
             if (protectedResource || !currentSlots.SetEquals(slots))
             {
-                continue;
+                await tx.RollbackAsync(ct);
+                return false;
             }
             await using (var cmd = new NpgsqlCommand("""
                 UPDATE slot_reservations SET status='RELEASED',released_at=clock_timestamp(),release_reason='HOLD_EXPIRED'
@@ -94,12 +119,23 @@ public sealed partial class ParkingRepository
                   FROM bookings WHERE id=@id;
                 """, conn, tx))
             {
-                cmd.Parameters.AddWithValue("id", candidate.Booking);
+                cmd.Parameters.AddWithValue("id", bookingId);
                 await cmd.ExecuteNonQueryAsync(ct);
             }
             await tx.CommitAsync(ct);
-            count++;
+            return true;
         }
-        return count;
+        catch (PostgresException) when (isolateFailures && !ct.IsCancellationRequested && conn.State == ConnectionState.Open)
+        {
+            if (tx is not null && conn.State == ConnectionState.Open)
+            {
+                await tx.RollbackAsync(CancellationToken.None);
+            }
+            return false;
+        }
+        finally
+        {
+            if (tx is not null) await tx.DisposeAsync();
+        }
     }
 }

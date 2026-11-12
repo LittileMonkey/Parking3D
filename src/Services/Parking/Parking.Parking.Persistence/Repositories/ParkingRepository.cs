@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Npgsql;
@@ -150,14 +150,16 @@ public sealed partial class ParkingRepository(NpgsqlDataSource db, TimeProvider 
             var local = TimeZoneInfo.ConvertTime(at, tz); var minute = (((int)local.DayOfWeek + 6) % 7) * 1440 + local.Hour * 60 + local.Minute;
             if (!intervals.Any(i => minute >= i.From && minute < i.To)) throw new ServiceException(409, "Outside lot operating hours");
         }
-        var id=Guid.NewGuid();var grace=0;
-        if(configuredGrace>0)
+        var id = Guid.NewGuid(); var grace = 0;
+        if (configuredGrace > 0)
         {
-            await using var grant=new NpgsqlCommand("INSERT INTO daily_grace_claims(user_id,local_day,booking_id,minutes) VALUES(@user,(@start AT TIME ZONE 'Asia/Ho_Chi_Minh')::date,@id,@minutes) ON CONFLICT DO NOTHING RETURNING minutes",conn,tx);
-            grant.Parameters.AddWithValue("user",customerId);grant.Parameters.AddWithValue("start",request.StartsAt.UtcDateTime);grant.Parameters.AddWithValue("id",id);grant.Parameters.AddWithValue("minutes",configuredGrace);
-            if(await grant.ExecuteScalarAsync(ct) is int minutes)grace=minutes;
+            await using var grant = new NpgsqlCommand("INSERT INTO daily_grace_claims(user_id,local_day,booking_id,minutes) VALUES(@user,(@start AT TIME ZONE 'Asia/Ho_Chi_Minh')::date,@id,@minutes) ON CONFLICT DO NOTHING RETURNING minutes", conn, tx);
+            grant.Parameters.AddWithValue("user", customerId); grant.Parameters.AddWithValue("start", request.StartsAt.UtcDateTime); grant.Parameters.AddWithValue("id", id); grant.Parameters.AddWithValue("minutes", configuredGrace);
+            if (await grant.ExecuteScalarAsync(ct) is int minutes) grace = minutes;
         }
-        var snapshot=Guid.NewGuid();var amount=price.Estimate(request.StartsAt.AddMinutes(grace),request.EndsAt,tz);var expires=clock.GetUtcNow().AddMinutes(hold);
+        var snapshot = Guid.NewGuid();
+        var amount = price.Estimate(request.StartsAt.AddMinutes(grace), request.EndsAt, tz);
+        var expires = CalculateHoldDeadline(clock.GetUtcNow(), hold);
         if (amount <= 0) throw new ServiceException(409, "Zero-price booking workflow not configured");
         var code = "B" + id.ToString("N")[..20].ToUpperInvariant();
         await using (var write = new NpgsqlCommand("""
@@ -188,6 +190,15 @@ public sealed partial class ParkingRepository(NpgsqlDataSource db, TimeProvider 
         { dedupe.Parameters.AddWithValue("id", requestId); dedupe.Parameters.AddWithValue("hash", fingerprint); dedupe.Parameters.AddWithValue("outcome", JsonSerializer.Serialize(result)); await dedupe.ExecuteNonQueryAsync(ct); }
         await tx.CommitAsync(ct);
         return result;
+    }
+
+    /// <summary>Tính thời điểm hết hạn hold và làm tròn xuống microsecond để khớp chính xác với PostgreSQL timestamptz.</summary>
+    public static DateTimeOffset CalculateHoldDeadline(DateTimeOffset now, int holdMinutes)
+    {
+        var utcDeadline = now.ToUniversalTime().AddMinutes(holdMinutes);
+        return new DateTimeOffset(
+            utcDeadline.UtcTicks - (utcDeadline.UtcTicks % TimeSpan.TicksPerMicrosecond),
+            TimeSpan.Zero);
     }
 
 }

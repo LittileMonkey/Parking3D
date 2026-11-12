@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 using Parking.Contracts.AI.V1;
 using Parking.Contracts.Identity.V1;
@@ -38,10 +38,9 @@ builder.Services.AddScoped<RegisteredVehicleSync>();
 builder.Services.AddHostedService<OccupancyWorker>();
 builder.Services.AddHostedService<HoldExpiryWorker>();
 builder.Services.AddHostedService<NotificationReminderWorker>();
-// 1. Thêm bộ nhớ đệm Memory Cache (hỗ trợ cho EstimatedPriceService và SCRUM-80 Spatial Cache)
 builder.Services.AddMemoryCache();
-builder.Services.AddSingleton<IParkingCacheService, ParkingCacheService>();
-// 2. Đăng ký Repository và Service tính giá THẬT (thay thế Fake)
+builder.Services.AddParkingCaching(builder.Configuration);
+// 2. ÄÄƒng kÃ½ Repository vÃ  Service tÃ­nh giÃ¡ THáº¬T (thay tháº¿ Fake)
 builder.Services.AddScoped<IParkingLotRepository, ParkingLotRepository>();
 builder.Services.AddScoped<IEstimatedPriceService, EstimatedPriceService>();
 

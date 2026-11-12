@@ -1,4 +1,3 @@
-using Parking.Parking.Application;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,14 +10,8 @@ namespace Parking.Parking.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/v1/parking-lots/{lotId:guid}/shift-handovers")]
-public sealed class ShiftHandoversController(ISender sender, IFacilityAccess access) : ControllerBase
+public sealed class ShiftHandoversController(ISender sender) : ControllerBase
 {
-    private async Task<bool> IsManagerUser(Guid lotId, CancellationToken ct)
-    {
-        try { await access.RequireAsync(User.Subject(),lotId,"MANAGER",ct); return true; }
-        catch(ServiceException error) when(error.StatusCode==403) { return false; }
-    }
-
     /// <summary>
     /// H1: Nhân viên giao ca tạo biên bản bàn giao ca trực mới (PendingConfirmation).
     /// </summary>
@@ -28,9 +21,9 @@ public sealed class ShiftHandoversController(ISender sender, IFacilityAccess acc
         [FromBody] CreateShiftHandoverRequestDto request,
         CancellationToken ct)
     {
-        var key = Request.Headers["Idempotency-Key"].ToString();
+        var key = Request.ReadOptionalIdempotencyKey();
         var result = await sender.Send(new CreateShiftHandoverCommand(
-            lotId, User.Subject(), request, string.IsNullOrWhiteSpace(key) ? null : key), ct);
+            lotId, User.Subject(), request, key), ct);
         return StatusCode(201, new ApiResponse<ShiftHandoverDto>(result, true, 201, "Đã gửi biên bản bàn giao, chờ người nhận xác nhận."));
     }
 
@@ -45,8 +38,9 @@ public sealed class ShiftHandoversController(ISender sender, IFacilityAccess acc
         [FromQuery] int pageSize = 25,
         CancellationToken ct = default)
     {
+        // Authoritative facility-scoped MANAGER resolution happens inside ShiftHandoverQueryHandlers.
         var result = await sender.Send(new ListShiftHandoversQuery(
-            lotId, User.Subject(), await IsManagerUser(lotId, ct), status, page, pageSize), ct);
+            lotId, User.Subject(), IsManager: false, status, page, pageSize), ct);
         return Ok(new ApiResponse<PagedResult<ShiftHandoverSummaryDto>>(result, true, 200, "Đã tải danh sách bàn giao ca."));
     }
 
@@ -59,8 +53,9 @@ public sealed class ShiftHandoversController(ISender sender, IFacilityAccess acc
         Guid handoverId,
         CancellationToken ct)
     {
+        // Authoritative facility-scoped MANAGER resolution happens inside ShiftHandoverQueryHandlers.
         var result = await sender.Send(new GetShiftHandoverByIdQuery(
-            lotId, handoverId, User.Subject(), await IsManagerUser(lotId, ct)), ct);
+            lotId, handoverId, User.Subject(), IsManager: false), ct);
         return Ok(new ApiResponse<ShiftHandoverDto>(result, true, 200, "Đã lấy chi tiết biên bản bàn giao ca."));
     }
 
@@ -74,9 +69,9 @@ public sealed class ShiftHandoversController(ISender sender, IFacilityAccess acc
         [FromBody] ConfirmShiftHandoverRequestDto request,
         CancellationToken ct)
     {
-        var key = Request.Headers["Idempotency-Key"].ToString();
+        var key = Request.ReadOptionalIdempotencyKey();
         var result = await sender.Send(new ConfirmShiftHandoverCommand(
-            lotId, handoverId, User.Subject(), request, string.IsNullOrWhiteSpace(key) ? null : key), ct);
+            lotId, handoverId, User.Subject(), request, key), ct);
         return Ok(new ApiResponse<ShiftHandoverDto>(result, true, 200, "Xác nhận nhận ca trực thành công."));
     }
 
@@ -90,8 +85,9 @@ public sealed class ShiftHandoversController(ISender sender, IFacilityAccess acc
         [FromBody] ReassignReceiverRequestDto request,
         CancellationToken ct)
     {
+        var key = Request.ReadOptionalIdempotencyKey();
         var result = await sender.Send(new ReassignReceiverCommand(
-            lotId, handoverId, User.Subject(), request), ct);
+            lotId, handoverId, User.Subject(), request, key), ct);
         return Ok(new ApiResponse<ShiftHandoverDto>(result, true, 200, "Đã chỉ định lại người nhận ca thành công."));
     }
 }

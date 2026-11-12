@@ -1,4 +1,4 @@
-using FluentValidation;
+﻿using FluentValidation;
 using MediatR;
 using Parking.Parking.Application.DTOs;
 using Parking.Parking.Application.Interfaces;
@@ -89,7 +89,8 @@ public sealed record ReassignReceiverCommand(
     Guid LotId,
     Guid HandoverId,
     Guid ActorId,
-    ReassignReceiverRequestDto Request
+    ReassignReceiverRequestDto Request,
+    string? IdempotencyKey = null
 ) : IRequest<ShiftHandoverDto>;
 
 /// <summary>
@@ -108,6 +109,10 @@ public sealed class ReassignReceiverCommandValidator : AbstractValidator<Reassig
             RuleFor(x => x.Request.ReceiverUserId).NotEmpty();
             RuleFor(x => x.Request.Reason).NotEmpty().MaximumLength(2000);
             RuleFor(x => x.Request.ExpectedVersion).GreaterThan(0);
+        });
+        When(x => !string.IsNullOrWhiteSpace(x.IdempotencyKey), () =>
+        {
+            RuleFor(x => x.IdempotencyKey!).MaximumLength(128);
         });
     }
 }
@@ -143,6 +148,6 @@ public sealed class ShiftHandoverCommandHandlers(
     {
         await access.RequireAsync(command.ActorId, command.LotId, "MANAGER", ct);
         await access.RequireAsync(command.Request.ReceiverUserId, command.LotId, "HANDOVER", ct);
-        return await repository.ReassignReceiverAsync(command.LotId, command.HandoverId, command.ActorId, command.Request, ct);
+        return await repository.ReassignReceiverAsync(command.LotId, command.HandoverId, command.ActorId, command.Request, command.IdempotencyKey, ct);
     }
 }

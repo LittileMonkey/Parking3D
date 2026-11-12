@@ -111,4 +111,18 @@ public sealed class CoreInvariantTests
         Assert.False(validator.Validate(new GetLotAvailabilityQuery
         { LotId = Guid.NewGuid(), StartTime = start, EndTime = start.AddDays(32) }).IsValid);
     }
+
+    [Fact]
+    public void AvailabilityAllowsWhitespacePaddedThirtyCharVehicleTypeAndRejectsLongerTrimmedValues()
+    {
+        var validator = new GetLotAvailabilityQueryValidator();
+        var lotId = Guid.NewGuid();
+
+        Assert.True(validator.Validate(new GetLotAvailabilityQuery
+        { LotId = lotId, VehicleType = "   " + new string('A', 30) + "   " }).IsValid);
+        Assert.True(validator.Validate(new GetLotAvailabilityQuery
+        { LotId = lotId, VehicleType = "     " }).IsValid);
+        Assert.False(validator.Validate(new GetLotAvailabilityQuery
+        { LotId = lotId, VehicleType = " " + new string('A', 31) + " " }).IsValid);
+    }
 }

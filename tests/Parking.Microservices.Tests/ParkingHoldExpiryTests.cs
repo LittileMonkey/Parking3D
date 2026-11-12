@@ -1,9 +1,13 @@
 using Grpc.Core;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
+using Parking.Contracts.AI.V1;
 using Parking.Contracts.Payments.V1;
 using Parking.Parking.Application;
 using Parking.Parking.Infrastructure;
+using Parking.Parking.Infrastructure.Repositories;
 using Parking.Parking.Persistence.Repositories;
 using Parking.ServiceDefaults;
 using Xunit;
@@ -179,6 +183,100 @@ public sealed partial class ParkingWorkflowTests
         Assert.Equal("CONFIRMED", await Scalar("SELECT status::text FROM slot_reservations"));
         Assert.Equal(2, await Scalar("SELECT version FROM bookings"));
     }
+
+    [PostgresFact]
+    public async Task HoldExpiryContinuesPastSingleFailingBooking()
+    {
+        var clock = UseHoldTestClock();
+        var slot2 = Guid.NewGuid();
+        var vehicle2 = Guid.NewGuid();
+        await Sql("""
+            INSERT INTO parking_slots(id,lot_id,zone_id,level_id,code,operational_status,width_m,length_m)
+              VALUES(@slot2,@lot,'55555555-5555-4555-8555-555555555555'::uuid,'33333333-3333-4333-8333-333333333333'::uuid,'A02','ACTIVE',2.5,5);
+            INSERT INTO slot_vehicle_types(slot_id,lot_id,vehicle_type) VALUES(@slot2,@lot,'CAR');
+            INSERT INTO vehicles(id,plate_country,plate_normalized,vehicle_type,fuel_type,is_active,created_at)
+              VALUES(@vehicle2,'VN','51A99999','CAR','PETROL',true,now());
+            INSERT INTO user_vehicle_access(user_id,vehicle_id,access_kind,verified_at,is_primary,created_at)
+              VALUES(@customer,@vehicle2,'OWNER',now(),false,now());
+            """, ("slot2", slot2), ("lot", Lot), ("vehicle2", vehicle2), ("customer", Customer));
+
+        var poisonedBooking = await Book();
+        clock.UtcNow = clock.UtcNow.AddSeconds(1);
+        var healthyBooking = await repository.CreateBookingAsync(Customer,
+            new BookingRequest(Lot, slot2, vehicle2,
+                DateTimeOffset.UtcNow.AddMinutes(2), DateTimeOffset.UtcNow.AddMinutes(62)),
+            Guid.NewGuid().ToString(), Ct);
+
+        await Sql($"""
+            CREATE OR REPLACE FUNCTION fail_poisoned_hold_expiry() RETURNS TRIGGER AS $$
+            BEGIN
+                IF NEW.status = 'EXPIRED' AND OLD.id = '{poisonedBooking.Id:D}'::uuid THEN
+                    RAISE EXCEPTION 'Simulated poisoned booking row %', OLD.id;
+                END IF;
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+            CREATE TRIGGER trg_fail_poisoned_hold_expiry
+              BEFORE UPDATE ON bookings FOR EACH ROW EXECUTE FUNCTION fail_poisoned_hold_expiry();
+            """);
+
+        clock.UtcNow = healthyBooking.HoldExpiresAt.AddMinutes(1);
+        Assert.Equal(1, await repository.ExpireHoldsAsync(Ct));
+        Assert.Equal("PENDING_PAYMENT", (await repository.GetBookingDetailAsync(poisonedBooking.Id, Ct))!.Value.Detail.Status);
+        Assert.Equal("EXPIRED", (await repository.GetBookingDetailAsync(healthyBooking.Id, Ct))!.Value.Detail.Status);
+
+        await Sql("DROP TRIGGER trg_fail_poisoned_hold_expiry ON bookings; DROP FUNCTION fail_poisoned_hold_expiry();");
+        Assert.Equal(1, await repository.ExpireHoldsAsync(Ct));
+        Assert.Equal("EXPIRED", (await repository.GetBookingDetailAsync(poisonedBooking.Id, Ct))!.Value.Detail.Status);
+    }
+
+    [PostgresFact]
+    public async Task NewBookingAlignsHoldDeadlineToPostgresMicroseconds()
+    {
+        var baseSecond = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var clock = new HoldTestClock(baseSecond.AddTicks(1234567));
+        repository = new ParkingRepository(data, clock);
+
+        var booking = await repository.CreateBookingAsync(Customer,
+            new BookingRequest(Lot, Slot, Vehicle, baseSecond.AddMinutes(5), baseSecond.AddMinutes(65)),
+            "sub-microsecond-hold", Ct);
+        var loaded = (await repository.GetBookingDetailAsync(booking.Id, Ct))!.Value.Detail;
+
+        Assert.Equal(0, booking.HoldExpiresAt.UtcTicks % TimeSpan.TicksPerMicrosecond);
+        Assert.Equal(booking.HoldExpiresAt, loaded.HoldExpiresAt);
+    }
+
+    [PostgresFact]
+    public async Task SearchAndOccupancyIgnoreExpiredPendingHoldBeforeWorkerRuns()
+    {
+        var clock = UseHoldTestClock();
+        var booking = await repository.CreateBookingAsync(Customer,
+            new BookingRequest(Lot, Slot, Vehicle, clock.UtcNow, clock.UtcNow.AddMinutes(60)),
+            "search-occupancy-hold-sync", Ct);
+        var lotRepo = new ParkingLotRepository(data, clock);
+        var worker = new OccupancyWorker(
+            data,
+            new OccupancyIngestion.OccupancyIngestionClient(GrpcChannelForUnusedClient()),
+            new ConfigurationBuilder().Build(),
+            NullLogger<OccupancyWorker>.Instance,
+            clock);
+
+        var lotsWhileHeld = await lotRepo.GetAvailableLotsAsync("CAR", Ct);
+        var snapshotsWhileHeld = await worker.CollectSnapshotsAsync(Ct);
+        Assert.Equal(0, Assert.Single(lotsWhileHeld, l => l.Id == Lot).AvailableSlots);
+        Assert.Equal(1, Assert.Single(snapshotsWhileHeld, s => s.LotId == Lot.ToString() && s.VehicleType == "CAR").ReservedCount);
+
+        clock.UtcNow = booking.HoldExpiresAt;
+        var lotsAtExpiry = await lotRepo.GetAvailableLotsAsync("CAR", Ct);
+        var snapshotsAtExpiry = await worker.CollectSnapshotsAsync(Ct);
+        Assert.Equal(1, Assert.Single(lotsAtExpiry, l => l.Id == Lot).AvailableSlots);
+        var expiredSnapshot = Assert.Single(snapshotsAtExpiry, s => s.LotId == Lot.ToString() && s.VehicleType == "CAR");
+        Assert.Equal(0, expiredSnapshot.ReservedCount);
+        Assert.Equal(booking.HoldExpiresAt.ToUnixTimeSeconds(), expiredSnapshot.ObservedAtUnixSeconds);
+    }
+
+    private static Grpc.Net.Client.GrpcChannel GrpcChannelForUnusedClient() =>
+        Grpc.Net.Client.GrpcChannel.ForAddress("http://localhost:5000");
 
     private sealed class UnexpectedFacilityAccess : IFacilityAccess
     {

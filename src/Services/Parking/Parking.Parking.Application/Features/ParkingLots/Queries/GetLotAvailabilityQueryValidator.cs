@@ -10,7 +10,9 @@ public sealed class GetLotAvailabilityQueryValidator : AbstractValidator<GetLotA
     {
         RuleFor(x => x.LotId).NotEmpty();
         RuleFor(x => x.LevelId).NotEqual(Guid.Empty).When(x => x.LevelId.HasValue);
-        RuleFor(x => x.VehicleType).MaximumLength(30);
+        RuleFor(x => x.VehicleType)
+            .Must(v => string.IsNullOrWhiteSpace(v) || v.Trim().Length <= 30)
+            .WithMessage("Vehicle type must not exceed 30 characters.");
         When(x => x.StartTime.HasValue && x.EndTime.HasValue, () =>
         {
             RuleFor(x => x.EndTime).GreaterThan(x => x.StartTime);
