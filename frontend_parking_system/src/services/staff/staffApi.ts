@@ -2,14 +2,11 @@ import { operations } from "../operations";
 import { api, type IncidentSummaryDto, type PaymentReceiptDto } from "../api";
 import type { ParkingLotSummary, ParkingSlotDetail, SlotStatus, CheckInPayload, CheckInResult, Incident, CreateIncidentPayload, CashConfirmationResult, PlateRecognitionResult } from "../../types/staff";
 
-function mapCheckInVehicleType(vehicleType?: string): string {
+function mapCheckInVehicleType(vehicleType?: string): "CAR" | "MOTORBIKE" {
   const normalized = (vehicleType ?? "Car").trim().toUpperCase();
   if (normalized === "MOTORCYCLE" || normalized === "BIKE" || normalized === "MOTORBIKE") return "MOTORBIKE";
-  if (normalized === "CAR") return "CAR";
-  if (normalized === "EV") return "EV";
-  if (normalized === "TRUCK") return "TRUCK";
-  if (normalized === "BICYCLE") return "BICYCLE";
-  return normalized || "CAR";
+  if (normalized === "CAR" || normalized === "EV") return "CAR";
+  throw new Error(`Loại xe "${vehicleType}" chưa được hỗ trợ check-in tại bãi (chỉ hỗ trợ Ô tô/EV và Xe máy).`);
 }
 
 function mapIncident(item: IncidentSummaryDto & { notes?: string | null }): Incident {
@@ -82,8 +79,8 @@ export const staffApi = {
       slotCode: result.slotCode || result.slotId,
       levelName: "",
       licensePlate: plate,
-      vehicleType: resolvedType === "MOTORBIKE" ? "Motorcycle" : resolvedType === "EV" ? "EV" : "Car",
-      entryMethod: result.entryMethod ?? (result.bookingId ? "PRE_BOOKING" : "AUTO_SLOT"),
+      vehicleType: resolvedType === "MOTORBIKE" ? "Motorcycle" : "Car",
+      entryMethod: result.entryMethod ?? (result.bookingId ? "QR" : "WALK_IN"),
       checkinAt: result.entryAt,
       bookingCode: payload.bookingCode,
       message: "Đã ghi nhận xe vào bãi.",
@@ -101,8 +98,17 @@ export const staffApi = {
       relatedGate: payload.relatedGate, relatedSessionId: payload.relatedSessionId,
     }, payload.idempotencyKey ?? crypto.randomUUID()));
   },
-  async updateIncidentStatus(incidentId: string, status: "InProgress" | "Resolved" | "Escalated", notes: string | undefined, lotId: string, expectedVersion: number): Promise<Incident> {
-    return mapIncident(await api.updateIncidentStatus(lotId, incidentId, { status, notes, expectedVersion }));
+  async updateIncidentStatus(
+    incidentId: string,
+    status: "InProgress" | "Resolved" | "Escalated",
+    notes: string | undefined,
+    lotId: string,
+    expectedVersion: number,
+    idempotencyKey?: string,
+  ): Promise<Incident> {
+    return mapIncident(
+      await api.updateIncidentStatus(lotId, incidentId, { status, notes, expectedVersion }, idempotencyKey ?? crypto.randomUUID()),
+    );
   },
   async confirmCashPayment(bookingId: string, reason?: string, version?: number): Promise<CashConfirmationResult> {
     return api.confirmCashPayment(bookingId, reason, version);

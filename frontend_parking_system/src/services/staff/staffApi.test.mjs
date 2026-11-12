@@ -37,21 +37,22 @@ test('incident API failure never reads or writes local fallback', async () => {
   await assert.rejects(service.updateIncidentStatus('incident', 'Resolved', 'fixed', 'lot', 4), error => error === failure);
 });
 
-test('incident update sends displayed version and selected lot and returns server state', async () => {
+test('incident update sends displayed version, selected lot, and stable idempotencyKey', async () => {
   let request;
   const service = adapter({ updateIncidentStatus: async (...args) => {
     request = args;
     return { incidentId: 'incident', status: 'Resolved', version: 5, updatedAt: 'server-time', reportedByUserId: 'real-user' };
   } });
-  const result = await service.updateIncidentStatus('incident', 'Resolved', 'fixed', 'assigned-lot', 4);
+  const result = await service.updateIncidentStatus('incident', 'Resolved', 'fixed', 'assigned-lot', 4, 'incident-op-key-1');
   assert.equal(request[0], 'assigned-lot');
   assert.equal(request[2].expectedVersion, 4);
+  assert.equal(request[3], 'incident-op-key-1');
   assert.equal(result.version, 5);
   assert.equal(result.updatedAt, 'server-time');
   assert.equal(result.reportedBy, 'real-user');
 });
 
-test('checkInVehicle maps Car/Motorcycle, supports null bookingId & entryMethod, and forwards override + stable idempotencyKey', async () => {
+test('checkInVehicle maps Car/EV->CAR, Motorcycle/Bike->MOTORBIKE, rejects Truck, supports null bookingId & entryMethod', async () => {
   let captured = [];
   const service = adapter({
     checkIn: async (payload, key) => {
@@ -62,8 +63,8 @@ test('checkInVehicle maps Car/Motorcycle, supports null bookingId & entryMethod,
         lotId: payload.lotId,
         slotId: 'slot-1',
         slotCode: 'M-01',
-        vehicleType: 'MOTORBIKE',
-        entryMethod: 'AUTO_SLOT',
+        vehicleType: payload.vehicleType,
+        entryMethod: 'WALK_IN',
         status: 'ACTIVE',
         entryAt: '2026-11-12T10:00:00Z',
       };
@@ -80,14 +81,14 @@ test('checkInVehicle maps Car/Motorcycle, supports null bookingId & entryMethod,
   assert.equal(captured[0].payload.vehicleType, 'MOTORBIKE');
   assert.equal(captured[0].key, 'fixed-key-1');
   assert.equal(walkIn.bookingId, null);
-  assert.equal(walkIn.entryMethod, 'AUTO_SLOT');
+  assert.equal(walkIn.entryMethod, 'WALK_IN');
   assert.equal(walkIn.vehicleType, 'Motorcycle');
 
-  await service.checkInVehicle({
+  const evEntry = await service.checkInVehicle({
     lotId: 'lot-1',
     gateId: 'gate-1',
     licensePlate: '51K-99999',
-    vehicleType: 'Car',
+    vehicleType: 'EV',
     qrToken: 'qr-abc',
     allowMismatchOverride: true,
     overrideReason: 'Verified registration document at gate',
@@ -99,4 +100,12 @@ test('checkInVehicle maps Car/Motorcycle, supports null bookingId & entryMethod,
   assert.equal(captured[1].payload.overrideReason, 'Verified registration document at gate');
   assert.equal(captured[1].payload.evidence[0].reference, 'gate-evidence://entry/cam1.jpg');
   assert.equal(captured[1].key, 'fixed-key-2');
+  assert.equal(evEntry.vehicleType, 'Car');
+
+  await assert.rejects(service.checkInVehicle({
+    lotId: 'lot-1',
+    gateId: 'gate-1',
+    licensePlate: '51C-12345',
+    vehicleType: 'Truck',
+  }), /chưa được hỗ trợ/);
 });

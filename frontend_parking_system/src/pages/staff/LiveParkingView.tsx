@@ -1,5 +1,8 @@
 import ReservationRelocation from "../../components/parking/ReservationRelocation";
-import { useState, useEffect } from "react";
+import ParkingViewer, { type ModelLevel } from "../../components/parking/ParkingViewer";
+import { useParkingHub } from "../../components/parking/useParkingHub";
+import type { SlotStatusChange } from "../../components/parking/parkingRealtime";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import {
   Grid3X3,
@@ -16,8 +19,26 @@ import {
   Info,
   Clock,
 } from "lucide-react";
+import { api, type LotLayout3DDto, type StaffSessionRow } from "../../services/api";
 import { staffApi } from "../../services/staff/staffApi";
 import type { ParkingSlotDetail, SlotStatus, VehicleType } from "../../types/staff";
+
+function mapRealtimeStatusToSlotStatus(status: string): SlotStatus {
+  const normalized = status.trim().toUpperCase();
+  if (normalized === "OCCUPIED") return "Occupied";
+  if (normalized === "HELD" || normalized === "RESERVED") return "Reserved";
+  if (normalized === "MAINTENANCE") return "Maintenance";
+  if (normalized === "DISABLED") return "Disabled";
+  return "Available";
+}
+
+function mapSlotStatusToViewerStatus(status: SlotStatus): string {
+  if (status === "Occupied") return "OCCUPIED";
+  if (status === "Reserved") return "HELD";
+  if (status === "Maintenance") return "MAINTENANCE";
+  if (status === "Disabled") return "DISABLED";
+  return "AVAILABLE";
+}
 
 export default function LiveParkingView() {
   const navigate = useNavigate();
@@ -27,6 +48,9 @@ export default function LiveParkingView() {
   const [levels, setLevels] = useState<Array<{ levelId: string; levelCode: string; levelName: string; totalSlots: number; availableSlots: number }>>([]);
   const [selectedLevelId, setSelectedLevelId] = useState<string>("");
   const [slots, setSlots] = useState<ParkingSlotDetail[]>([]);
+  const [sessions, setSessions] = useState<StaffSessionRow[]>([]);
+  const [lotLayout, setLotLayout] = useState<LotLayout3DDto | null>(null);
+  const layoutCacheRef = useRef<Record<string, LotLayout3DDto>>({});
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>("All");
@@ -35,15 +59,30 @@ export default function LiveParkingView() {
   // Selected slot for modal inspection
   const [activeSlot, setActiveSlot] = useState<ParkingSlotDetail | null>(null);
   const [overrideReason, setOverrideReason] = useState("");
+  const [overrideError, setOverrideError] = useState("");
   const [overrideLoading, setOverrideLoading] = useState(false);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       if (!selectedLotId) return;
       const lotId = selectedLotId;
-      const data = await staffApi.getParkingLotLevels(lotId);
+      const cachedLayout = layoutCacheRef.current[lotId];
+      const [data, sessionRows, layout] = await Promise.all([
+        staffApi.getParkingLotLevels(lotId),
+        api.getStaffSessions(lotId).catch(() => [] as StaffSessionRow[]),
+        cachedLayout
+          ? Promise.resolve(cachedLayout)
+          : api.getLotLayout3D(lotId).catch(() => null),
+      ]);
+      if (layout) {
+        layoutCacheRef.current[lotId] = layout;
+        setLotLayout(layout);
+      } else {
+        setLotLayout(null);
+      }
       setLevels(data.levels);
       setSlots(data.slots);
+      setSessions(sessionRows);
       if (data.levels.length > 0 && !data.levels.some(level => level.levelId === selectedLevelId)) {
         setSelectedLevelId(data.levels[0].levelId);
       }
@@ -52,13 +91,89 @@ export default function LiveParkingView() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedLotId, selectedLevelId]);
 
   useEffect(() => {
-    loadData();
-    const interval = setInterval(loadData, 12000);
+    void loadData();
+    const interval = setInterval(() => { void loadData(); }, 15000);
     return () => clearInterval(interval);
+  }, [loadData]);
+
+  const applyRealtimeStatusChanges = useCallback((changes: SlotStatusChange[]) => {
+    if (!changes.length) return;
+    setSlots(prev => prev.map(slot => {
+      const hit = changes.find(
+        change => change.slotId === slot.slotId && (!change.parkingLotId || change.parkingLotId === selectedLotId),
+      );
+      if (!hit) return slot;
+      return { ...slot, status: mapRealtimeStatusToSlotStatus(hit.status) };
+    }));
   }, [selectedLotId]);
+
+  const hubStatus = useParkingHub(Boolean(selectedLotId), selectedLotId ?? null, applyRealtimeStatusChanges);
+
+  const selectedLevelCode = useMemo(() => {
+    if (!selectedLevelId) return undefined;
+    const fromLayout = lotLayout?.levels.find(l => l.id === selectedLevelId)?.code;
+    if (fromLayout) return fromLayout;
+    return levels.find(l => l.levelId === selectedLevelId)?.levelCode;
+  }, [lotLayout, levels, selectedLevelId]);
+
+  const viewerLevels = useMemo<ModelLevel[]>(() => {
+    const slotById = new Map(slots.map(slot => [slot.slotId, slot] as const));
+    if (lotLayout && lotLayout.lotId === selectedLotId && lotLayout.levels.length > 0) {
+      const mapped = lotLayout.levels
+        .slice()
+        .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+        .map(level => {
+          const levelSlots = (level.zones ?? []).flatMap(zone =>
+            (zone.slots ?? []).map(spatialSlot => {
+              const live = slotById.get(spatialSlot.id);
+              return {
+                slotId: spatialSlot.id,
+                slotCode: spatialSlot.code || live?.slotCode || spatialSlot.id,
+                floorCode: level.code || live?.levelName || level.name,
+                zoneCode: zone.code || live?.zoneName || "",
+                supportedVehicleTypes: live ? [live.vehicleType] : ["Car"],
+                features: live?.features ?? [],
+                status: live ? mapSlotStatusToViewerStatus(live.status) : (spatialSlot.operationalStatus === "ACTIVE" ? "AVAILABLE" : spatialSlot.operationalStatus),
+                position: spatialSlot.position ?? null,
+                rotationY: spatialSlot.rotationY ?? null,
+                widthM: spatialSlot.widthM ?? null,
+                lengthM: spatialSlot.lengthM ?? null,
+                size: spatialSlot.size ?? null,
+              };
+            })
+          );
+          return {
+            levelId: level.id,
+            levelCode: level.code,
+            levelName: level.name,
+            elevationM: level.elevationM ?? null,
+            slots: levelSlots,
+          };
+        })
+        .filter(level => level.slots.length > 0);
+      if (mapped.length > 0) return mapped;
+    }
+
+    return levels.map(level => ({
+      levelId: level.levelId,
+      levelCode: level.levelCode,
+      levelName: level.levelName,
+      slots: slots
+        .filter(slot => slot.levelId === level.levelId)
+        .map(slot => ({
+          slotId: slot.slotId,
+          slotCode: slot.slotCode,
+          floorCode: level.levelCode,
+          zoneCode: slot.zoneName || "",
+          supportedVehicleTypes: [slot.vehicleType],
+          features: slot.features ?? [],
+          status: mapSlotStatusToViewerStatus(slot.status),
+        })),
+    })).filter(level => level.slots.length > 0);
+  }, [lotLayout, selectedLotId, levels, slots]);
 
   // Filtered Slots
   const currentLevelSlots = slots.filter((s) => !selectedLevelId || s.levelId === selectedLevelId);
@@ -68,28 +183,40 @@ export default function LiveParkingView() {
     return true;
   });
 
-  // Level statistics with exact defaults matching user's spec (40, 18, 19, 1, 2)
+  // Level statistics
   const totalCount = currentLevelSlots.length;
   const availableCount = currentLevelSlots.filter((s) => s.status === "Available").length;
   const occupiedCount = currentLevelSlots.filter((s) => s.status === "Occupied").length;
   const reservedCount = currentLevelSlots.filter((s) => s.status === "Reserved").length;
   const maintenanceCount = currentLevelSlots.filter((s) => s.status === "Maintenance").length;
 
-  // Handle Staff Slot Override (Available, Maintenance, Disabled)
-  const handleUpdateStatus = async (newStatus: SlotStatus) => {
-    if (!activeSlot) return;
+  // Handle Staff Slot Operational Status Update (only Available / Maintenance / Disabled)
+  const handleUpdateStatus = async (newStatus: "Available" | "Maintenance" | "Disabled") => {
+    if (!activeSlot || !selectedLotId) return;
+    if (!overrideReason.trim()) {
+      setOverrideError("Vui lòng nhập lý do thay đổi trạng thái vận hành.");
+      return;
+    }
+    setOverrideError("");
     setOverrideLoading(true);
     try {
-      await staffApi.updateSlotStatus(selectedLotId!, activeSlot, newStatus, overrideReason);
+      await staffApi.updateSlotStatus(selectedLotId, activeSlot, newStatus, overrideReason.trim());
       setActiveSlot({ ...activeSlot, status: newStatus });
       setOverrideReason("");
-      loadData();
-    } catch (err: any) {
-      alert("Lỗi cập nhật trạng thái ô: " + err.message);
+      await loadData();
+    } catch (err) {
+      setOverrideError(err instanceof Error ? err.message : "Lỗi cập nhật trạng thái ô.");
     } finally {
       setOverrideLoading(false);
     }
   };
+
+  const activeSessionForSlot = useMemo(() => {
+    if (!activeSlot) return null;
+    return sessions.find(
+      session => session.status !== "COMPLETED" && session.slotCode === activeSlot.slotCode,
+    ) ?? null;
+  }, [activeSlot, sessions]);
 
   const getVehicleIcon = (type: VehicleType) => {
     switch (type) {
@@ -273,6 +400,34 @@ export default function LiveParkingView() {
         </div>
       </div>
 
+      {/* ─── 3.5 Interactive 3D Parking Viewer + SignalR Realtime Status ─── */}
+      {viewerLevels.length > 0 && (
+        <div className="pm-grid-card" style={{ marginBottom: 18 }}>
+          <div className="pm-grid-card-header">
+            <div className="pm-grid-title-group">
+              <Layers size={18} color="var(--pm-teal)" />
+              <h2 className="pm-grid-title">
+                Mô hình 3D Bãi đỗ (Realtime: {hubStatus === "connected" ? "Đã kết nối SignalR" : hubStatus})
+              </h2>
+            </div>
+          </div>
+          <div className="pm-grid-card-body">
+            <ParkingViewer
+              levels={viewerLevels}
+              selectedLevelCode={selectedLevelCode || ""}
+              selectedId={activeSlot?.slotId ?? null}
+              onSelect={(slot) => {
+                const matched = slots.find(item => item.slotId === slot.slotId);
+                if (matched) {
+                  setOverrideError("");
+                  setActiveSlot(matched);
+                }
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* ─── 4. Interactive Parking Grid Map (Sơ đồ Bố trí Ô đỗ) ───────────── */}
       <div className="pm-grid-card">
         <div className="pm-grid-card-header">
@@ -408,15 +563,17 @@ export default function LiveParkingView() {
                     <span>Thông tin Phương tiện Đang Đỗ</span>
                   </div>
                   <div className="pm-occupied-box-details">
-                    <div>Mã phiên: <strong>{activeSlot.currentSessionId || "SES-20261013-004"}</strong></div>
-                    <div>Cảm biến IoT: <span className="pm-text-success">Báo có vật cản (Siêu âm + Camera AI)</span></div>
+                    <div>Mã phiên: <strong>{activeSessionForSlot?.sessionId || activeSlot.currentSessionId || "Đang đồng bộ"}</strong></div>
+                    <div>Biển số xe: <strong>{activeSessionForSlot?.licensePlate || "Chưa tra được biển số"}</strong></div>
                   </div>
                   <div className="pm-occupied-actions">
                     <button
                       type="button"
                       className="pm-cta-btn-sm cyan"
+                      disabled={!activeSessionForSlot?.licensePlate}
                       onClick={() => {
-                        navigate(`/staff/operations?tab=checkout&plate=${encodeURIComponent(activeSlot.slotCode)}`);
+                        if (!activeSessionForSlot?.licensePlate) return;
+                        navigate(`/staff/operations?tab=checkout&plate=${encodeURIComponent(activeSessionForSlot.licensePlate)}`);
                         setActiveSlot(null);
                       }}
                     >
@@ -426,7 +583,9 @@ export default function LiveParkingView() {
                       type="button"
                       className="pm-cta-btn-sm red"
                       onClick={() => {
-                        navigate(`/staff/incidents?slot=${encodeURIComponent(activeSlot.slotCode)}`);
+                        const params = new URLSearchParams({ slot: activeSlot.slotCode });
+                        if (activeSessionForSlot?.licensePlate) params.set("plate", activeSessionForSlot.licensePlate);
+                        navigate(`/staff/incidents?${params.toString()}`);
                         setActiveSlot(null);
                       }}
                     >
@@ -436,14 +595,15 @@ export default function LiveParkingView() {
                 </div>
               )}
 
-              {/* Staff Manual Override */}
+              {/* Staff Manual Override (Only operational statuses: ACTIVE / MAINTENANCE / DISABLED) */}
               <div className="pm-override-section">
                 <h4 className="pm-override-title">
-                  Can thiệp Trạng thái Ô đỗ (Nhân viên vận hành)
+                  Can thiệp Trạng thái Vận hành Ô đỗ
                 </h4>
+                {overrideError && <p role="alert" style={{ color: "#f87171", marginBottom: 8 }}>{overrideError}</p>}
 
                 <div className="pm-form-field">
-                  <label className="pm-form-label">Ghi chú / Lý do thay đổi trạng thái:</label>
+                  <label className="pm-form-label">Ghi chú / Lý do thay đổi trạng thái (*):</label>
                   <input
                     type="text"
                     className="pm-form-input"
@@ -460,7 +620,7 @@ export default function LiveParkingView() {
                     onClick={() => handleUpdateStatus("Available")}
                     className="pm-override-btn green"
                   >
-                    <CheckCircle2 size={15} /> Chuyển thành TRỐNG
+                    <CheckCircle2 size={15} /> Kích hoạt (ACTIVE)
                   </button>
 
                   <button
@@ -469,16 +629,16 @@ export default function LiveParkingView() {
                     onClick={() => handleUpdateStatus("Maintenance")}
                     className="pm-override-btn amber"
                   >
-                    <Wrench size={15} /> Chuyển thành BẢO TRÌ
+                    <Wrench size={15} /> Bảo trì (MAINTENANCE)
                   </button>
 
                   <button
                     type="button"
-                    disabled={overrideLoading || activeSlot.status === "Occupied"}
-                    onClick={() => handleUpdateStatus("Occupied")}
+                    disabled={overrideLoading || activeSlot.status === "Disabled"}
+                    onClick={() => handleUpdateStatus("Disabled")}
                     className="pm-override-btn red"
                   >
-                    <Car size={15} /> Đánh dấu ĐÃ CÓ XE
+                    <X size={15} /> Tạm khóa (DISABLED)
                   </button>
                 </div>
               </div>

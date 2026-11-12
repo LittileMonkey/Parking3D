@@ -94,7 +94,7 @@ export interface CheckInResult {
   levelName: string;
   licensePlate: string;
   vehicleType: VehicleType;
-  entryMethod?: string | null;
+  entryMethod?: "QR" | "WALK_IN" | string | null;
   checkinAt: string;
   bookingCode?: string;
   message?: string;

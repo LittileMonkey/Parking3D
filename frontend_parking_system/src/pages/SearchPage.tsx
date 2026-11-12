@@ -12,9 +12,13 @@ import "./Booking.css";
 type VehicleType = "Car" | "Motorbike";
 
 function normalizeVehicleType(value: string): VehicleType | null {
-  const normalized = value.toLowerCase();
-  if (normalized.includes("car")) return "Car";
-  if (normalized.includes("motorbike") || normalized.includes("motorcycle")) return "Motorbike";
+  const normalized = value.trim().toLowerCase();
+  if (normalized.includes("motorbike") || normalized.includes("motorcycle") || normalized.includes("bike")) {
+    return "Motorbike";
+  }
+  if (normalized.includes("car") || normalized === "ev" || normalized.includes("electric")) {
+    return "Car";
+  }
   return null;
 }
 
@@ -710,7 +714,7 @@ export default function SearchPage() {
           {levelSlots.length > 0 && availabilityIsCurrent && (
             <div className="booking-map-layout">
               <section className="booking-map-card" aria-label="Sơ đồ slot bãi đỗ">
-                <ParkingViewer levels={viewerLevels} mapObjects={availability?.mapObjects}
+                <ParkingViewer levels={viewerLevels}
                   selectedLevelCode={selectedLevelCode} selectedId={selectedSlotId || null}
                   onSelect={slot => {
                     setSelectedSlotId(slot.slotId);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { api, ApiError, request, type ShiftHandoverSummaryDto } from "../../services/api";
 import { operations } from "../../services/operations";
@@ -35,6 +35,7 @@ export default function StaffShiftsPage() {
   const [reassignId, setReassignId] = useState<string | null>(null);
   const [newReceiverId, setNewReceiverId] = useState("");
   const [reassignReason, setReassignReason] = useState("");
+  const reassignKeysRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     let current = true;
@@ -96,15 +97,25 @@ export default function StaffShiftsPage() {
       setError("Chọn nhân viên nhận ca mới và nhập lý do đổi người nhận.");
       return;
     }
+    const opKey = `${item.handoverId}:${item.version}:${newReceiverId}:${reassignReason.trim()}`;
+    if (!reassignKeysRef.current[opKey]) {
+      reassignKeysRef.current[opKey] = crypto.randomUUID();
+    }
     setBusy(true);
     setError("");
     setNotice("");
     try {
-      await api.reassignShiftHandoverReceiver(selectedLotId, item.handoverId, {
-        receiverUserId: newReceiverId,
-        reason: reassignReason.trim(),
-        expectedVersion: item.version,
-      });
+      await api.reassignShiftHandoverReceiver(
+        selectedLotId,
+        item.handoverId,
+        {
+          receiverUserId: newReceiverId,
+          reason: reassignReason.trim(),
+          expectedVersion: item.version,
+        },
+        reassignKeysRef.current[opKey],
+      );
+      delete reassignKeysRef.current[opKey];
       setReassignId(null);
       setNewReceiverId("");
       setReassignReason("");
