@@ -1,8 +1,33 @@
 import RefundQueue from "../../components/manager/RefundQueue";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom";
-import { api, ApiError, type IncidentDto, type IncidentSummaryDto } from "../../services/api";
+import { api, ApiError, type IncidentDto, type IncidentEvidenceDto, type IncidentSummaryDto } from "../../services/api";
 import { operations } from "../../services/operations";
+
+async function uploadImageToEvidence(lotId: string, file: File): Promise<string> {
+  const normalizedType = file.type === "image/jpg" ? "image/jpeg" : file.type;
+  if (normalizedType !== "image/png" && normalizedType !== "image/jpeg") {
+    throw new Error("Chỉ hỗ trợ ảnh chứng cứ định dạng PNG hoặc JPEG.");
+  }
+  if (file.size > 4 * 1024 * 1024) {
+    throw new Error("Ảnh chứng cứ vượt quá giới hạn 4 MiB.");
+  }
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === "string"
+      ? resolve(reader.result)
+      : reject(new Error("Không đọc được nội dung file ảnh."));
+    reader.onerror = () => reject(new Error("Không đọc được file ảnh."));
+    reader.readAsDataURL(file);
+  });
+  const imageBase64 = dataUrl.includes(",") ? dataUrl.split(",", 2)[1] : dataUrl;
+  const uploaded = await api.uploadLotEvidence(
+    lotId,
+    { contentType: normalizedType, imageBase64 },
+    crypto.randomUUID(),
+  );
+  return uploaded.reference;
+}
 
 export default function IncidentsApprovalsPage() {
   const { selectedLotId } = useOutletContext<{ selectedLotId: string }>();
@@ -10,11 +35,15 @@ export default function IncidentsApprovalsPage() {
   const [cancellations, setCancellations] = useState<Awaited<ReturnType<typeof operations.cancellations>>>([]);
   const [selected, setSelected] = useState<IncidentDto | null>(null);
   const [reason, setReason] = useState("");
-  const [reference, setReference] = useState("");
+  const [cameraReference, setCameraReference] = useState("");
+  const [cameraCapturedAt, setCameraCapturedAt] = useState("");
+  const [vehicleDocReference, setVehicleDocReference] = useState("");
+  const [uploadingField, setUploadingField] = useState<"camera" | "doc" | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
+  const decisionKeysRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     let current = true;
@@ -22,7 +51,9 @@ export default function IncidentsApprovalsPage() {
     setItems([]);
     setSelected(null);
     setReason("");
-    setReference("");
+    setCameraReference("");
+    setCameraCapturedAt("");
+    setVehicleDocReference("");
     setError("");
     setNotice("");
     if (!selectedLotId || selectedLotId === "all") return;
@@ -54,11 +85,32 @@ export default function IncidentsApprovalsPage() {
     try {
       setSelected(await api.getIncidentById(selectedLotId, id));
       setReason("");
-      setReference("");
+      setCameraReference("");
+      setCameraCapturedAt("");
+      setVehicleDocReference("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không tải được sự cố.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleEvidenceUpload(field: "camera" | "doc", file?: File) {
+    if (!file || !selectedLotId) return;
+    setUploadingField(field);
+    setError("");
+    try {
+      const ref = await uploadImageToEvidence(selectedLotId, file);
+      if (field === "camera") {
+        setCameraReference(ref);
+        setCameraCapturedAt(new Date().toISOString());
+      } else {
+        setVehicleDocReference(ref);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không upload được ảnh chứng cứ.");
+    } finally {
+      setUploadingField(null);
     }
   }
 
@@ -67,22 +119,49 @@ export default function IncidentsApprovalsPage() {
       setError("Nhập lý do xử lý.");
       return;
     }
-    if (decision === "Approved" && !reference.trim()) {
-      setError("Phê duyệt cần tham chiếu bằng chứng đã đối chiếu.");
+    const camRef = cameraReference.trim();
+    const docRef = vehicleDocReference.trim();
+    if (decision === "Approved" && (!camRef || !docRef)) {
+      setError("Phê duyệt (Approved) bắt buộc có đủ ảnh/tham chiếu camera và ảnh/tham chiếu giấy tờ xe.");
       return;
     }
+    const evidence: IncidentEvidenceDto[] = [];
+    if (camRef) {
+      evidence.push({
+        kind: "CAMERA",
+        reference: camRef,
+        capturedAt: cameraCapturedAt || new Date().toISOString(),
+      });
+    }
+    if (docRef) {
+      evidence.push({
+        kind: "VEHICLE_REGISTRATION",
+        reference: docRef,
+      });
+    }
+
+    const opKey = `${selected.incidentId}:${decision}:${selected.version}:${reason.trim()}:${camRef}:${docRef}`;
+    if (!decisionKeysRef.current[opKey]) {
+      decisionKeysRef.current[opKey] = crypto.randomUUID();
+    }
+
     setBusy(true);
     setError("");
     setNotice("");
     try {
-      await api.createIncidentDecision(selectedLotId, selected.incidentId, {
-        decision,
-        reason,
-        evidence: reference.trim()
-          ? [{ kind: "MANUAL_REVIEW", reference: reference.trim(), capturedAt: new Date().toISOString() }]
-          : [],
-        expectedVersion: selected.version,
-      });
+      await api.createIncidentDecision(
+        selectedLotId,
+        selected.incidentId,
+        {
+          decision,
+          reason: reason.trim(),
+          evidence,
+          expectedVersion: selected.version,
+        },
+        decisionKeysRef.current[opKey],
+      );
+      delete decisionKeysRef.current[opKey];
+      setNotice(`Đã lưu quyết định ${decision === "Approved" ? "Phê duyệt" : "Từ chối"}.`);
       setRevision((value) => value + 1);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
@@ -94,7 +173,7 @@ export default function IncidentsApprovalsPage() {
           setSelected(latest);
           setItems(list.items);
           setError(
-            `Xung đột phiên bản (409): Bản ghi đã được cập nhật lên v${latest.version} (${latest.status}). Nội dung bạn nhập vẫn được giữ lại — vui lòng kiểm tra lại và xác nhận lại.`
+            `Xung đột phiên bản (409): Bản ghi đã được cập nhật lên v${latest.version} (${latest.status}). Nội dung và chứng cứ bạn nhập vẫn được giữ lại — vui lòng kiểm tra lại và xác nhận lại.`
           );
         } catch {
           setError("Xung đột phiên bản (409). Vui lòng tải lại bản ghi trước khi xác nhận lại.");
@@ -185,14 +264,45 @@ export default function IncidentsApprovalsPage() {
           <label>
             Lý do <textarea maxLength={2000} value={reason} onChange={(e) => setReason(e.target.value)} />
           </label>
-          <label>
-            Tham chiếu bằng chứng (camera/biên bản đối chiếu){" "}
-            <input value={reference} onChange={(e) => setReference(e.target.value)} />
-          </label>
-          <button disabled={busy} onClick={() => decide("Approved")}>
+          <div style={{ display: "grid", gap: 10 }}>
+            <label>
+              Ảnh camera cổng (`CAMERA` — PNG/JPEG tối đa 4 MiB){" "}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/jpg"
+                disabled={uploadingField !== null || busy}
+                onChange={(e) => { void handleEvidenceUpload("camera", e.target.files?.[0]); }}
+              />
+              {uploadingField === "camera" && <small>Đang upload ảnh camera...</small>}
+              <input
+                placeholder="Reference ảnh camera (parking-evidence:...)"
+                value={cameraReference}
+                onChange={(e) => {
+                  setCameraReference(e.target.value);
+                  if (!cameraCapturedAt) setCameraCapturedAt(new Date().toISOString());
+                }}
+              />
+            </label>
+            <label>
+              Ảnh giấy tờ xe (`VEHICLE_REGISTRATION` — PNG/JPEG tối đa 4 MiB){" "}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/jpg"
+                disabled={uploadingField !== null || busy}
+                onChange={(e) => { void handleEvidenceUpload("doc", e.target.files?.[0]); }}
+              />
+              {uploadingField === "doc" && <small>Đang upload ảnh giấy tờ xe...</small>}
+              <input
+                placeholder="Reference giấy tờ xe (parking-evidence:...)"
+                value={vehicleDocReference}
+                onChange={(e) => setVehicleDocReference(e.target.value)}
+              />
+            </label>
+          </div>
+          <button disabled={busy || uploadingField !== null} onClick={() => decide("Approved")}>
             Phê duyệt
           </button>
-          <button disabled={busy} onClick={() => decide("Rejected")}>
+          <button disabled={busy || uploadingField !== null} onClick={() => decide("Rejected")}>
             Từ chối
           </button>
         </article>

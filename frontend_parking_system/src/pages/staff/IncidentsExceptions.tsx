@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
@@ -11,9 +11,10 @@ import {
   Check,
   AlertOctagon,
 } from "lucide-react";
-import { api, ApiError, type ParkingLot } from "../../services/api";
+import { api, ApiError, type ParkingLot, type StaffAssignmentItem } from "../../services/api";
 import { staffApi } from "../../services/staff/staffApi";
 import { useIdempotencyKey } from "../../hooks/useIdempotencyKey";
+import { useAuth } from "../../context/AuthContext";
 import type {
   Incident,
   IncidentSeverity,
@@ -25,18 +26,27 @@ export default function IncidentsExceptions() {
   const prefillSlot = searchParams.get("slot") || "";
   const prefillPlate = searchParams.get("plate") || "";
 
+  const { user } = useAuth();
   const [lots, setLots] = useState<ParkingLot[]>([]);
+  const [assignments, setAssignments] = useState<StaffAssignmentItem[]>([]);
   const [lotId, setLotId] = useState("");
   const [error, setError] = useState("");
   useEffect(() => {
-    Promise.all([api.getParkingLots(), api.getStaffAssignmentsMe()]).then(([catalog, assignments]) => {
-      const assigned = new Set(assignments.map(item => item.lotId));
+    Promise.all([api.getParkingLots(), api.getStaffAssignmentsMe()]).then(([catalog, myAssignments]) => {
+      setAssignments(myAssignments);
+      const assigned = new Set(myAssignments.map(item => item.lotId));
       const allowed = catalog.filter(item => assigned.has(item.id));
       setLots(allowed);
       setLotId(allowed[0]?.id ?? "");
       if (!allowed.length) { setError("Tài khoản chưa được phân công bãi xe."); setLoading(false); }
     }).catch(err => { setError(err.message); setLoading(false); });
   }, []);
+  const lotAssignment = assignments.find(a => a.lotId === lotId);
+  const canResolveIncident = Boolean(
+    lotAssignment?.roleCode === "PARKING_MANAGER" ||
+    user?.roles?.includes("ADMIN") ||
+    user?.role === "ADMIN"
+  );
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -58,11 +68,14 @@ export default function IncidentsExceptions() {
   const [relatedGate, setRelatedGate] = useState("Cổng Vào G1");
   const [submitting, setSubmitting] = useState(false);
 
-  // Resolution modal / note prompt
+  // Resolution / Escalation modal & stable idempotency keys
   const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [targetActionStatus, setTargetActionStatus] = useState<"Resolved" | "Escalated">("Resolved");
   const [resolveNote, setResolveNote] = useState("");
   const [occNotice, setOccNotice] = useState("");
+  const [updatingStatus, setUpdatingStatus] = useState(false);
   const { key: createIncidentKey, renewKey: renewCreateIncidentKey } = useIdempotencyKey("incident");
+  const statusKeysRef = useRef<Record<string, string>>({});
 
   const loadIncidents = async () => {
     try {
@@ -116,11 +129,30 @@ export default function IncidentsExceptions() {
     newStatus: "InProgress" | "Resolved" | "Escalated",
     notes?: string,
   ) => {
+    if (updatingStatus) return;
+    if ((newStatus === "Resolved" || newStatus === "Escalated") && !notes?.trim()) {
+      setError("Vui lòng nhập ghi chú xử lý / lý do chuyển cấp trước khi xác nhận.");
+      return;
+    }
+    setError("");
     setOccNotice("");
     const currentItem = incidents.find(item => item.incidentId === incidentId);
     if (!currentItem) return;
+    const opKey = `${incidentId}:${newStatus}:${currentItem.version}:${(notes ?? "").trim()}`;
+    if (!statusKeysRef.current[opKey]) {
+      statusKeysRef.current[opKey] = crypto.randomUUID();
+    }
+    setUpdatingStatus(true);
     try {
-      await staffApi.updateIncidentStatus(incidentId, newStatus, notes, lotId, currentItem.version);
+      await staffApi.updateIncidentStatus(
+        incidentId,
+        newStatus,
+        notes?.trim(),
+        lotId,
+        currentItem.version,
+        statusKeysRef.current[opKey],
+      );
+      delete statusKeysRef.current[opKey];
       setResolvingId(null);
       setResolveNote("");
       loadIncidents();
@@ -131,6 +163,8 @@ export default function IncidentsExceptions() {
       } else {
         setError(err instanceof Error ? err.message : "Không cập nhật được trạng thái sự cố.");
       }
+    } finally {
+      setUpdatingStatus(false);
     }
   };
 
@@ -414,20 +448,41 @@ export default function IncidentsExceptions() {
                         {inc.status === "Open" && (
                           <button
                             type="button"
+                            disabled={updatingStatus}
                             onClick={() => handleUpdateStatus(inc.incidentId, "InProgress", "Nhân viên ca trực đã tiếp nhận xử lý")}
                             className="pm-btn-pill cyan"
                           >
                             Tiếp nhận
                           </button>
                         )}
-                        {inc.status === "InProgress" && (
+                        {(inc.status === "Open" || inc.status === "InProgress") && (
                           <button
                             type="button"
-                            onClick={() => setResolvingId(inc.incidentId)}
+                            disabled={updatingStatus}
+                            onClick={() => {
+                              setTargetActionStatus("Escalated");
+                              setResolvingId(inc.incidentId);
+                            }}
+                            className="pm-btn-pill amber"
+                          >
+                            Chuyển quản lý
+                          </button>
+                        )}
+                        {inc.status === "InProgress" && canResolveIncident && (
+                          <button
+                            type="button"
+                            disabled={updatingStatus}
+                            onClick={() => {
+                              setTargetActionStatus("Resolved");
+                              setResolvingId(inc.incidentId);
+                            }}
                             className="pm-btn-pill green"
                           >
                             Hoàn tất
                           </button>
+                        )}
+                        {inc.status === "Escalated" && (
+                          <span className="pm-text-muted">Đã chuyển quản lý</span>
                         )}
                         {inc.status === "Resolved" && (
                           <span className="pm-resolved-text">
@@ -592,8 +647,8 @@ export default function IncidentsExceptions() {
           <div className="staff-modal pm-dark-modal" onClick={(e) => e.stopPropagation()}>
             <div className="staff-modal-header pm-dark-modal-header">
               <h3 className="staff-modal-title" style={{ display: "flex", alignItems: "center", gap: 8, color: "#ffffff" }}>
-                <CheckCircle2 size={20} color="#10b981" />
-                <span>Xác nhận Hoàn tất &amp; Đóng Sự cố</span>
+                <CheckCircle2 size={20} color={targetActionStatus === "Resolved" ? "#10b981" : "#fbbf24"} />
+                <span>{targetActionStatus === "Resolved" ? "Xác nhận Hoàn tất & Đóng Sự cố" : "Chuyển sự cố lên Quản lý (Escalated)"}</span>
               </h3>
               <button
                 type="button"
@@ -628,11 +683,17 @@ export default function IncidentsExceptions() {
               </button>
               <button
                 type="button"
-                onClick={() => handleUpdateStatus(resolvingId, "Resolved", resolveNote)}
+                disabled={updatingStatus || !resolveNote.trim()}
+                onClick={() => handleUpdateStatus(resolvingId, targetActionStatus, resolveNote)}
                 className="pm-cta-btn"
-                style={{ background: "#10b981", color: "#ffffff", width: "auto", padding: "8px 20px" }}
+                style={{
+                  background: targetActionStatus === "Resolved" ? "#10b981" : "#f59e0b",
+                  color: "#ffffff",
+                  width: "auto",
+                  padding: "8px 20px",
+                }}
               >
-                Đánh dấu Đã Giải Quyết
+                {updatingStatus ? "Đang cập nhật..." : targetActionStatus === "Resolved" ? "Đánh dấu Đã Giải Quyết" : "Xác nhận Chuyển Quản Lý"}
               </button>
             </div>
           </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -17,7 +17,14 @@ import {
   X,
   Hash,
 } from "lucide-react";
-import { api, ApiError, type CheckoutRequest, type StaffSessionRow, type Payment } from "../../services/api";
+import {
+  api,
+  ApiError,
+  type CheckOutQuoteDto,
+  type CheckoutRequest,
+  type Payment,
+  type StaffSessionRow,
+} from "../../services/api";
 import { staffApi } from "../../services/staff/staffApi";
 import { useIdempotencyKey } from "../../hooks/useIdempotencyKey";
 import type {
@@ -96,23 +103,31 @@ export default function VehicleOperations() {
   const [evidenceReference, setEvidenceReference] = useState("");
   const [evidenceFileName, setEvidenceFileName] = useState("");
   const [evidenceUploading, setEvidenceUploading] = useState(false);
+  const [showOverrideModal, setShowOverrideModal] = useState(false);
+  const [cameraError, setCameraError] = useState("");
 
   // Check-Out Form State
   const [checkOutQuery, setCheckOutQuery] = useState(initialPlate);
+  const [checkOutQrPayload, setCheckOutQrPayload] = useState("");
+  const [checkoutPaymentMethod, setCheckoutPaymentMethod] = useState<"CASH" | "VNPAY_QR">("CASH");
   const [cashReceived, setCashReceived] = useState("");
   const [cashNotes, setCashNotes] = useState("");
+  const [vnpayInfo, setVnpayInfo] = useState<{ paymentId: string; amount: number; paymentUrl: string } | null>(null);
+  const [vnpayBusy, setVnpayBusy] = useState(false);
   const [exitPermit, setExitPermit] = useState<{ payload: CheckoutRequest; token: string; confirmKey: string } | null>(null);
   const [authorizeKey, setAuthorizeKey] = useState("");
   const [checkoutError, setCheckoutError] = useState("");
+  const [mismatchQuote, setMismatchQuote] = useState<CheckOutQuoteDto | null>(null);
+  const [issuedExitQr, setIssuedExitQr] = useState<{ sessionId: string; qrPayload: string; expiresAt?: string } | null>(null);
 
-  const [feeInfo, setFeeInfo] = useState<(Awaited<ReturnType<typeof api.getCheckoutQuote>> & { gateId: string; detectedPlate: string }) | null>(null);
+  const [feeInfo, setFeeInfo] = useState<(CheckOutQuoteDto & { gateId: string; detectedPlate: string }) | null>(null);
   const [calculatingFee, setCalculatingFee] = useState(false);
   const [checkOutProcessing, setCheckOutProcessing] = useState(false);
   const [checkOutSuccess, setCheckOutSuccess] = useState<{ message: string; paymentId?: string } | null>(null);
   const [eReceipt, setEReceipt] = useState<any | null>(null);
   const [loadingReceipt, setLoadingReceipt] = useState(false);
 
-  // Camera ANPR Boxes State (Quản lý trạng thái và ảnh tải lên riêng cho từng ô camera)
+  // Camera ANPR Boxes State (Bắt đầu trống, chỉ hiển thị biển số sau khi quét AI thật)
   interface CamBoxState {
     fileUrl?: string;
     result?: PlateRecognitionResult;
@@ -123,9 +138,9 @@ export default function VehicleOperations() {
 
   const [cameraStates, setCameraStates] = useState<Record<string, CamBoxState>>({
     "moto-cam1": {},
-    "moto-cam2": { plateText: "59-P1 982.14", confidence: "Độ chính xác: 99.2% • Honda AirBlade" },
-    "car-cam1": { plateText: "51K - 892.45", confidence: "AI: 99.4% • Toyota Cross" },
-    "car-cam2": { plateText: "51K - 892.45", confidence: "AI: 98.9% • Khớp biển trước" },
+    "moto-cam2": {},
+    "car-cam1": {},
+    "car-cam2": {},
     "car-cam3": {},
     "car-cam4": {},
   });
@@ -145,14 +160,15 @@ export default function VehicleOperations() {
     const camId = activeTargetCam;
 
     if (file.size > 5 * 1024 * 1024) {
-      alert("Dung lượng ảnh vượt quá 5MB. Vui lòng chọn ảnh nhỏ hơn.");
+      setCameraError("Dung lượng ảnh vượt quá 5MB. Vui lòng chọn ảnh nhỏ hơn.");
       return;
     }
 
     if (!["image/jpeg", "image/png", "image/jpg"].includes(file.type)) {
-      alert("Chỉ chấp nhận file ảnh JPG hoặc PNG hợp lệ.");
+      setCameraError("Chỉ chấp nhận file ảnh JPG hoặc PNG hợp lệ.");
       return;
     }
+    setCameraError("");
 
     const previewUrl = URL.createObjectURL(file);
 
@@ -210,9 +226,9 @@ export default function VehicleOperations() {
           handleLookupFee(recognizedPlate);
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("AI Plate Recognition error for cam:", camId, err);
-      alert("Lỗi nhận diện biển số: " + (err.message || "Máy chủ OCR không phản hồi"));
+      setCameraError("Lỗi nhận diện biển số: " + (err instanceof Error ? err.message : "Máy chủ OCR không phản hồi"));
       setCameraStates((prev) => ({
         ...prev,
         [camId]: {
@@ -223,15 +239,16 @@ export default function VehicleOperations() {
     }
   };
 
-  const handleResetCam = (camId: string, defaultPlate?: string, defaultConf?: string) => {
+  const handleResetCam = (camId: string) => {
+    setCameraError("");
     setCameraStates((prev) => ({
       ...prev,
       [camId]: {
         fileUrl: undefined,
         result: undefined,
         scanning: false,
-        plateText: defaultPlate,
-        confidence: defaultConf,
+        plateText: undefined,
+        confidence: undefined,
       },
     }));
   };
@@ -248,13 +265,7 @@ export default function VehicleOperations() {
 
   const handleCameraCategoryToggle = (category: "Car" | "Motorcycle") => {
     setCameraVehicleCategory(category);
-    if (category === "Motorcycle") {
-      setCheckInVehicleType("Motorcycle");
-      setCheckInPlate("59-P1 982.14");
-    } else {
-      setCheckInVehicleType("Car");
-      setCheckInPlate("51K-892.45");
-    }
+    setCheckInVehicleType(category === "Motorcycle" ? "Motorcycle" : "Car");
   };
 
   const loadSessions = async () => {
@@ -304,20 +315,64 @@ export default function VehicleOperations() {
     }
   };
 
+  const handleCheckInEvidenceFile = async (file?: File) => {
+    if (!file) return;
+    const selectedLotId = entryGates.find(gate => gate.id === checkInGate)?.lotId;
+    if (!selectedLotId) {
+      setCheckInError("Vui lòng chọn cổng vào trước khi tải ảnh chứng cứ.");
+      return;
+    }
+    const normalizedType = file.type === "image/jpg" ? "image/jpeg" : file.type;
+    if (normalizedType !== "image/png" && normalizedType !== "image/jpeg") {
+      setCheckInError("Chỉ hỗ trợ ảnh định dạng PNG hoặc JPEG.");
+      return;
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      setCheckInError("Ảnh chứng cứ vượt quá giới hạn 4 MiB.");
+      return;
+    }
+    setCheckInError("");
+    setEvidenceFileName(file.name);
+    setEvidenceUploading(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === "string"
+          ? resolve(reader.result)
+          : reject(new Error("Không đọc được nội dung file ảnh."));
+        reader.onerror = () => reject(new Error("Không đọc được file ảnh."));
+        reader.readAsDataURL(file);
+      });
+      const base64 = dataUrl.includes(",") ? dataUrl.split(",", 2)[1] : dataUrl;
+      const uploaded = await api.uploadLotEvidence(
+        selectedLotId,
+        { contentType: normalizedType, imageBase64: base64 },
+        crypto.randomUUID(),
+      );
+      setEvidenceReference(uploaded.reference);
+      renewCheckInKey();
+    } catch (uploadErr) {
+      setCheckInError(uploadErr instanceof Error ? uploadErr.message : "Upload ảnh chứng cứ thất bại.");
+    } finally {
+      setEvidenceUploading(false);
+    }
+  };
+
   // Check-In Submit
-  const handleCheckIn = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCheckIn = async (e?: React.FormEvent, forceOverride?: boolean) => {
+    e?.preventDefault();
     setCheckInError("");
     setCheckInSuccess(null);
+    const isOverride = forceOverride ?? allowMismatchOverride;
 
-    if (allowMismatchOverride) {
+    if (isOverride) {
       const reasonTrimmed = overrideReason.trim();
       if (reasonTrimmed.length < 10 || reasonTrimmed.length > 500) {
         setCheckInError("Lý do override lệch biển số phải từ 10 đến 500 ký tự.");
         return;
       }
       if (!evidenceReference.trim()) {
-        setCheckInError("Vui lòng chọn ảnh chứng cứ hoặc nhập tham chiếu bằng chứng camera.");
+        setCheckInError("Vui lòng upload ảnh chứng cứ hoặc nhập tham chiếu bằng chứng camera.");
         return;
       }
     }
@@ -330,9 +385,9 @@ export default function VehicleOperations() {
         lotId: entryGates.find(gate => gate.id === checkInGate)?.lotId,
         vehicleType: checkInVehicleType,
         gateId: checkInGate,
-        allowMismatchOverride,
-        overrideReason: allowMismatchOverride ? overrideReason.trim() : undefined,
-        evidence: allowMismatchOverride
+        allowMismatchOverride: isOverride,
+        overrideReason: isOverride ? overrideReason.trim() : undefined,
+        evidence: isOverride
           ? [{ kind: evidenceKind, reference: evidenceReference.trim(), capturedAt: new Date().toISOString() }]
           : undefined,
         idempotencyKey: checkInKey,
@@ -341,6 +396,7 @@ export default function VehicleOperations() {
       setCheckInPlate("");
       setCheckInBooking("");
       setAllowMismatchOverride(false);
+      setShowOverrideModal(false);
       setOverrideReason("");
       setEvidenceReference("");
       setEvidenceFileName("");
@@ -351,8 +407,9 @@ export default function VehicleOperations() {
       const lower = msg.toLowerCase();
       if (err instanceof ApiError && err.status === 409 && (err.errorCode === "PLATE_MISMATCH" || lower.includes("mismatch") || lower.includes("booked") || lower.includes("override") || lower.includes("biển"))) {
         setAllowMismatchOverride(true);
+        setShowOverrideModal(true);
         renewCheckInKey();
-        setCheckInError(`${msg} — Đã mở form xác nhận ngoại lệ bên dưới để nhập lý do (10–500 ký tự) và ảnh chứng cứ.`);
+        setCheckInError(`${msg} — Vui lòng nhập lý do (10–500 ký tự) và upload ảnh chứng cứ để xác nhận ngoại lệ.`);
       } else if (lower.includes("full") || lower.includes("no available") || lower.includes("hết") || lower.includes("đầy")) {
         setCheckInError(`Bãi hiện đã đầy cho loại xe ${checkInVehicleType}: ${msg}`);
       } else if (lower.includes("active session") || lower.includes("already") || lower.includes("phiên")) {
@@ -366,20 +423,27 @@ export default function VehicleOperations() {
   };
 
   // Lookup Fee for Check-Out
-  const handleLookupFee = async (overrideQ?: string, gateId = exitGate) => {
+  const handleLookupFee = async (overrideQ?: string, gateId = exitGate, qrOverride?: string) => {
     const plate = (overrideQ ?? checkOutQuery).trim();
+    const qr = (qrOverride ?? checkOutQrPayload).trim();
     const gate = exitGates.find(item => item.id === gateId);
-    if (!plate || !gate || exitPermit) return;
+    if ((!plate && !qr) || !gate || exitPermit) return;
     setCalculatingFee(true);
     setCheckoutError("");
+    setMismatchQuote(null);
     setFeeInfo(null);
+    setVnpayInfo(null);
     setCheckOutSuccess(null);
     try {
-      const quote = await api.getCheckoutQuote(gate.lotId, gate.id, plate);
+      const quote = await api.getCheckoutQuote(gate.lotId, gate.id, plate, qr || undefined);
       if (!quote.isPlateMatched || !quote.quoteToken) {
-        throw new Error("Biển số không khớp với phiên đỗ. Cần đối soát trước khi cho xe ra.");
+        setMismatchQuote(quote);
+        throw new Error(
+          `Lệch biển số khi đối soát: Biển lúc vào "${quote.entryPlate}" ≠ biển tại cổng ra "${quote.exitPlate || plate}"${quote.incidentCode ? ` (Mã sự cố: ${quote.incidentCode})` : ""}.`,
+        );
       }
-      setFeeInfo({ ...quote, gateId: gate.id, detectedPlate: plate });
+      setFeeInfo({ ...quote, gateId: gate.id, detectedPlate: quote.exitPlate || plate });
+      setCheckoutPaymentMethod("CASH");
       setCashReceived("");
       setCashNotes("");
       setAuthorizeKey(crypto.randomUUID());
@@ -390,20 +454,39 @@ export default function VehicleOperations() {
     }
   };
 
+  const handlePrepareVnPay = async () => {
+    if (!feeInfo?.quoteToken) return;
+    setVnpayBusy(true);
+    setCheckoutError("");
+    try {
+      const prep = await api.prepareCheckoutVnPay(feeInfo.quoteToken);
+      setVnpayInfo({ paymentId: prep.paymentId, amount: prep.amount, paymentUrl: prep.paymentUrl });
+      setAuthorizeKey(crypto.randomUUID());
+    } catch (err) {
+      setCheckoutError(err instanceof Error ? err.message : "Không khởi tạo được giao dịch VNPay check-out.");
+    } finally {
+      setVnpayBusy(false);
+    }
+  };
+
   const handleCheckOut = async () => {
     if (!feeInfo?.quoteToken) return;
     setCheckOutProcessing(true);
     setCheckoutError("");
     try {
       if (!exitPermit) {
+        const method: CheckoutRequest["paymentMethod"] = !feeInfo.paymentRequired
+          ? "NONE"
+          : checkoutPaymentMethod;
         const payload: CheckoutRequest = {
           sessionId: feeInfo.sessionId,
           gateId: feeInfo.gateId,
           detectedPlate: feeInfo.detectedPlate,
           quoteToken: feeInfo.quoteToken,
-          paymentMethod: feeInfo.paymentRequired ? "CASH" : "NONE",
-          cashReceived: feeInfo.paymentRequired ? Number(cashReceived) : 0,
-          staffNotes: feeInfo.paymentRequired ? cashNotes.trim() : undefined,
+          paymentMethod: method,
+          cashReceived: method === "CASH" ? Number(cashReceived) : 0,
+          paymentReference: method === "VNPAY_QR" ? vnpayInfo?.paymentId : undefined,
+          staffNotes: method === "CASH" ? cashNotes.trim() : undefined,
         };
         const authorization = await api.authorizeCheckout(payload, authorizeKey);
         setExitPermit({ payload, token: authorization.exitPermitToken, confirmKey: crypto.randomUUID() });
@@ -416,12 +499,25 @@ export default function VehicleOperations() {
       });
       setExitPermit(null);
       setFeeInfo(null);
+      setVnpayInfo(null);
       setCheckOutQuery("");
+      setCheckOutQrPayload("");
       loadSessions();
     } catch (err) {
       setCheckoutError(err instanceof Error ? err.message : "Không ghi nhận được lượt xe ra.");
     } finally {
       setCheckOutProcessing(false);
+    }
+  };
+
+  const handleIssueExitQr = async (sessionId: string) => {
+    setCheckoutError("");
+    try {
+      const qr = await api.issueCheckOutQr(sessionId);
+      const token = qr.qrPayload || qr.qrToken || qr.token || "";
+      setIssuedExitQr({ sessionId, qrPayload: token, expiresAt: qr.expiresAt });
+    } catch (err) {
+      setCheckoutError(err instanceof Error ? err.message : "Không phát hành được QR chiều ra.");
     }
   };
 
@@ -538,8 +634,7 @@ export default function VehicleOperations() {
                       >
                         <option value="Car">Ô tô (4-7 chỗ)</option>
                         <option value="Motorcycle">Xe máy</option>
-                        <option value="EV">Xe điện (EV)</option>
-                        <option value="Truck">Xe tải nhẹ</option>
+                        <option value="EV">Xe điện (EV → CAR)</option>
                       </select>
                     </div>
                   </div>
@@ -604,50 +699,7 @@ export default function VehicleOperations() {
                             type="file"
                             accept="image/png,image/jpeg,image/jpg"
                             disabled={evidenceUploading}
-                            onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              const selectedLotId = entryGates.find(gate => gate.id === checkInGate)?.lotId;
-                              if (!selectedLotId) {
-                                setCheckInError("Vui lòng chọn cổng vào trước khi tải ảnh chứng cứ.");
-                                return;
-                              }
-                              const normalizedType = file.type === "image/jpg" ? "image/jpeg" : file.type;
-                              if (normalizedType !== "image/png" && normalizedType !== "image/jpeg") {
-                                setCheckInError("Chỉ hỗ trợ ảnh định dạng PNG hoặc JPEG.");
-                                return;
-                              }
-                              if (file.size > 4 * 1024 * 1024) {
-                                setCheckInError("Ảnh chứng cứ vượt quá giới hạn 4 MiB.");
-                                return;
-                              }
-
-                              setCheckInError("");
-                              setEvidenceFileName(file.name);
-                              setEvidenceUploading(true);
-                              try {
-                                const dataUrl = await new Promise<string>((resolve, reject) => {
-                                  const reader = new FileReader();
-                                  reader.onload = () => typeof reader.result === "string"
-                                    ? resolve(reader.result)
-                                    : reject(new Error("Không đọc được nội dung file ảnh."));
-                                  reader.onerror = () => reject(new Error("Không đọc được file ảnh."));
-                                  reader.readAsDataURL(file);
-                                });
-                                const base64 = dataUrl.includes(",") ? dataUrl.split(",", 2)[1] : dataUrl;
-                                const uploaded = await api.uploadLotEvidence(
-                                  selectedLotId,
-                                  { contentType: normalizedType, imageBase64: base64 },
-                                  crypto.randomUUID(),
-                                );
-                                setEvidenceReference(uploaded.reference);
-                                renewCheckInKey();
-                              } catch (uploadErr) {
-                                setCheckInError(uploadErr instanceof Error ? uploadErr.message : "Upload ảnh chứng cứ thất bại.");
-                              } finally {
-                                setEvidenceUploading(false);
-                              }
-                            }}
+                            onChange={(e) => { void handleCheckInEvidenceFile(e.target.files?.[0]); }}
                           />
                           {evidenceUploading && <small>Đang tải ảnh chứng cứ lên máy chủ...</small>}
                           {!evidenceUploading && evidenceFileName && <small>Đã upload ảnh: {evidenceFileName}</small>}
@@ -746,7 +798,7 @@ export default function VehicleOperations() {
               </div>
 
               <div className="pm-op-card-body">
-                <div className="pm-lookup-row">
+                <div className="pm-lookup-row" style={{ marginBottom: 10 }}>
                   <input
                     type="text"
                     className="pm-form-input pm-plate-input"
@@ -767,15 +819,43 @@ export default function VehicleOperations() {
                   </button>
                 </div>
 
+                <label className="pm-form-label" style={{ marginBottom: 10 }}>
+                  Mã QR chiều ra (tùy chọn)
+                  <input
+                    type="text"
+                    className="pm-form-input"
+                    placeholder="Dán payload QR chiều ra để đối soát..."
+                    value={checkOutQrPayload}
+                    disabled={!!exitPermit || checkOutProcessing}
+                    onChange={(e) => setCheckOutQrPayload(e.target.value)}
+                  />
+                </label>
+
                 <label className="pm-form-label">
                   Cổng ra
                   <select className="pm-form-select" value={exitGate} disabled={!!exitPermit || checkOutProcessing}
-                    onChange={event => { setExitGate(event.target.value); setFeeInfo(null); }}>
+                    onChange={event => { setExitGate(event.target.value); setFeeInfo(null); setVnpayInfo(null); }}>
                     <option value="" disabled>Chọn cổng ra</option>
                     {exitGates.map(gate => <option key={gate.id} value={gate.id}>{gate.label}</option>)}
                   </select>
                 </label>
-                {checkoutError && <p role="alert">{checkoutError}</p>}
+                {checkoutError && <p role="alert" style={{ color: "#f87171" }}>{checkoutError}</p>}
+
+                {mismatchQuote && !mismatchQuote.isPlateMatched && (
+                  <div style={{ border: "1px solid #ef4444", borderRadius: 10, padding: 12, marginTop: 10, background: "rgba(239,68,68,0.12)" }}>
+                    <strong>Cảnh báo lệch biển số vào / ra</strong>
+                    <div>Biển số vào: <strong>{mismatchQuote.entryPlate}</strong> · Biển số ra: <strong>{mismatchQuote.exitPlate}</strong></div>
+                    {mismatchQuote.incidentCode && <div>Mã sự cố phát sinh: <strong>{mismatchQuote.incidentCode}</strong></div>}
+                    <div style={{ marginTop: 8 }}>
+                      <Link
+                        to={`/staff/incidents?plate=${encodeURIComponent(mismatchQuote.entryPlate)}`}
+                        className="pm-cta-btn-sm red"
+                      >
+                        Mở xử lý sự cố lệch biển số
+                      </Link>
+                    </div>
+                  </div>
+                )}
 
                 {/* Fee Information Breakdown */}
                 {feeInfo && (
@@ -783,8 +863,8 @@ export default function VehicleOperations() {
                     <h3 className="pm-fee-title">Bảng kê Chi tiết Thu phí Xuất bến</h3>
                     <div className="pm-fee-lines">
                       <div className="pm-fee-line">
-                        <span className="pm-text-muted">Biển số xe:</span>
-                        <strong className="pm-text-white">{feeInfo.entryPlate}</strong>
+                        <span className="pm-text-muted">Biển số xe (vào / ra):</span>
+                        <strong className="pm-text-white">{feeInfo.entryPlate} / {feeInfo.exitPlate}</strong>
                       </div>
                       <div className="pm-fee-line">
                         <span className="pm-text-muted">Vị trí đã đỗ:</span>
@@ -799,8 +879,8 @@ export default function VehicleOperations() {
                         <strong>{Math.floor(feeInfo.totalDurationMinutes / 60)} giờ {feeInfo.totalDurationMinutes % 60} phút</strong>
                       </div>
                       <div className="pm-fee-line">
-                        <span className="pm-text-muted">Gói cước áp dụng:</span>
-                        <span>Biểu giá chốt khi xe vào</span>
+                        <span className="pm-text-muted">Đã trả trước / Trễ giờ:</span>
+                        <span>{feeInfo.prepaidAmount.toLocaleString("vi-VN")} VND / {feeInfo.overdueMinutes} phút</span>
                       </div>
                       <div className="pm-fee-total-row">
                         <span>TỔNG TIỀN PHẢI THU:</span>
@@ -811,28 +891,98 @@ export default function VehicleOperations() {
                     </div>
 
                     {feeInfo.paymentRequired && !exitPermit && (
-                      <>
-                        <label className="pm-form-label">Số tiền mặt đã nhận
-                          <input className="pm-form-input" type="number" min={feeInfo.totalAmountDue}
-                            value={cashReceived} onChange={event => setCashReceived(event.target.value)} />
+                      <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+                        <label className="pm-form-label">
+                          Phương thức thanh toán xuất bãi:
+                          <select
+                            className="pm-form-select"
+                            value={checkoutPaymentMethod}
+                            onChange={(e) => {
+                              setCheckoutPaymentMethod(e.target.value as "CASH" | "VNPAY_QR");
+                              setAuthorizeKey(crypto.randomUUID());
+                            }}
+                          >
+                            <option value="CASH">Tiền mặt tại cổng (CASH)</option>
+                            <option value="VNPAY_QR">Chuyển khoản / QR VNPay (VNPAY_QR)</option>
+                          </select>
                         </label>
-                        <label className="pm-form-label">Ghi chú thu tiền
-                          <input className="pm-form-input" value={cashNotes}
-                            onChange={event => setCashNotes(event.target.value)} />
-                        </label>
-                      </>
+
+                        {checkoutPaymentMethod === "CASH" ? (
+                          <>
+                            <label className="pm-form-label">Số tiền mặt đã nhận
+                              <input
+                                className="pm-form-input"
+                                type="number"
+                                min={feeInfo.totalAmountDue}
+                                value={cashReceived}
+                                onChange={event => {
+                                  setCashReceived(event.target.value);
+                                  setAuthorizeKey(crypto.randomUUID());
+                                }}
+                              />
+                            </label>
+                            <label className="pm-form-label">Ghi chú thu tiền
+                              <input
+                                className="pm-form-input"
+                                value={cashNotes}
+                                onChange={event => {
+                                  setCashNotes(event.target.value);
+                                  setAuthorizeKey(crypto.randomUUID());
+                                }}
+                              />
+                            </label>
+                          </>
+                        ) : (
+                          <div style={{ display: "grid", gap: 8 }}>
+                            <button
+                              type="button"
+                              className="pm-search-action-btn"
+                              disabled={vnpayBusy}
+                              onClick={() => void handlePrepareVnPay()}
+                            >
+                              {vnpayBusy ? "Đang tạo link VNPay..." : "Tạo link thanh toán VNPay"}
+                            </button>
+                            {vnpayInfo && (
+                              <div style={{ fontSize: 13 }}>
+                                <div>Payment ID: <code>{vnpayInfo.paymentId}</code></div>
+                                <div>Số tiền: <strong>{vnpayInfo.amount.toLocaleString("vi-VN")} VND</strong></div>
+                                <a href={vnpayInfo.paymentUrl} target="_blank" rel="noreferrer" style={{ color: "#22d3ee" }}>
+                                  Mở cổng thanh toán VNPay
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     )}
                     {exitPermit && <p>Đã được phép cho xe ra. Chỉ xác nhận khi xe đã rời cổng.</p>}
 
                     <button
                       type="button"
                       onClick={handleCheckOut}
-                      disabled={checkOutProcessing || (!exitPermit && feeInfo.paymentRequired && (Number(cashReceived) < feeInfo.totalAmountDue || !cashNotes.trim()))}
+                      disabled={
+                        checkOutProcessing ||
+                        (!exitPermit &&
+                          feeInfo.paymentRequired &&
+                          (checkoutPaymentMethod === "CASH"
+                            ? Number(cashReceived) < feeInfo.totalAmountDue || !cashNotes.trim()
+                            : !vnpayInfo?.paymentId))
+                      }
                       className="pm-cta-btn pm-btn-teal"
                       style={{ marginTop: 18 }}
                     >
                       <CheckCircle2 size={18} />
-                      <span>{checkOutProcessing ? "Đang ghi nhận..." : exitPermit ? "Xác nhận xe đã rời cổng" : feeInfo.paymentRequired ? "Xác nhận thu tiền mặt và cho xe ra" : "Xác nhận cho xe ra"}</span>
+                      <span>
+                        {checkOutProcessing
+                          ? "Đang ghi nhận..."
+                          : exitPermit
+                          ? "Xác nhận xe đã rời cổng"
+                          : !feeInfo.paymentRequired
+                          ? "Xác nhận cho xe ra"
+                          : checkoutPaymentMethod === "CASH"
+                          ? "Xác nhận thu tiền mặt và cho xe ra"
+                          : "Xác minh VNPay và cho phép mở cổng"}
+                      </span>
                     </button>
                   </div>
                 )}
@@ -906,6 +1056,7 @@ export default function VehicleOperations() {
           </div>
 
           <div className="pm-op-card-body">
+            {cameraError && <p role="alert" style={{ color: "#f87171", marginBottom: 10 }}>{cameraError}</p>}
             {/* IF MOTORCYCLE: 2-Camera Grid Layout */}
             {cameraVehicleCategory === "Motorcycle" ? (
               <div className="pm-cam-grid-2">
@@ -988,10 +1139,10 @@ export default function VehicleOperations() {
                     )}
                     <div className="pm-cam-anpr-bounding-box">
                       <div className="pm-anpr-plate">
-                        [ {cameraStates["moto-cam2"]?.plateText || "59-P1 982.14"} ]
+                        [ {cameraStates["moto-cam2"]?.plateText || "Chờ ảnh / nhận diện"} ]
                       </div>
                       <div className="pm-anpr-confidence">
-                        {cameraStates["moto-cam2"]?.confidence || "Độ chính xác: 99.2% • Honda AirBlade"}
+                        {cameraStates["moto-cam2"]?.confidence || "Tải ảnh để AI đọc biển số"}
                       </div>
                     </div>
                     <div className="pm-cam-time">{new Date().toLocaleTimeString("vi-VN")}</div>
@@ -1010,8 +1161,10 @@ export default function VehicleOperations() {
                     <button
                       type="button"
                       className="pm-cam-fill-btn"
+                      disabled={!cameraStates["moto-cam2"]?.plateText}
                       onClick={() => {
-                        const p = cameraStates["moto-cam2"]?.plateText || "59-P1 982.14";
+                        const p = cameraStates["moto-cam2"]?.plateText;
+                        if (!p) return;
                         if (activeTab === "checkin") setCheckInPlate(p);
                         else {
                           setCheckOutQuery(p);
@@ -1025,7 +1178,7 @@ export default function VehicleOperations() {
                     <button
                       type="button"
                       className="pm-cam-retake-btn"
-                      onClick={() => handleResetCam("moto-cam2", "59-P1 982.14", "Độ chính xác: 99.2% • Honda AirBlade")}
+                      onClick={() => handleResetCam("moto-cam2")}
                       title="Chụp lại hoặc reset ảnh"
                     >
                       <RotateCcw size={12} /> Chụp lại
@@ -1060,10 +1213,10 @@ export default function VehicleOperations() {
                     )}
                     <div className="pm-cam-anpr-bounding-box">
                       <div className="pm-anpr-plate">
-                        [ {cameraStates["car-cam1"]?.plateText || "51K - 892.45"} ]
+                        [ {cameraStates["car-cam1"]?.plateText || "Chờ ảnh / nhận diện"} ]
                       </div>
                       <div className="pm-anpr-confidence">
-                        {cameraStates["car-cam1"]?.confidence || "AI: 99.4% • Toyota Cross"}
+                        {cameraStates["car-cam1"]?.confidence || "Tải ảnh để AI đọc biển số"}
                       </div>
                     </div>
                   </div>
@@ -1081,8 +1234,10 @@ export default function VehicleOperations() {
                     <button
                       type="button"
                       className="pm-cam-fill-btn compact"
+                      disabled={!cameraStates["car-cam1"]?.plateText}
                       onClick={() => {
-                        const p = cameraStates["car-cam1"]?.plateText || "51K-892.45";
+                        const p = cameraStates["car-cam1"]?.plateText;
+                        if (!p) return;
                         if (activeTab === "checkin") setCheckInPlate(p);
                         else {
                           setCheckOutQuery(p);
@@ -1096,7 +1251,7 @@ export default function VehicleOperations() {
                     <button
                       type="button"
                       className="pm-cam-retake-btn compact"
-                      onClick={() => handleResetCam("car-cam1", "51K - 892.45", "AI: 99.4% • Toyota Cross")}
+                      onClick={() => handleResetCam("car-cam1")}
                       title="Chụp lại hoặc reset ảnh"
                     >
                       <RotateCcw size={11} /> Chụp lại
@@ -1128,10 +1283,10 @@ export default function VehicleOperations() {
                     )}
                     <div className="pm-cam-anpr-bounding-box">
                       <div className="pm-anpr-plate">
-                        [ {cameraStates["car-cam2"]?.plateText || "51K - 892.45"} ]
+                        [ {cameraStates["car-cam2"]?.plateText || "Chờ ảnh / nhận diện"} ]
                       </div>
                       <div className="pm-anpr-confidence">
-                        {cameraStates["car-cam2"]?.confidence || "AI: 98.9% • Khớp biển trước"}
+                        {cameraStates["car-cam2"]?.confidence || "Tải ảnh để AI đọc biển số"}
                       </div>
                     </div>
                   </div>
@@ -1149,8 +1304,10 @@ export default function VehicleOperations() {
                     <button
                       type="button"
                       className="pm-cam-fill-btn compact"
+                      disabled={!cameraStates["car-cam2"]?.plateText}
                       onClick={() => {
-                        const p = cameraStates["car-cam2"]?.plateText || "51K-892.45";
+                        const p = cameraStates["car-cam2"]?.plateText;
+                        if (!p) return;
                         if (activeTab === "checkin") setCheckInPlate(p);
                         else {
                           setCheckOutQuery(p);
@@ -1164,7 +1321,7 @@ export default function VehicleOperations() {
                     <button
                       type="button"
                       className="pm-cam-retake-btn compact"
-                      onClick={() => handleResetCam("car-cam2", "51K - 892.45", "AI: 98.9% • Khớp biển trước")}
+                      onClick={() => handleResetCam("car-cam2")}
                       title="Chụp lại hoặc reset ảnh"
                     >
                       <RotateCcw size={11} /> Chụp lại
@@ -1360,21 +1517,30 @@ export default function VehicleOperations() {
                     </td>
                     <td>
                       {s.status !== "COMPLETED" ? (
-                        <button
-                          type="button"
-                          className="pm-action-btn-cyan"
-                          onClick={() => {
-                            setActiveTab("checkout");
-                            setCheckOutQuery(s.licensePlate);
-                            const gate = exitGates.find(item => item.lotId === s.lotId);
-                            if (gate) {
-                              setExitGate(gate.id);
-                              void handleLookupFee(s.licensePlate, gate.id);
-                            }
-                          }}
-                        >
-                          Thu phí ra bãi
-                        </button>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          <button
+                            type="button"
+                            className="pm-action-btn-cyan"
+                            onClick={() => {
+                              setActiveTab("checkout");
+                              setCheckOutQuery(s.licensePlate);
+                              const gate = exitGates.find(item => item.lotId === s.lotId);
+                              if (gate) {
+                                setExitGate(gate.id);
+                                void handleLookupFee(s.licensePlate, gate.id);
+                              }
+                            }}
+                          >
+                            Thu phí ra bãi
+                          </button>
+                          <button
+                            type="button"
+                            className="pm-cam-retake-btn compact"
+                            onClick={() => void handleIssueExitQr(s.sessionId)}
+                          >
+                            Phát QR ra
+                          </button>
+                        </div>
                       ) : (
                         <span className="pm-text-muted">Đã hoàn tất</span>
                       )}
@@ -1513,6 +1679,117 @@ export default function VehicleOperations() {
               >
                 <Printer size={15} />
                 <span>In Biên lai</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ─── CHECK-IN PLATE_MISMATCH OVERRIDE MODAL (SCRUM-111) ───────────────── */}
+      {showOverrideModal && (
+        <div className="staff-modal-backdrop" onClick={() => setShowOverrideModal(false)}>
+          <div className="staff-modal pm-dark-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="staff-modal-header pm-dark-modal-header">
+              <h3 className="staff-modal-title" style={{ display: "flex", alignItems: "center", gap: 8, color: "#ffffff" }}>
+                <ShieldCheck size={20} color="#fbbf24" />
+                <span>Xác nhận ngoại lệ lệch biển số (PLATE_MISMATCH)</span>
+              </h3>
+              <button
+                type="button"
+                className="staff-btn-secondary pm-modal-close-btn"
+                onClick={() => setShowOverrideModal(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="staff-modal-body pm-dark-modal-body" style={{ display: "grid", gap: 12 }}>
+              <p style={{ margin: 0, color: "#fbbf24" }}>
+                Biển số thực tế <strong>{checkInPlate}</strong> không khớp với đặt chỗ QR. Nhập lý do đối chiếu (10–500 ký tự) và upload ảnh chứng cứ camera để tiếp tục check-in.
+              </p>
+              <label className="pm-form-label">
+                Lý do override (10–500 ký tự) <span className="pm-required">*</span>:
+                <textarea
+                  minLength={10}
+                  maxLength={500}
+                  className="pm-form-input"
+                  style={{ minHeight: 72, paddingTop: 8 }}
+                  value={overrideReason}
+                  onChange={(e) => { setOverrideReason(e.target.value); renewCheckInKey(); }}
+                />
+                <small>{overrideReason.trim().length} / 500 ký tự</small>
+              </label>
+              <label className="pm-form-label">
+                Ảnh chứng cứ camera PNG/JPEG (tối đa 4 MiB):
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg"
+                  disabled={evidenceUploading}
+                  onChange={(e) => { void handleCheckInEvidenceFile(e.target.files?.[0]); }}
+                />
+                {evidenceUploading && <small>Đang tải ảnh chứng cứ lên máy chủ...</small>}
+                {!evidenceUploading && evidenceFileName && <small>Đã upload ảnh: {evidenceFileName}</small>}
+              </label>
+              <label className="pm-form-label">
+                Tham chiếu chứng cứ (`evidence.reference`):
+                <input
+                  type="text"
+                  maxLength={2048}
+                  className="pm-form-input"
+                  value={evidenceReference}
+                  onChange={(e) => { setEvidenceReference(e.target.value); renewCheckInKey(); }}
+                />
+              </label>
+              {checkInError && <p role="alert" style={{ color: "#f87171", margin: 0 }}>{checkInError}</p>}
+            </div>
+            <div className="staff-modal-footer pm-dark-modal-footer">
+              <button type="button" className="staff-btn-secondary" onClick={() => setShowOverrideModal(false)}>
+                Đóng
+              </button>
+              <button
+                type="button"
+                disabled={checkInLoading || evidenceUploading}
+                className="pm-cta-btn pm-btn-teal"
+                style={{ width: "auto", padding: "8px 18px" }}
+                onClick={() => void handleCheckIn(undefined, true)}
+              >
+                {checkInLoading ? "Đang xử lý..." : "Xác nhận Override & Cho xe vào"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── ISSUED CHECK-OUT QR MODAL (SCRUM-49/69) ──────────────────────────── */}
+      {issuedExitQr && (
+        <div className="staff-modal-backdrop" onClick={() => setIssuedExitQr(null)}>
+          <div className="staff-modal pm-dark-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="staff-modal-header pm-dark-modal-header">
+              <h3 className="staff-modal-title" style={{ color: "#ffffff" }}>Mã QR Chiều Ra (Check-out QR)</h3>
+              <button type="button" className="staff-btn-secondary pm-modal-close-btn" onClick={() => setIssuedExitQr(null)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="staff-modal-body pm-dark-modal-body" style={{ display: "grid", gap: 10 }}>
+              <div>Phiên: <strong>{issuedExitQr.sessionId}</strong></div>
+              <textarea readOnly className="pm-form-input" style={{ minHeight: 80 }} value={issuedExitQr.qrPayload} />
+              {issuedExitQr.expiresAt && (
+                <small>Hết hạn: {new Date(issuedExitQr.expiresAt).toLocaleString("vi-VN")}</small>
+              )}
+            </div>
+            <div className="staff-modal-footer pm-dark-modal-footer">
+              <button type="button" className="staff-btn-secondary" onClick={() => setIssuedExitQr(null)}>Đóng</button>
+              <button
+                type="button"
+                className="pm-cta-btn pm-btn-teal"
+                style={{ width: "auto", padding: "8px 18px" }}
+                onClick={() => {
+                  const session = sessions.find(item => item.sessionId === issuedExitQr.sessionId);
+                  setActiveTab("checkout");
+                  setCheckOutQrPayload(issuedExitQr.qrPayload);
+                  if (session) setCheckOutQuery(session.licensePlate);
+                  setIssuedExitQr(null);
+                }}
+              >
+                Dùng QR này để Check-out
               </button>
             </div>
           </div>

@@ -2,16 +2,19 @@ import { useEffect, useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useIdempotencyKey } from "../../hooks/useIdempotencyKey";
-import { api, ApiError, type ShiftHandoverDto } from "../../services/api";
+import { api, ApiError, request, type ShiftHandoverDto } from "../../services/api";
 import { operations } from "../../services/operations";
 
 type Shift = { id: string; lotId: string; staffUserId: string; startedAt: string };
+interface RosterMember { staffUserId: string; name: string; roleCode?: string }
 
 export default function ShiftManagement() {
   const { selectedLotId } = useOutletContext<{ selectedLotId: string }>();
   const { user } = useAuth();
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [handovers, setHandovers] = useState<ShiftHandoverDto[]>([]);
+  const [staffNames, setStaffNames] = useState<Record<string, string>>({});
+  const [historyFilter, setHistoryFilter] = useState<"All" | "PendingConfirmation" | "Confirmed" | "Cancelled">("All");
   const [receiver, setReceiver] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -35,12 +38,29 @@ export default function ShiftManagement() {
     setReceiver("");
     setError("");
     if (!selectedLotId) return;
-    Promise.all([operations.shifts(selectedLotId), api.getShiftHandovers(selectedLotId)])
-      .then(async ([active, list]) => {
+    const isManager = Boolean(user?.roles?.some(r => r === "PARKING_MANAGER" || r === "ADMIN") || user?.role === "PARKING_MANAGER" || user?.role === "ADMIN");
+    const rosterPromise = isManager
+      ? request<RosterMember[]>(`/api/v1/staff-assignments?lotId=${encodeURIComponent(selectedLotId)}`).catch(() => [] as RosterMember[])
+      : Promise.resolve([] as RosterMember[]);
+
+    Promise.all([
+      operations.shifts(selectedLotId),
+      api.getShiftHandovers(selectedLotId, historyFilter === "All" ? undefined : historyFilter),
+      rosterPromise,
+    ])
+      .then(async ([active, list, roster]) => {
         const details = await Promise.all(
           list.items.map((item) => api.getShiftHandoverById(selectedLotId, item.handoverId))
         );
         if (current) {
+          const map: Record<string, string> = {};
+          if (user?.userId) {
+            map[user.userId] = user.fullName || user.email || user.userName || "Bạn";
+          }
+          for (const member of roster) {
+            if (member.staffUserId && member.name) map[member.staffUserId] = member.name;
+          }
+          setStaffNames(map);
           setShifts(active);
           setHandovers(details);
         }
@@ -51,7 +71,13 @@ export default function ShiftManagement() {
     return () => {
       current = false;
     };
-  }, [selectedLotId, revision]);
+  }, [selectedLotId, revision, historyFilter, user]);
+
+  const formatStaffLabel = (staffId: string) => {
+    if (staffNames[staffId]) return staffNames[staffId];
+    if (user?.userId === staffId) return user.fullName || user.email || "Bạn";
+    return `Nhân viên #${staffId.slice(0, 8)}`;
+  };
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -185,7 +211,7 @@ export default function ShiftManagement() {
                 .filter((shift) => shift.staffUserId !== user?.userId)
                 .map((shift) => (
                   <option key={shift.id} value={shift.id}>
-                    {shift.staffUserId} · {new Date(shift.startedAt).toLocaleString("vi-VN")}
+                    {formatStaffLabel(shift.staffUserId)} · Bắt đầu {new Date(shift.startedAt).toLocaleString("vi-VN")}
                   </option>
                 ))}
             </select>
@@ -215,14 +241,31 @@ export default function ShiftManagement() {
           <button type="submit">Gửi biên bản bàn giao</button>
         </fieldset>
       </form>
-      <h2>Biên bản liên quan đến bạn</h2>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+        <h2>Lịch sử &amp; biên bản bàn giao liên quan đến bạn ({handovers.length})</h2>
+        <select
+          className="pm-form-select"
+          style={{ width: "auto" }}
+          value={historyFilter}
+          onChange={(e) => setHistoryFilter(e.target.value as typeof historyFilter)}
+          aria-label="Lọc lịch sử bàn giao"
+        >
+          <option value="All">Tất cả trạng thái</option>
+          <option value="PendingConfirmation">Chờ xác nhận</option>
+          <option value="Confirmed">Đã xác nhận hoàn tất</option>
+          <option value="Cancelled">Đã hủy</option>
+        </select>
+      </div>
+      {handovers.length === 0 && <p>Chưa có biên bản bàn giao nào cho bộ lọc hiện tại.</p>}
       {handovers.map((item) => (
         <article className="pm-glass-card" key={item.handoverId}>
           <p>
             {new Date(item.createdAt).toLocaleString("vi-VN")} · {item.status} · v{item.version}
+            {item.confirmedAt && ` · Đã xác nhận lúc ${new Date(item.confirmedAt).toLocaleString("vi-VN")}`}
           </p>
           <p>
-            Người giao: {item.senderUserId} · Người nhận: {item.receiverUserId}
+            Người giao: <strong>{formatStaffLabel(item.senderUserId)}</strong> · Người nhận:{" "}
+            <strong>{formatStaffLabel(item.receiverUserId)}</strong>
           </p>
           <p>Đã làm: {item.completedTasks}</p>
           <p>Chưa xử lý: {item.unresolvedIssues}</p>

@@ -369,13 +369,34 @@ export const api = {
     return request("/api/v1/parking-lots/" + encodeURIComponent(lotId) + "/sessions");
   },
 
-  async getCheckoutQuote(lotId: string, gateId: string, detectedPlate: string) {
-    return request<{
-      sessionId: string; entryPlate: string; slotCode: string; entryAt: string;
-      totalDurationMinutes: number; totalAmountDue: number; paymentRequired: boolean;
-      isPlateMatched: boolean; quoteToken?: string;
-    }>("/api/v1/check-out/quote", {
-      method: "POST", body: JSON.stringify({ lotId, gateId, detectedPlate }),
+  async getCheckoutQuote(
+    lotId: string,
+    gateId: string,
+    detectedPlate: string,
+    qrPayload?: string,
+    sessionId?: string,
+  ): Promise<CheckOutQuoteDto> {
+    return request<CheckOutQuoteDto>("/api/v1/check-out/quote", {
+      method: "POST",
+      body: JSON.stringify({
+        lotId,
+        gateId,
+        detectedPlate,
+        ...(qrPayload ? { qrPayload } : {}),
+        ...(sessionId ? { sessionId } : {}),
+      }),
+    });
+  },
+
+  async prepareCheckoutVnPay(quoteToken: string): Promise<{
+    paymentId: string;
+    amount: number;
+    status: string;
+    paymentUrl: string;
+  }> {
+    return request("/api/v1/payments/checkout/vnpay", {
+      method: "POST",
+      body: JSON.stringify({ quoteToken }),
     });
   },
 
@@ -810,30 +831,54 @@ export const api = {
     });
   },
 
-  async updateIncidentStatus(lotId: string, incidentId: string, payload: { status: string; notes?: string; expectedVersion: number }): Promise<IncidentDto> {
+  async updateIncidentStatus(
+    lotId: string,
+    incidentId: string,
+    payload: { status: string; notes?: string; expectedVersion: number },
+    idempotencyKey?: string,
+  ): Promise<IncidentDto> {
     return request<IncidentDto>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/status`, {
       method: "PATCH",
+      headers: { "Idempotency-Key": idempotencyKey ?? crypto.randomUUID() },
       body: JSON.stringify(payload),
     });
   },
 
-  async reopenIncident(lotId: string, incidentId: string, payload: { reason: string; expectedVersion: number }): Promise<IncidentDto> {
+  async reopenIncident(
+    lotId: string,
+    incidentId: string,
+    payload: { reason: string; expectedVersion: number },
+    idempotencyKey?: string,
+  ): Promise<IncidentDto> {
     return request<IncidentDto>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/reopen`, {
       method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey ?? crypto.randomUUID() },
       body: JSON.stringify(payload),
     });
   },
 
-  async cancelIncident(lotId: string, incidentId: string, payload: { reason: string; expectedVersion: number }): Promise<IncidentDto> {
+  async cancelIncident(
+    lotId: string,
+    incidentId: string,
+    payload: { reason: string; expectedVersion: number },
+    idempotencyKey?: string,
+  ): Promise<IncidentDto> {
     return request<IncidentDto>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/cancel`, {
       method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey ?? crypto.randomUUID() },
       body: JSON.stringify(payload),
     });
   },
 
-  async createIncidentDecision(lotId: string, incidentId: string, payload: { decision: string; reason: string; evidence: IncidentEvidenceDto[]; expectedVersion: number }): Promise<IncidentDto> {
+  async createIncidentDecision(
+    lotId: string,
+    incidentId: string,
+    payload: { decision: string; reason: string; evidence: IncidentEvidenceDto[]; expectedVersion: number },
+    idempotencyKey?: string,
+  ): Promise<IncidentDto> {
     return request<IncidentDto>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/decisions`, {
       method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey ?? crypto.randomUUID() },
       body: JSON.stringify(payload),
     });
   },
@@ -873,9 +918,15 @@ export const api = {
     });
   },
 
-  async reassignShiftHandoverReceiver(lotId: string, handoverId: string, payload: { receiverUserId: string; reason: string; expectedVersion: number }): Promise<ShiftHandoverDto> {
+  async reassignShiftHandoverReceiver(
+    lotId: string,
+    handoverId: string,
+    payload: { receiverUserId: string; reason: string; expectedVersion: number },
+    idempotencyKey?: string,
+  ): Promise<ShiftHandoverDto> {
     return request<ShiftHandoverDto>(`/api/v1/parking-lots/${lotId}/shift-handovers/${handoverId}/receiver`, {
       method: "PATCH",
+      headers: { "Idempotency-Key": idempotencyKey ?? crypto.randomUUID() },
       body: JSON.stringify(payload),
     });
   },
@@ -1227,14 +1278,37 @@ export interface BackendCheckInPayload {
 
 export interface BackendCheckInResponse {
   sessionId: string;
-  bookingId: string | null;
+  bookingId?: string | null;
   lotId: string;
   slotId: string;
   status: string;
   entryAt: string;
   slotCode?: string | null;
   vehicleType?: string | null;
-  entryMethod?: string | null;
+  entryMethod?: "QR" | "WALK_IN" | string | null;
+}
+
+export interface CheckOutQuoteDto {
+  sessionId: string;
+  bookingId?: string | null;
+  slotId: string;
+  slotCode: string;
+  entryPlate: string;
+  exitPlate: string;
+  isPlateMatched: boolean;
+  entryAt: string;
+  expectedExitAt: string;
+  quoteAt: string;
+  totalDurationMinutes: number;
+  overdueMinutes: number;
+  prepaidAmount: number;
+  overtimeAmount: number;
+  totalAmountDue: number;
+  paymentRequired: boolean;
+  incidentCode?: string | null;
+  quoteToken?: string | null;
+  validUntil?: string | null;
+  checkoutCredit?: number;
 }
 
 export interface BookingQrResponse {
@@ -1264,8 +1338,9 @@ export interface CheckoutRequest {
   gateId: string;
   detectedPlate: string;
   quoteToken: string;
-  paymentMethod: 'NONE' | 'CASH';
+  paymentMethod: 'NONE' | 'CASH' | 'VNPAY_QR';
   cashReceived: number;
+  paymentReference?: string;
   staffNotes?: string;
 }
 
