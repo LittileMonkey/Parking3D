@@ -50,3 +50,53 @@ test('incident update sends displayed version and selected lot and returns serve
   assert.equal(result.updatedAt, 'server-time');
   assert.equal(result.reportedBy, 'real-user');
 });
+
+test('checkInVehicle maps Car/Motorcycle, supports null bookingId & entryMethod, and forwards override + stable idempotencyKey', async () => {
+  let captured = [];
+  const service = adapter({
+    checkIn: async (payload, key) => {
+      captured.push({ payload, key });
+      return {
+        sessionId: 'sess-1',
+        bookingId: null,
+        lotId: payload.lotId,
+        slotId: 'slot-1',
+        slotCode: 'M-01',
+        vehicleType: 'MOTORBIKE',
+        entryMethod: 'AUTO_SLOT',
+        status: 'ACTIVE',
+        entryAt: '2026-11-12T10:00:00Z',
+      };
+    },
+  });
+
+  const walkIn = await service.checkInVehicle({
+    lotId: 'lot-1',
+    gateId: 'gate-1',
+    licensePlate: '59p1-12345',
+    vehicleType: 'Motorcycle',
+    idempotencyKey: 'fixed-key-1',
+  });
+  assert.equal(captured[0].payload.vehicleType, 'MOTORBIKE');
+  assert.equal(captured[0].key, 'fixed-key-1');
+  assert.equal(walkIn.bookingId, null);
+  assert.equal(walkIn.entryMethod, 'AUTO_SLOT');
+  assert.equal(walkIn.vehicleType, 'Motorcycle');
+
+  await service.checkInVehicle({
+    lotId: 'lot-1',
+    gateId: 'gate-1',
+    licensePlate: '51K-99999',
+    vehicleType: 'Car',
+    qrToken: 'qr-abc',
+    allowMismatchOverride: true,
+    overrideReason: 'Verified registration document at gate',
+    evidence: [{ kind: 'CAMERA_SNAPSHOT', reference: 'gate-evidence://entry/cam1.jpg' }],
+    idempotencyKey: 'fixed-key-2',
+  });
+  assert.equal(captured[1].payload.vehicleType, 'CAR');
+  assert.equal(captured[1].payload.allowMismatchOverride, true);
+  assert.equal(captured[1].payload.overrideReason, 'Verified registration document at gate');
+  assert.equal(captured[1].payload.evidence[0].reference, 'gate-evidence://entry/cam1.jpg');
+  assert.equal(captured[1].key, 'fixed-key-2');
+});

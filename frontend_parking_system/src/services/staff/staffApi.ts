@@ -1,15 +1,26 @@
 import { operations } from "../operations";
-import { api, type PaymentReceiptDto } from "../api";
+import { api, type IncidentSummaryDto, type PaymentReceiptDto } from "../api";
 import type { ParkingLotSummary, ParkingSlotDetail, SlotStatus, CheckInPayload, CheckInResult, Incident, CreateIncidentPayload, CashConfirmationResult, PlateRecognitionResult } from "../../types/staff";
 
-function mapIncident(item: any): Incident {
+function mapCheckInVehicleType(vehicleType?: string): string {
+  const normalized = (vehicleType ?? "Car").trim().toUpperCase();
+  if (normalized === "MOTORCYCLE" || normalized === "BIKE" || normalized === "MOTORBIKE") return "MOTORBIKE";
+  if (normalized === "CAR") return "CAR";
+  if (normalized === "EV") return "EV";
+  if (normalized === "TRUCK") return "TRUCK";
+  if (normalized === "BICYCLE") return "BICYCLE";
+  return normalized || "CAR";
+}
+
+function mapIncident(item: IncidentSummaryDto & { notes?: string | null }): Incident {
   return {
     incidentId: item.incidentId, title: item.title, type: item.type,
     severity: item.severity, status: item.status, description: item.description ?? "",
-    relatedLicensePlate: item.relatedPlate, relatedSessionId: item.relatedSessionId,
-    relatedSlotCode: item.relatedSlotCode, relatedGate: item.relatedGate,
-    reportedBy: item.reportedByUserId ?? "", detectedAt: item.detectedAt ?? item.reportedAt,
-    updatedAt: item.updatedAt, resolvedAt: item.resolvedAt, version: item.version,
+    relatedLicensePlate: item.relatedPlate ?? undefined, relatedSessionId: item.relatedSessionId ?? undefined,
+    relatedSlotCode: item.relatedSlotCode ?? undefined, relatedGate: item.relatedGate ?? undefined,
+    reportedBy: item.reportedByUserId ?? "", detectedAt: item.detectedAt ?? item.reportedAt ?? item.updatedAt,
+    updatedAt: item.updatedAt, resolvedAt: item.resolvedAt ?? undefined, notes: item.notes ?? undefined,
+    version: typeof item.version === "number" ? item.version : 1,
   };
 }
 
@@ -48,13 +59,35 @@ export const staffApi = {
     return true;
   },
   async checkInVehicle(payload: CheckInPayload): Promise<CheckInResult> {
-    const { lotId, gateId, licensePlate, qrToken, vehicleType } = payload;
+    const { lotId, gateId, licensePlate, qrToken, vehicleType, allowMismatchOverride, overrideReason, evidence, idempotencyKey } = payload;
     const plate = licensePlate?.trim().toUpperCase();
     if (!lotId || !gateId || !plate) throw new Error("Chọn cổng vào và nhập biển số.");
-    const result = await api.checkIn({ lotId, gateId, qrPayload: qrToken, detectedPlate: plate, vehicleType }, crypto.randomUUID());
-    return { sessionId: result.sessionId, slotId: result.slotId, slotCode: result.slotCode || result.slotId,
-      levelName: "", licensePlate: plate, vehicleType: (result.vehicleType ?? vehicleType)?.toUpperCase() === "CAR" ? "Car" : "Motorcycle",
-      checkinAt: result.entryAt, bookingCode: payload.bookingCode, message: "Đã ghi nhận xe vào bãi." };
+    const mappedType = mapCheckInVehicleType(vehicleType);
+    const result = await api.checkIn(
+      {
+        lotId,
+        gateId,
+        qrPayload: qrToken,
+        detectedPlate: plate,
+        vehicleType: mappedType,
+        ...(allowMismatchOverride ? { allowMismatchOverride: true, overrideReason, evidence } : {}),
+      },
+      idempotencyKey ?? crypto.randomUUID(),
+    );
+    const resolvedType = (result.vehicleType ?? mappedType).toUpperCase();
+    return {
+      sessionId: result.sessionId,
+      bookingId: result.bookingId ?? null,
+      slotId: result.slotId,
+      slotCode: result.slotCode || result.slotId,
+      levelName: "",
+      licensePlate: plate,
+      vehicleType: resolvedType === "MOTORBIKE" ? "Motorcycle" : resolvedType === "EV" ? "EV" : "Car",
+      entryMethod: result.entryMethod ?? (result.bookingId ? "PRE_BOOKING" : "AUTO_SLOT"),
+      checkinAt: result.entryAt,
+      bookingCode: payload.bookingCode,
+      message: "Đã ghi nhận xe vào bãi.",
+    };
   },
   async getIncidents(lotId: string): Promise<Incident[]> {
     const response = await api.getIncidents(lotId);
@@ -66,7 +99,7 @@ export const staffApi = {
       description: payload.description, detectedAt: payload.detectedAt,
       relatedPlate: payload.relatedLicensePlate, relatedSlotCode: payload.relatedSlotCode,
       relatedGate: payload.relatedGate, relatedSessionId: payload.relatedSessionId,
-    }, crypto.randomUUID()));
+    }, payload.idempotencyKey ?? crypto.randomUUID()));
   },
   async updateIncidentStatus(incidentId: string, status: "InProgress" | "Resolved" | "Escalated", notes: string | undefined, lotId: string, expectedVersion: number): Promise<Incident> {
     return mapIncident(await api.updateIncidentStatus(lotId, incidentId, { status, notes, expectedVersion }));

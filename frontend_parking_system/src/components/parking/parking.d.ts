@@ -10,12 +10,18 @@ export interface ParkingSceneSlot {
   status: string;
   supportedVehicleTypes: string[];
   features: string[];
+  position?: { x: number; y: number; z: number } | null;
+  rotationY?: number | null;
+  widthM?: number | null;
+  lengthM?: number | null;
+  size?: { x: number; y: number; z: number } | null;
 }
 
 export interface ParkingSceneLevel {
   levelId: string;
   levelCode: string;
   levelName: string;
+  elevationM?: number | null;
   slots: ParkingSceneSlot[];
 }
 

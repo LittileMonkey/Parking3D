@@ -66,6 +66,12 @@ export interface ParkingSession {
   gateOut?: string;
 }
 
+export interface CheckInEvidence {
+  kind: string;
+  reference: string;
+  capturedAt?: string;
+}
+
 export interface CheckInPayload {
   vehicleType?: VehicleType;
   bookingCode?: string;
@@ -74,15 +80,21 @@ export interface CheckInPayload {
   qrToken?: string;
   lotId?: string;
   gateId?: string;
+  allowMismatchOverride?: boolean;
+  overrideReason?: string;
+  evidence?: CheckInEvidence[];
+  idempotencyKey?: string;
 }
 
 export interface CheckInResult {
   sessionId: string;
+  bookingId: string | null;
   slotCode: string;
   slotId: string;
   levelName: string;
   licensePlate: string;
   vehicleType: VehicleType;
+  entryMethod?: string | null;
   checkinAt: string;
   bookingCode?: string;
   message?: string;
@@ -126,7 +138,7 @@ export interface Incident {
   resolvedAt?: string;
   notes?: string;
   updatedAt: string;
-  version?: number;
+  version: number;
 }
 
 export interface IncidentLog {
@@ -148,6 +160,7 @@ export interface CreateIncidentPayload {
   relatedSlotCode?: string;
   relatedGate?: string;
   detectedAt: string;
+  idempotencyKey?: string;
 }
 
 export interface ShiftInfo {
