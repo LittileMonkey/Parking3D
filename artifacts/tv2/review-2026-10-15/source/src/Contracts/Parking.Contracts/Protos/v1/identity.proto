@@ -1,0 +1,15 @@
+syntax = "proto3";
+package parking.identity.v1;
+option csharp_namespace = "Parking.Contracts.Identity.V1";
+service FacilityAuthorization {
+  rpc CheckAccess(AccessRequest) returns (AccessReply);
+}
+message AccessRequest {
+  string user_id = 1;
+  string lot_id = 2;
+  string capability = 3;
+}
+message AccessReply {
+  bool allowed = 1;
+  string reason_code = 2;
+}

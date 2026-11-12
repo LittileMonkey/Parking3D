@@ -18,6 +18,19 @@ namespace Parking.Identity.Persistence.Service
             await context.SaveChangesAsync(cancellationToken);
         }
 
+        public async Task<bool> RotateAsync(Guid previousId, AuthToken replacement, CancellationToken cancellationToken)
+        {
+            await using var transaction=await context.Database.BeginTransactionAsync(cancellationToken);
+            var now=DateTime.UtcNow;
+            var consumed=await context.AuthTokens.Where(t=>t.Id==previousId && t.ConsumedAt==null && t.RevokedAt==null && t.ExpiresAt>now && t.Purpose=="RefreshToken")
+                .ExecuteUpdateAsync(set=>set.SetProperty(t=>t.ConsumedAt,now),cancellationToken);
+            if(consumed!=1)return false;
+            await context.AuthTokens.AddAsync(replacement,cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return true;
+        }
+
         public async Task<AuthToken?> GetByTokenHashAsync(string tokenHash, CancellationToken cancellationToken)
         {
             return await context.AuthTokens

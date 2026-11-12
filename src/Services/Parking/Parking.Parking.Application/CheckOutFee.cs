@@ -25,10 +25,27 @@ public static class CheckOutFee
         string rulesJson,
         string timezone,
         DateTimeOffset? bookedStart = null,
-        bool isGoldStarMember = false)
+        bool isGoldStarMember = false, int graceMinutes = 0)
     {
+        if(graceMinutes is < 0 or > 15)throw new ArgumentException("Invalid grace snapshot");
+        entryAt=entryAt.AddMinutes(graceMinutes);bookedStart=bookedStart?.AddMinutes(graceMinutes);
         var start = hasBooking ? expectedExitAt : entryAt;
         if (pricedAt <= start) return 0;
+
+        // Flat-block snapshots must use the same calculation as search and booking.
+        // Otherwise the legacy multiplier is applied only at checkout peak hours.
+        using var snapshot = JsonDocument.Parse(rulesJson);
+        if (snapshot.RootElement.TryGetProperty("blockMinutes", out _) &&
+            !snapshot.RootElement.TryGetProperty("initialBlockMinutes", out _))
+        {
+            var flat = JsonSerializer.Deserialize<BlockPrice>(rulesJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+            var tz = ResolveTimeZone(timezone);
+            if (!hasBooking) return flat.Estimate(entryAt, pricedAt, tz);
+            var beginning = bookedStart ?? entryAt;
+            if (entryAt < beginning) beginning = entryAt;
+            if (beginning >= expectedExitAt) beginning = expectedExitAt.AddMinutes(-flat.BlockMinutes);
+            return Math.Max(0, flat.Estimate(beginning, pricedAt, tz) - flat.Estimate(beginning, expectedExitAt, tz));
+        }
 
         var policy = ParsePolicy(rulesJson);
         var zone = ResolveTimeZone(timezone);

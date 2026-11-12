@@ -25,7 +25,8 @@ namespace Parking.Parking.Application.Features.ParkingLots.Queries
         {
             // 1. Kéo danh sách bãi xe HỢP LỆ từ Database lên (Đang Active, đúng loại xe, chưa Full)
             // Việc lọc Full/Active/Maintenance sẽ được Database làm giúp ở bên trong hàm này
-            var lots = await _repository.GetAvailableLotsAsync(request.VehicleType, cancellationToken);
+            var start = new DateTimeOffset((request.StartTime ?? DateTime.UtcNow).ToUniversalTime());
+            var lots = await _repository.GetAvailableLotsAsync(request.VehicleType, start, start.AddMinutes(request.ExpectedDuration), cancellationToken);
             var resultItems = new List<ParkingLotItemDto>();
             // 2. Chạy vòng lặp tính Khoảng cách và Tính giá cho TỪNG bãi xe
             foreach (var lot in lots)
@@ -40,12 +41,14 @@ namespace Parking.Parking.Application.Features.ParkingLots.Queries
                         lot.Latitude,
                         lot.Longitude);
                     distance = distanceInMeters / 1000.0;
+                    if (distance > request.RadiusKm) continue;
                 }
                 var pricing = await _priceService.CalculateEstimatedFeeAsync(
                     lot.Id,
                     request.VehicleType,
-                    request.StartTime ?? DateTime.UtcNow,
+                    start.UtcDateTime,
                     request.ExpectedDuration);
+                if (pricing.TotalFee < 0) continue; // Never advertise missing pricing as free.
                 // Gom dữ liệu vào DTO
                 resultItems.Add(new ParkingLotItemDto
                 {

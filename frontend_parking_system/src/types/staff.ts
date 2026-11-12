@@ -32,6 +32,7 @@ export interface ParkingLevel {
 }
 
 export interface ParkingSlotDetail {
+  operationalStatus?: "ACTIVE" | "MAINTENANCE" | "DISABLED";
   slotId: string;
   slotCode: string;
   levelId: string;
@@ -66,6 +67,7 @@ export interface ParkingSession {
 }
 
 export interface CheckInPayload {
+  vehicleType?: VehicleType;
   bookingCode?: string;
   licensePlate?: string;
   qrCode?: string;

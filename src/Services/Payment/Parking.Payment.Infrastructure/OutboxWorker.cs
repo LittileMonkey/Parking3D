@@ -47,7 +47,12 @@ public sealed class OutboxWorker(NpgsqlDataSource db,ParkingPaymentEvents.Parkin
                 string? outcome=null;
                 try
                 {
-                    if(eventType=="CheckoutPaymentSucceeded.v1")
+                    if(eventType=="RefundSucceeded.v1")
+                    {
+                        var response=await parking.DeliverRefundSucceededAsync(JsonParser.Default.Parse<RefundSucceeded>(payload),headers:GrpcHeaders.For(config),deadline:DateTime.UtcNow.AddSeconds(5),cancellationToken:stoppingToken);
+                        outcome=response.Outcome;
+                    }
+                    else if(eventType=="CheckoutPaymentSucceeded.v1")
                     {
                         var response=await checkout.DeliverAsync(JsonParser.Default.Parse<CheckoutPaymentSucceeded>(payload),
                             headers:GrpcHeaders.For(config),deadline:DateTime.UtcNow.AddSeconds(5),cancellationToken:stoppingToken);

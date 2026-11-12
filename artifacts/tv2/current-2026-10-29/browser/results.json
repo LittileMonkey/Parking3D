@@ -1,0 +1,100 @@
+{
+  "scope": "Frontend rendering only; real backend not attached; no API mocks",
+  "routes": [
+    {
+      "name": "home",
+      "status": 200,
+      "finalPath": "/",
+      "title": "ParkMatrix | Bãi đỗ xe thông minh",
+      "buttons": [
+        "VN",
+        "EN",
+        "",
+        "Bản đồ",
+        "Vệ tinh",
+        "Lớp 3D",
+        ""
+      ],
+      "headings": [
+        "Tìm Chỗ Đỗ Xe Thông Minh,Nhanh Chóng & Chuẩn Xác",
+        "Trung Tâm Bản Đồ Không Gian GIS",
+        "Giải Pháp Toàn Diện Cho Đô Thị Thông Minh",
+        "Tình Trạng Chỗ Theo Thời Gian Thực",
+        "Đặt Trước Vị Trí Đỗ Xe",
+        "Thanh Toán Đa Phương Thức",
+        "Tự Động Nhận Diện Biển Số (ANPR)",
+        "Quản Lý Đa Phương Tiện & EV",
+        "Lịch Sử & Hóa Đơn Điện Tử",
+        "Đèn dẫn hướng LED từng ô đỗ",
+        "ANPR AI mở Barie trong 0.3s",
+        "Trạm sạc nhanh DC thế hệ mới",
+        "Sẵn sàng nâng tầm trải nghiệm đỗ xe thông minh cùng ParkMatrix?",
+        "Trung Tâm Hỗ Trợ",
+        "Độ Phủ Hạ Tầng",
+        "Dành Cho Doanh Nghiệp"
+      ],
+      "text": "HẠ TẦNG GIÁM SÁT TOÀN DIỆN:\n100% HOẠT ĐỘNG\n•\nLƯU LƯỢNG KHÓI:\n0.014 mg/m³\n(AN TOÀN)\n•\nCHẤT LƯỢNG KHÔNG KHÍ:\nAQI 42\n- TỐT (AQI) | CO₂: 415 ppm\n•\nTHỜI TIẾT:\nTP. HỒ CHÍ MINH 29°C\n(Nắng nhẹ • Gió 8 km/h)\n•\nĐỘ ẨM:\n65%\n•\nHẠ TẦNG GIÁM SÁT TOÀN DIỆN:\n100% HOẠT ĐỘNG\n•\nLƯU LƯỢNG KHÓI:\n0.014 mg/m³\n(AN TOÀN)\n•\nCHẤT LƯỢNG KHÔNG KHÍ:\nAQI 42\n- TỐT (AQI) | CO₂: 415 ppm\n•\nTHỜI TIẾT:\nTP. HỒ CHÍ MINH 29°C\n(Nắng nhẹ • Gió 8 km/h)\n•\nĐỘ ẨM:\n65%\n•\nParkMatrix\nSMART PARKING PLATFORM\nTìm và đặt chỗ\nSơ Đồ & Đặt Chỗ\nFAQ\nGiải Pháp\nHạ Tầng\nCổng Vận Hành\nQuản Lý V7\nVN\n|\nEN\nĐăng Nhập\nĐăng Ký\nMẠNG LƯỚI HẠ TẦNG GIÁM SÁT QUỐC GIA • LIVE TELEMETRY V4 URBAN MOBILITY ENGINE\nTìm Chỗ Đỗ Xe Thông Minh,\nNhanh Chóng & Chuẩn Xác\n\nKhám phá các bãi đỗ xe gần bạn, kiểm tra tình trạng chỗ trống theo thời gian thực và đặt trước vị trí với công nghệ IoT, GIS và ANPR.\n\nTìm bãi đỗ xe phù hợp\nSo sánh khoảng cách, chỗ trống và giá ước tính theo thời gian gửi.\nTìm bãi\nTiêu chí tìm kiếm\nGẦN NHẤT · GIÁ THẤP NHẤT · ước tính toàn thời lượng\nChứng nhận ANPR chuẩn Quốc gia\nBàn giao lưới thời gian thực GiST/Spatial\nTự động thanh toán chạm & đi Mobile\nTỔNG CƠ SỞ\n1,450+\nBãi đỗ xe đối tác\nĐồng bộ liên tục qua mạng IoT GIS\nPhủ khắp 63 tỉnh thành | TOÀN QUỐC →\nĐỘ CHÍNH XÁC\n99.4%\nĐộ chính xác cảm biến\nCảm biến kép Siêu âm & Từ trường\nXác minh độ rộng | ĐỘ RỘNG →\nLƯU LƯỢNG NGÀY\n32,000+\nLượt gửi xe / ngày\nLưu lượng phương tiện gửi/rút\nGiám sát 450 Trung tâm thương mại | HIỆN TẠI →\nQUY TRÌNH TỰ ĐỘNG\n100%\nTự động hóa số\nKhông dừng ANPR Barie mở <0.3s\nAI Edge xử lý tại chỗ 50ms | TỰ ĐỘNG XỬ LÝ →\nSPATIAL TELEMETRY HUB\nTrung Tâm Bản Đồ Không Gian GIS\n\nMạng lưới định vị vệ tinh và vận hành toàn bãi xe thời gian thực TP. Hồ Chí Minh\n\nBản đồ\nVệ tinh\nLớp 3D\n\nBản đồ trang chủ mang tính minh họa. Dùng tìm kiếm bãi để xem chỗ trống và giá ước tính từ API. Tìm và đặt chỗ\n\nKhu Vực 1 Quận 1\nDEMO VIEW\nTổng số chỗ đang mở:\n62 điểm\nChỗ trống thực tế:\n887 chỗ\nMức độ lấp đầy:\n84.2%\nSAIGON CENTRE\n125 chỗ trống\n35.000đ/h · 0.8 km · Chi tiết →\nSKYVIEW GRAND TOWER\n64 chỗ trống\n20.000đ/h · 1.2 km · Chi tiết →\nNHÀ BÈ ĐỒNG DIỄN\nMất kết nối\n100% Tải trọng · Tạm ngừng nhận · 15 chỗ trống chờ xe\nVị trí của bạn\nBÃI ĐỖ XE\nOFF\nDữ liệu API chưa khả dụng\nHiển thị nh"
+    },
+    {
+      "name": "search",
+      "status": 200,
+      "finalPath": "/booking",
+      "title": "ParkMatrix | Bãi đỗ xe thông minh",
+      "buttons": [
+        "Tìm bãi"
+      ],
+      "headings": [
+        "Tìm và đặt chỗ",
+        "Kết quả tìm kiếm"
+      ],
+      "text": "ParkMatrix\nTìm và đặt chỗ\nFAQ\nĐăng nhập\n\nHÀNH TRÌNH ĐẶT CHỖ\n\nTìm và đặt chỗ\n\nTìm bãi, xem tầng và tình trạng slot trực tiếp, chọn xe tài khoản rồi giữ chỗ và theo dõi booking.\n\nLoại phương tiện\nÔ tô\nXe máy\nThời gian bắt đầu\nThời lượng (phút)\nSắp xếp kết quả\nGiá thấp nhất\nGần nhất\nBán kính (km)\nTìm bãi\nKết quả tìm kiếm\n\nChưa tìm kiếm\n\nDữ liệu tìm kiếm từ API\nChọn loại xe, thời gian gửi và tiêu chí sắp xếp rồi tìm bãi."
+    },
+    {
+      "name": "booking",
+      "status": 200,
+      "finalPath": "/booking",
+      "title": "ParkMatrix | Bãi đỗ xe thông minh",
+      "buttons": [
+        "Tìm bãi"
+      ],
+      "headings": [
+        "Tìm và đặt chỗ",
+        "Kết quả tìm kiếm"
+      ],
+      "text": "ParkMatrix\nTìm và đặt chỗ\nFAQ\nĐăng nhập\n\nHÀNH TRÌNH ĐẶT CHỖ\n\nTìm và đặt chỗ\n\nTìm bãi, xem tầng và tình trạng slot trực tiếp, chọn xe tài khoản rồi giữ chỗ và theo dõi booking.\n\nLoại phương tiện\nÔ tô\nXe máy\nThời gian bắt đầu\nThời lượng (phút)\nSắp xếp kết quả\nGiá thấp nhất\nGần nhất\nBán kính (km)\nTìm bãi\nKết quả tìm kiếm\n\nChưa tìm kiếm\n\nDữ liệu tìm kiếm từ API\nChọn loại xe, thời gian gửi và tiêu chí sắp xếp rồi tìm bãi."
+    },
+    {
+      "name": "staff",
+      "status": 200,
+      "finalPath": "/staff/dashboard",
+      "title": "ParkMatrix | Bãi đỗ xe thông minh",
+      "buttons": [
+        "PParkMatrix",
+        "Báo động khẩn",
+        "2",
+        "Quick logout",
+        "Báo động khẩn cấp",
+        "Điều phối Vào / Ra",
+        "Xem danh sách sự cố >",
+        "Tìm xe",
+        "Xem tất cả",
+        "Xem tất cả"
+      ],
+      "headings": [
+        "Tổng quan ca trực",
+        "Tra cứu nhanh Biển số / Mã vé",
+        "Xe và hoạt động ca trực",
+        "Barrier & Equipment Status",
+        "Alerts & Handover Notes",
+        "Real time log list"
+      ],
+      "text": "P\nParkMatrix\nBãi đỗ xe Trung tâm Quận 1 (LOT-Q1-01)\nBãi đỗ xe Bitexco Financial (LOT-Q1-02)\nCa Sáng (06:00 - 14:00)\nHệ thống Trực tuyến\nBáo động khẩn\n2\nST\nST Nguyễn Văn Hùng\nQuick logout\nTổng quan ca trực\nĐiều phối Vào / Ra\nMặt bằng bãi xe\nSự cố & Ngoại lệ\n2\nQuản lý ca trực\nBáo động khẩn cấp\nTổng quan ca trực\nĐiều phối Vào / Ra\nTỶ LỆ LẤP ĐẦY\n46%\n(69/150 xe)\n76 chỗ trống\n• 3 đang bảo trì\nXE VÀO TRONG CA\n42\n+12% so với ca trước\nXE RA TRONG CA\n28\nDoanh thu tiền mặt: ~1.280.000đ\nSỰ CỐ CẦN XỬ LÝ\n2\nXem danh sách sự cố >\nTra cứu nhanh Biển số / Mã vé\nTìm xe\n\nTra cứu tức thì vị trí đỗ, thời gian gửi, hoặc chuyển nhanh sang màn hình thanh toán ra cổng.\n\nXe và hoạt động ca trực\nXem tất cả\nXe 51K-892.45 check-in thành công qua cổng G1\nNguyễn Văn Hùng\nVào cổng\n09:30\nXe 60A-112.33 thanh toán tiền mặt 65.000đ & rời bãi\nNguyễn Văn Hùng\nĐã ra bãi\n12:00\nBarrier & Equipment Status\nCổng Vào G1 (Barrier 01 - ANPR)\nCamera nhận diện tự động\nOnline\nCổng Ra G3 (Barrier 02 - POS)\nQuét QR & Thu phí tự động\nOnline\nAlerts & Handover Notes\n2 cảnh báo\nKhu vực sạc xe điện Tầng B2 đạt 80% công suất\nƯu tiên điều hướng xe xăng sang Zone A & Zone C\nBàn giao thiết bị đầy đủ; 2 thẻ dự phòng tại quầy trực bàn giao cho ca tối.\nReal time log list\nXem tất cả\nXe 51K-892.45 check-in thành công qua cổng G1\n09:30\nXe 60A-112.33 thanh toán tiền mặt 65.000đ & rời bãi\n12:00"
+    },
+    {
+      "name": "search-mobile",
+      "documentWidth": 390,
+      "viewport": 390
+    }
+  ],
+  "pageErrors": []
+}

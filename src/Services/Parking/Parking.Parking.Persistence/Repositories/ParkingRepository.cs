@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Npgsql;
@@ -31,19 +31,18 @@ public sealed partial class ParkingRepository(NpgsqlDataSource db, TimeProvider 
     /// <summary>Tạo booking PENDING_PAYMENT và reservation HELD theo policy trong transaction chống đặt trùng; dọn hold hết hạn liên quan trước khi đặt.</summary>
     public async Task<BookingView> CreateBookingAsync(Guid customerId, BookingRequest request, string key, CancellationToken ct)
     {
-        if (request.LotId == Guid.Empty || request.SlotId == Guid.Empty || request.VehicleId == Guid.Empty || request.EndsAt <= request.StartsAt
+        if (request.LotId == Guid.Empty || (request.Mode == "EXACT_SLOT" && request.SlotId == Guid.Empty) || request.VehicleId == Guid.Empty || (request.EndsAt-request.StartsAt).TotalMinutes < 30 || (request.EndsAt-request.StartsAt).TotalMinutes > 1440
             || request.StartsAt < clock.GetUtcNow().AddMinutes(-5) || string.IsNullOrWhiteSpace(key) || key.Length > 128)
             throw new ServiceException(400, "Valid IDs, future time range and Idempotency-Key required");
-        await ExpireHoldsAsync(ct, request.VehicleId, request.SlotId);
+        if (request.Mode is not ("EXACT_SLOT" or "AUTO_SLOT")) throw new ServiceException(400, "Mode must be EXACT_SLOT or AUTO_SLOT");
+        await ExpireHoldsAsync(ct, request.Mode == "AUTO_SLOT" ? null : request.VehicleId, request.Mode == "AUTO_SLOT" ? null : request.SlotId);
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
         // Khóa request theo khách trước khi ghi; retry cùng key không tạo booking thứ hai.
         var requestId = new Guid(SHA256.HashData(Encoding.UTF8.GetBytes(customerId + ":" + key)).AsSpan(0, 16));
         var fingerprint = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request))));
-        await using (var cmd = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended(@key,0)); SELECT lock_parking_resource('VEHICLE',@vehicle);", conn, tx))
+        await using (var cmd = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtext(@key)); SELECT lock_parking_resource('VEHICLE',@vehicle);", conn, tx))
         { cmd.Parameters.AddWithValue("key", customerId + ":" + key); cmd.Parameters.AddWithValue("vehicle", request.VehicleId); await cmd.ExecuteNonQueryAsync(ct); }
-        await using (var slotLock = new NpgsqlCommand("SELECT lock_parking_resource('SLOT',@slot)", conn, tx))
-        { slotLock.Parameters.AddWithValue("slot", request.SlotId); await slotLock.ExecuteNonQueryAsync(ct); }
         await using (var old = new NpgsqlCommand("SELECT payload_hash,outcome FROM integration_inbox WHERE event_id=@id AND event_type='BookingRequest'", conn, tx))
         {
             old.Parameters.AddWithValue("id", requestId); await using var r = await old.ExecuteReaderAsync(ct);
@@ -64,15 +63,55 @@ public sealed partial class ParkingRepository(NpgsqlDataSource db, TimeProvider 
             await using var r = await vehicle.ExecuteReaderAsync(ct); if (!await r.ReadAsync(ct)) throw new ServiceException(403, "Verified vehicle access required");
             type = r.GetString(0); plate = r.GetString(1);
         }
+        var slotId = request.SlotId;
+        if (request.Mode == "AUTO_SLOT")
+        {
+            var candidates = new List<Guid>();
+            await using (var choose = new NpgsqlCommand("""
+                SELECT s.id FROM parking_slots s
+                JOIN slot_vehicle_types t ON t.slot_id=s.id AND t.vehicle_type=@type
+                WHERE s.lot_id=@lot AND s.operational_status='ACTIVE'
+                  AND NOT EXISTS(SELECT 1 FROM slot_feature_links f WHERE f.slot_id=s.id AND f.feature_code IN ('ACCESSIBLE','PRIORITY','EV','EV_CHARGING'))
+                ORDER BY s.id
+                """, conn, tx))
+            {
+                choose.Parameters.AddWithValue("lot",request.LotId); choose.Parameters.AddWithValue("type",type);
+                await using var reader=await choose.ExecuteReaderAsync(ct);
+                while(await reader.ReadAsync(ct)) candidates.Add(reader.GetGuid(0));
+            }
+            slotId=Guid.Empty;
+            foreach(var candidate in candidates)
+            {
+                // Same lock order as exact booking: vehicle, then slots in UUID order.
+                await using var take=new NpgsqlCommand("SELECT lock_parking_resource('SLOT',@slot)",conn,tx);
+                take.Parameters.AddWithValue("slot",candidate); await take.ExecuteNonQueryAsync(ct);
+                await using var free=new NpgsqlCommand("""
+                    SELECT EXISTS(SELECT 1 FROM parking_slots s WHERE s.id=@slot AND s.operational_status='ACTIVE'
+                      AND NOT EXISTS(SELECT 1 FROM session_slot_assignments a WHERE a.slot_id=s.id AND a.vacated_at IS NULL)
+                      AND NOT EXISTS(SELECT 1 FROM slot_reservations r WHERE r.slot_id=s.id AND r.status IN ('HELD','CONFIRMED')
+                        AND tstzrange(r.starts_at,r.ends_at,'[)') && tstzrange(@start,@end,'[)')))
+                    """,conn,tx);
+                free.Parameters.AddWithValue("slot",candidate);free.Parameters.AddWithValue("start",request.StartsAt.UtcDateTime);free.Parameters.AddWithValue("end",request.EndsAt.UtcDateTime);
+                if((bool)(await free.ExecuteScalarAsync(ct))!) { slotId=candidate;break; }
+            }
+            if(slotId==Guid.Empty)throw new ServiceException(409,"No compatible slot remains in this time range");
+        }
+        else
+        {
+            await using var take=new NpgsqlCommand("SELECT lock_parking_resource('SLOT',@slot)",conn,tx);
+            take.Parameters.AddWithValue("slot",slotId);await take.ExecuteNonQueryAsync(ct);
+        }
         string timezone;
         int hold;
         int late;
+        int cancellationCutoff;
+        int configuredGrace;
         Guid plan;
         string rulesJson;
         BlockPrice price;
         await using (var policy = new NpgsqlCommand("""
             SELECT l.timezone,p.hold_minutes,p.min_booking_minutes,p.max_booking_minutes,p.late_arrival_minutes,
-              pp.id,pr.parameters::text FROM parking_lots l JOIN lot_vehicle_policies p ON p.lot_id=l.id
+              pp.id,pr.parameters::text,p.cancellation_refund_cutoff_minutes,p.grace_free_minutes FROM parking_lots l JOIN lot_vehicle_policies p ON p.lot_id=l.id
               JOIN parking_slots s ON s.lot_id=l.id AND s.id=@slot
               JOIN slot_vehicle_types sv ON sv.slot_id=s.id AND sv.vehicle_type=p.vehicle_type
               JOIN pricing_plans pp ON pp.lot_id=l.id AND pp.vehicle_type=p.vehicle_type
@@ -81,14 +120,16 @@ public sealed partial class ParkingRepository(NpgsqlDataSource db, TimeProvider 
               AND pp.status='PUBLISHED' AND pp.currency='VND' AND pp.effective_from<=@start
               AND (pp.effective_until IS NULL OR pp.effective_until>=@end)
               AND NOT EXISTS(SELECT 1 FROM session_slot_assignments x WHERE x.slot_id=s.id AND x.vacated_at IS NULL)
-              AND NOT EXISTS(SELECT 1 FROM slot_feature_links f WHERE f.slot_id=s.id AND f.feature_code IN ('ACCESSIBLE','PRIORITY','EV'))
+              AND NOT EXISTS(SELECT 1 FROM slot_feature_links f WHERE f.slot_id=s.id AND f.feature_code IN ('ACCESSIBLE','PRIORITY','EV','EV_CHARGING'))
               AND NOT EXISTS(SELECT 1 FROM pricing_rules extra WHERE extra.plan_id=pp.id AND extra.id<>pr.id)
             ORDER BY pp.version_no DESC LIMIT 1
             """, conn, tx))
         {
-            policy.Parameters.AddWithValue("slot", request.SlotId); policy.Parameters.AddWithValue("lot", request.LotId); policy.Parameters.AddWithValue("type", type);
+            policy.Parameters.AddWithValue("slot", slotId); policy.Parameters.AddWithValue("lot", request.LotId); policy.Parameters.AddWithValue("type", type);
             policy.Parameters.AddWithValue("start", request.StartsAt.UtcDateTime); policy.Parameters.AddWithValue("end", request.EndsAt.UtcDateTime);
             await using var r = await policy.ExecuteReaderAsync(ct); if (!await r.ReadAsync(ct)) throw new ServiceException(409, "Lot/slot/price unavailable or unsupported pricing rules");
+            cancellationCutoff = r.GetInt32(7);
+            configuredGrace = r.GetInt32(8);
             timezone = r.GetString(0); hold = r.GetInt32(1); late = r.GetInt32(4); plan = r.GetGuid(5); rulesJson = r.GetString(6);
             var minutes = (request.EndsAt - request.StartsAt).TotalMinutes;
             if (minutes < r.GetInt32(2) || minutes > r.GetInt32(3)) throw new ServiceException(400, "Booking duration outside configured policy");
@@ -109,28 +150,37 @@ public sealed partial class ParkingRepository(NpgsqlDataSource db, TimeProvider 
             var local = TimeZoneInfo.ConvertTime(at, tz); var minute = (((int)local.DayOfWeek + 6) % 7) * 1440 + local.Hour * 60 + local.Minute;
             if (!intervals.Any(i => minute >= i.From && minute < i.To)) throw new ServiceException(409, "Outside lot operating hours");
         }
-        var id = Guid.NewGuid();
+        var id = Guid.NewGuid(); var grace = 0;
+        if (configuredGrace > 0)
+        {
+            await using var grant = new NpgsqlCommand("INSERT INTO daily_grace_claims(user_id,local_day,booking_id,minutes) VALUES(@user,(@start AT TIME ZONE 'Asia/Ho_Chi_Minh')::date,@id,@minutes) ON CONFLICT DO NOTHING RETURNING minutes", conn, tx);
+            grant.Parameters.AddWithValue("user", customerId); grant.Parameters.AddWithValue("start", request.StartsAt.UtcDateTime); grant.Parameters.AddWithValue("id", id); grant.Parameters.AddWithValue("minutes", configuredGrace);
+            if (await grant.ExecuteScalarAsync(ct) is int minutes) grace = minutes;
+        }
         var snapshot = Guid.NewGuid();
-        var amount = price.Estimate(request.StartsAt, request.EndsAt, tz);
+        var amount = price.Estimate(request.StartsAt.AddMinutes(grace), request.EndsAt, tz);
         var expires = CalculateHoldDeadline(clock.GetUtcNow(), hold);
         if (amount <= 0) throw new ServiceException(409, "Zero-price booking workflow not configured");
         var code = "B" + id.ToString("N")[..20].ToUpperInvariant();
         await using (var write = new NpgsqlCommand("""
             INSERT INTO pricing_snapshots(id,lot_id,plan_id,vehicle_type,engine_version,resolved_rules,policy_snapshot,currency,created_at)
-            VALUES(@snapshot,@lot,@plan,@type,'block-v1',@rules::jsonb,jsonb_build_object('holdMinutes',@hold,'lateArrivalMinutes',@late),'VND',now());
+            VALUES(@snapshot,@lot,@plan,@type,'block-v1',@rules::jsonb,jsonb_build_object('holdMinutes',@hold,'lateArrivalMinutes',@late,'cancellationRefundCutoffMinutes',@cutoff,'graceFreeMinutes',@grace),'VND',now());
             INSERT INTO bookings(id,code,lot_id,vehicle_id,vehicle_type,customer_id,plate_snapshot,mode,starts_at,ends_at,hold_expires_at,
               arrival_deadline,status,pricing_snapshot_id,estimated_amount,created_at)
-            VALUES(@id,@code,@lot,@vehicle,@type,@user,@plate,'EXACT_SLOT',@start,@end,@expires,@arrival,'PENDING_PAYMENT',@snapshot,@amount,now());
+            VALUES(@id,@code,@lot,@vehicle,@type,@user,@plate,@mode::booking_mode,@start,@end,@expires,@arrival,'PENDING_PAYMENT',@snapshot,@amount,now());
             INSERT INTO slot_reservations(id,booking_id,lot_id,slot_id,vehicle_type,starts_at,ends_at,status,created_at)
             VALUES(gen_random_uuid(),@id,@lot,@slot,@type,@start,@end,'HELD',now());
             INSERT INTO audit_logs(id,lot_id,actor_user_id,actor_type,action,entity_type,entity_id,created_at)
             VALUES(gen_random_uuid(),@lot,@user,'USER','CREATE_BOOKING','BOOKING',@entity,now());
             """, conn, tx))
         {
+            write.Parameters.AddWithValue("cutoff", cancellationCutoff);
+            write.Parameters.AddWithValue("grace",grace);
             write.Parameters.AddWithValue("snapshot", snapshot); write.Parameters.AddWithValue("lot", request.LotId); write.Parameters.AddWithValue("plan", plan);
             write.Parameters.AddWithValue("type", type); write.Parameters.AddWithValue("rules", rulesJson); write.Parameters.AddWithValue("hold", hold); write.Parameters.AddWithValue("late", late);
             write.Parameters.AddWithValue("id", id); write.Parameters.AddWithValue("code", code); write.Parameters.AddWithValue("vehicle", request.VehicleId); write.Parameters.AddWithValue("user", customerId);
-            write.Parameters.AddWithValue("plate", plate); write.Parameters.AddWithValue("slot", request.SlotId); write.Parameters.AddWithValue("start", request.StartsAt.UtcDateTime);
+            write.Parameters.AddWithValue("mode",request.Mode);
+            write.Parameters.AddWithValue("plate", plate); write.Parameters.AddWithValue("slot", slotId); write.Parameters.AddWithValue("start", request.StartsAt.UtcDateTime);
             write.Parameters.AddWithValue("end", request.EndsAt.UtcDateTime); write.Parameters.AddWithValue("expires", expires.UtcDateTime);
             write.Parameters.AddWithValue("arrival", request.StartsAt.AddMinutes(late).UtcDateTime); write.Parameters.AddWithValue("amount", amount); write.Parameters.AddWithValue("entity", id.ToString());
             await write.ExecuteNonQueryAsync(ct);

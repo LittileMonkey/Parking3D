@@ -5,12 +5,9 @@ import {
   ArrowUpRight,
   Car,
   Bike,
-  QrCode,
   Search,
   CheckCircle2,
   Printer,
-  CreditCard,
-  Banknote,
   RotateCcw,
   Layers,
   Camera,
@@ -20,11 +17,10 @@ import {
   X,
   Hash,
 } from "lucide-react";
+import { api, type CheckoutRequest, type StaffSessionRow, type Payment } from "../../services/api";
 import { staffApi } from "../../services/staff/staffApi";
 import type {
-  ParkingSession,
   CheckInResult,
-  CheckOutFeeInfo,
   VehicleType,
   PlateRecognitionResult,
 } from "../../types/staff";
@@ -35,32 +31,77 @@ export default function VehicleOperations() {
   const initialPlate = searchParams.get("plate") || "";
 
   const [activeTab, setActiveTab] = useState<"checkin" | "checkout">(initialTab);
-  const [sessions, setSessions] = useState<ParkingSession[]>([]);
+  const [sessions, setSessions] = useState<StaffSessionRow[]>([]);
   const [filterQuery, setFilterQuery] = useState("");
+  const [sessionError, setSessionError] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
 
   // Vehicle Category for Dynamic Camera Layout: "Motorcycle" | "Car"
   const [cameraVehicleCategory, setCameraVehicleCategory] = useState<"Car" | "Motorcycle">("Car");
 
   // Check-In Form State
+  const [cashBookingId, setCashBookingId] = useState("");
+  const [bookingCash, setBookingCash] = useState<Payment | null>(null);
+  const [bookingCashReason, setBookingCashReason] = useState("");
+  const [bookingCashBusy, setBookingCashBusy] = useState(false);
+  const [bookingCashError, setBookingCashError] = useState("");
+
   const [checkInPlate, setCheckInPlate] = useState(initialPlate);
   const [checkInBooking, setCheckInBooking] = useState("");
-  const [checkInGate, setCheckInGate] = useState("Cổng Vào G1");
+  const [checkInGate, setCheckInGate] = useState("");
+  const [entryGates, setEntryGates] = useState<{ id: string; lotId: string; label: string }[]>([]);
+  const [exitGates, setExitGates] = useState<typeof entryGates>([]);
+  const [exitGate, setExitGate] = useState("");
+  const [gateError, setGateError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    async function loadGates() {
+      try {
+        const [lots, assignments] = await Promise.all([api.getParkingLots(), api.getStaffAssignmentsMe()]);
+        const assigned = new Set(assignments.map(assignment => assignment.lotId));
+        const results = await Promise.allSettled(lots.filter(lot => assigned.has(lot.id)).map(async lot =>
+          (await api.getEntryGates(lot.id)).map(gate => ({ ...gate, label: `${lot.name} · ${gate.code}` })),
+        ));
+        if (!active) return;
+        const gates = results.flatMap(result => result.status === "fulfilled" ? result.value : []);
+        setEntryGates(gates);
+        setCheckInGate(gates[0]?.id ?? "");
+        const exitResults = await Promise.allSettled(lots.filter(lot => assigned.has(lot.id)).map(async lot =>
+          (await api.getExitGates(lot.id)).map(gate => ({ ...gate, label: `${lot.name} · ${gate.code}` })),
+        ));
+        if (!active) return;
+        const exits = exitResults.flatMap(result => result.status === "fulfilled" ? result.value : []);
+        setExitGates(exits);
+        setExitGate(exits[0]?.id ?? "");
+
+        if (!gates.length) setGateError("Không có cổng vào khả dụng cho tài khoản này.");
+      } catch {
+        if (active) setGateError("Không tải được danh sách cổng vào. Hãy thử tải lại trang.");
+      }
+    }
+    void loadGates();
+    return () => { active = false; };
+  }, []);
+
   const [checkInVehicleType, setCheckInVehicleType] = useState<VehicleType>("Car");
   const [checkInLoading, setCheckInLoading] = useState(false);
   const [checkInSuccess, setCheckInSuccess] = useState<CheckInResult | null>(null);
 
   // Check-Out Form State
   const [checkOutQuery, setCheckOutQuery] = useState(initialPlate);
-  const [feeInfo, setFeeInfo] = useState<CheckOutFeeInfo | null>(null);
+  const [cashReceived, setCashReceived] = useState("");
+  const [cashNotes, setCashNotes] = useState("");
+  const [exitPermit, setExitPermit] = useState<{ payload: CheckoutRequest; token: string; confirmKey: string } | null>(null);
+  const [authorizeKey, setAuthorizeKey] = useState("");
+  const [checkoutError, setCheckoutError] = useState("");
+
+  const [feeInfo, setFeeInfo] = useState<(Awaited<ReturnType<typeof api.getCheckoutQuote>> & { gateId: string; detectedPlate: string }) | null>(null);
   const [calculatingFee, setCalculatingFee] = useState(false);
-  const [checkOutMethod, setCheckOutMethod] = useState<"Cash" | "Card" | "Wallet">("Cash");
   const [checkOutProcessing, setCheckOutProcessing] = useState(false);
-  const [checkOutSuccess, setCheckOutSuccess] = useState<{ message: string; receiptNumber: string; paymentId?: string } | null>(null);
+  const [checkOutSuccess, setCheckOutSuccess] = useState<{ message: string; paymentId?: string } | null>(null);
   const [eReceipt, setEReceipt] = useState<any | null>(null);
   const [loadingReceipt, setLoadingReceipt] = useState(false);
-  const [onlinePaymentStatus, setOnlinePaymentStatus] = useState<string | null>(null);
-  const [checkingOnlinePayment, setCheckingOnlinePayment] = useState(false);
 
   // Camera ANPR Boxes State (Quản lý trạng thái và ảnh tải lên riêng cho từng ô camera)
   interface CamBoxState {
@@ -117,9 +158,12 @@ export default function VehicleOperations() {
     }));
 
     try {
-      const gate = activeTab === "checkin" ? checkInGate : "Cổng Ra G3";
+      const gate = activeTab === "checkin"
+        ? entryGates.find(item => item.id === checkInGate)
+        : exitGates.find(item => item.id === exitGate);
+      if (!gate) throw new Error("Chọn cổng trước khi nhận diện biển số.");
       const direction = activeTab === "checkin" ? "IN" : "OUT";
-      const result = await staffApi.scanLicensePlate(file, gate, direction);
+      const result = await staffApi.scanLicensePlate(file, gate.id, direction, gate.lotId);
 
       const recognizedPlate = result.displayPlate || result.plateNumber;
 
@@ -134,7 +178,7 @@ export default function VehicleOperations() {
         },
       }));
 
-      if (recognizedPlate) {
+      if (recognizedPlate && !result.isFallback && result.confidence >= 0.85) {
         if (activeTab === "checkin") {
           setCheckInPlate(recognizedPlate);
 
@@ -204,48 +248,52 @@ export default function VehicleOperations() {
     }
   };
 
-  const handleCheckOnlinePayment = async () => {
-    if (!feeInfo?.bookingId) {
-      alert("Lượt đỗ này không gắn với Booking ID trực tuyến!");
-      return;
-    }
-    setCheckingOnlinePayment(true);
-    try {
-      const res = await staffApi.getPaymentStatus(feeInfo.bookingId);
-      if (res && (res.status === "COMPLETED" || res.status === "SUCCESS")) {
-        setOnlinePaymentStatus("Đã thanh toán thành công trực tuyến");
-      } else if (res?.status) {
-        setOnlinePaymentStatus(`Trạng thái: ${res.status}`);
-      } else {
-        setOnlinePaymentStatus("Chưa nhận được thanh toán trực tuyến");
-      }
-    } catch {
-      setOnlinePaymentStatus("Chưa nhận được thanh toán trực tuyến");
-    } finally {
-      setCheckingOnlinePayment(false);
-    }
-  };
-
-  // Load Sessions
   const loadSessions = async () => {
-    try {
-      const data = await staffApi.getSessions({ status: statusFilter, query: filterQuery });
-      setSessions(data);
-    } catch (err) {
-      console.error("Load sessions error:", err);
+    setSessionError("");
+    const lots = [...new Set([...entryGates, ...exitGates].map(gate => gate.lotId))];
+    const results = await Promise.allSettled(lots.map(lotId => api.getStaffSessions(lotId)));
+    setSessions(results.flatMap(result => result.status === "fulfilled" ? result.value : []));
+    if (results.some(result => result.status === "rejected")) {
+      setSessionError("Không tải được phiên đỗ của một số bãi.");
     }
   };
 
   useEffect(() => {
-    loadSessions();
-  }, [statusFilter, filterQuery]);
+    void loadSessions();
+  }, [entryGates, exitGates]);
 
-  // Handle Initial Query from URL
-  useEffect(() => {
-    if (initialPlate && initialTab === "checkout") {
-      handleLookupFee(initialPlate);
+  const searchPlate = filterQuery.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const visibleSessions = sessions.filter(session =>
+    (statusFilter === "All" || (statusFilter === "Active" ? session.status !== "COMPLETED" : session.status === "COMPLETED"))
+    && session.licensePlate.replace(/[^A-Z0-9]/g, "").includes(searchPlate),
+  );
+
+  const lookupBookingCash = async () => {
+    setBookingCashBusy(true);
+    setBookingCashError("");
+    setBookingCash(null);
+    try {
+      const booking = await api.getBooking(cashBookingId.trim());
+      setBookingCash(await api.getBookingCashRequest(booking.bookingId, booking.lotId));
+    } catch (err) {
+      setBookingCashError(err instanceof Error ? err.message : "Không tìm được yêu cầu thu tiền.");
+    } finally {
+      setBookingCashBusy(false);
     }
-  }, [initialPlate, initialTab]);
+  };
+
+  const confirmBookingCash = async () => {
+    if (bookingCash?.status !== "PENDING" || !bookingCashReason.trim()) return;
+    setBookingCashBusy(true);
+    setBookingCashError("");
+    try {
+      setBookingCash(await api.confirmBookingCash(bookingCash, bookingCashReason.trim()));
+    } catch (err) {
+      setBookingCashError(err instanceof Error ? err.message : "Không xác nhận được khoản thu.");
+    } finally {
+      setBookingCashBusy(false);
+    }
+  };
 
   // Check-In Submit
   const handleCheckIn = async (e: React.FormEvent) => {
@@ -255,7 +303,9 @@ export default function VehicleOperations() {
     try {
       const res = await staffApi.checkInVehicle({
         licensePlate: checkInPlate.trim(),
-        bookingCode: checkInBooking.trim() || undefined,
+        qrToken: checkInBooking.trim() || undefined,
+        lotId: entryGates.find(gate => gate.id === checkInGate)?.lotId,
+        vehicleType: checkInVehicleType,
         gateId: checkInGate,
       });
       setCheckInSuccess(res);
@@ -270,94 +320,72 @@ export default function VehicleOperations() {
   };
 
   // Lookup Fee for Check-Out
-  const handleLookupFee = async (overrideQ?: string) => {
-    const q = overrideQ ?? checkOutQuery;
-    if (!q.trim()) return;
+  const handleLookupFee = async (overrideQ?: string, gateId = exitGate) => {
+    const plate = (overrideQ ?? checkOutQuery).trim();
+    const gate = exitGates.find(item => item.id === gateId);
+    if (!plate || !gate || exitPermit) return;
     setCalculatingFee(true);
+    setCheckoutError("");
+    setFeeInfo(null);
     setCheckOutSuccess(null);
     try {
-      const info = await staffApi.calculateCheckOutFee(q.trim());
-      setFeeInfo(info);
-      if (!info) {
-        alert("Không tìm thấy xe đang gửi khớp với thông tin: " + q);
+      const quote = await api.getCheckoutQuote(gate.lotId, gate.id, plate);
+      if (!quote.isPlateMatched || !quote.quoteToken) {
+        throw new Error("Biển số không khớp với phiên đỗ. Cần đối soát trước khi cho xe ra.");
       }
-    } catch (err: any) {
-      alert("Lỗi tính phí: " + err.message);
+      setFeeInfo({ ...quote, gateId: gate.id, detectedPlate: plate });
+      setCashReceived("");
+      setCashNotes("");
+      setAuthorizeKey(crypto.randomUUID());
+    } catch (err) {
+      setCheckoutError(err instanceof Error ? err.message : "Không lấy được phí xuất bãi.");
     } finally {
       setCalculatingFee(false);
     }
   };
 
-  // Check-Out Submit
   const handleCheckOut = async () => {
-    if (!feeInfo) return;
+    if (!feeInfo?.quoteToken) return;
     setCheckOutProcessing(true);
+    setCheckoutError("");
     try {
-      let paymentId: string | undefined;
-      if (checkOutMethod === "Cash") {
-        try {
-          const bookingId = feeInfo.bookingId || "00000000-0000-0000-0000-000000000001";
-          const cashRes = await staffApi.confirmCashPayment(bookingId, "Nhân viên xác nhận thu tiền mặt tại bốt ra G3");
-          if (cashRes && cashRes.paymentId) {
-            paymentId = cashRes.paymentId;
-          }
-        } catch (cashErr) {
-          console.warn("Cash confirmation backend fallback:", cashErr);
-        }
+      if (!exitPermit) {
+        const payload: CheckoutRequest = {
+          sessionId: feeInfo.sessionId,
+          gateId: feeInfo.gateId,
+          detectedPlate: feeInfo.detectedPlate,
+          quoteToken: feeInfo.quoteToken,
+          paymentMethod: feeInfo.paymentRequired ? "CASH" : "NONE",
+          cashReceived: feeInfo.paymentRequired ? Number(cashReceived) : 0,
+          staffNotes: feeInfo.paymentRequired ? cashNotes.trim() : undefined,
+        };
+        const authorization = await api.authorizeCheckout(payload, authorizeKey);
+        setExitPermit({ payload, token: authorization.exitPermitToken, confirmKey: crypto.randomUUID() });
+        return;
       }
-
-      const res = await staffApi.checkOutVehicle({
-        sessionId: feeInfo.sessionId,
-        paymentMethod: checkOutMethod,
-        gateId: "Cổng Ra G3",
-        paymentId,
+      const result = await api.confirmCheckout(exitPermit.payload, exitPermit.token, exitPermit.confirmKey);
+      setCheckOutSuccess({
+        message: "Đã ghi nhận xe rời bãi và giải phóng ô đỗ.",
+        paymentId: result.paymentId,
       });
-      setCheckOutSuccess({ ...res, paymentId });
+      setExitPermit(null);
       setFeeInfo(null);
       setCheckOutQuery("");
       loadSessions();
-    } catch (err: any) {
-      alert("Lỗi check-out: " + err.message);
+    } catch (err) {
+      setCheckoutError(err instanceof Error ? err.message : "Không ghi nhận được lượt xe ra.");
     } finally {
       setCheckOutProcessing(false);
     }
   };
 
   const handleViewReceipt = async (paymentId?: string) => {
+    if (!paymentId) return;
     setLoadingReceipt(true);
     try {
-      if (paymentId && !paymentId.startsWith("PAY-")) {
-        const rec = await staffApi.getPaymentReceipt(paymentId);
-        setEReceipt(rec);
-      } else {
-        // Fallback e-receipt representation
-        setEReceipt({
-          receiptNumber: checkOutSuccess?.receiptNumber || `REC-${Date.now().toString().slice(-8)}`,
-          paymentId: paymentId || "pay-" + Date.now(),
-          lotName: "Bãi đỗ xe Trung tâm Quận 1",
-          plateNumber: checkOutSuccess?.receiptNumber ? "Xe lượt ra bãi" : "51K-892.45",
-          paymentMethod: checkOutMethod === "Cash" ? "Tiền mặt (CASH)" : "Điện tử (VNPAY)",
-          totalAmount: 45000,
-          currency: "VND",
-          paidAt: new Date().toISOString(),
-          collectedByStaff: "Nguyễn Văn Hùng (Staff ID: STF-091)",
-          verificationHash: "f9b8c2d1e0a4f5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
-        });
-      }
-    } catch (err: any) {
-      console.warn("Backend getPaymentReceipt fallback:", err);
-      setEReceipt({
-        receiptNumber: checkOutSuccess?.receiptNumber || `REC-${Date.now().toString().slice(-8)}`,
-        paymentId: paymentId || "pay-" + Date.now(),
-        lotName: "Bãi đỗ xe Trung tâm Quận 1",
-        plateNumber: "51K-892.45",
-        paymentMethod: "CASH",
-        totalAmount: 45000,
-        currency: "VND",
-        paidAt: new Date().toISOString(),
-        collectedByStaff: "Nguyễn Văn Hùng",
-        verificationHash: "sha256-verified-receipt-hash-pkm2026",
-      });
+      setEReceipt(await staffApi.getPaymentReceipt(paymentId));
+    } catch (err) {
+      setCheckoutError(err instanceof Error ? err.message : "Không tải được biên lai.");
     } finally {
       setLoadingReceipt(false);
     }
@@ -382,7 +410,7 @@ export default function VehicleOperations() {
             <span>Điều phối Xe Vào &amp; Xe Ra</span>
           </h1>
           <p className="pm-section-subtitle">
-            Xử lý tiếp nhận tại cổng vào, kiểm tra mã đặt chỗ QR, tính phí xuất bến và điều khiển Barrier tự động
+            Xử lý tiếp nhận tại cổng vào, kiểm tra mã đặt chỗ QR, tính phí xuất bến và xác nhận xe rời cổng
           </p>
         </div>
 
@@ -424,7 +452,7 @@ export default function VehicleOperations() {
                   <ArrowDownLeft size={19} className="pm-icon-teal" />
                   <h2 className="pm-op-card-title">Tiếp nhận Xe vào Cổng</h2>
                 </div>
-                <span className="pm-badge-success">Barrier G1 Sẵn sàng</span>
+                <span className="pm-badge-success">Cổng vào</span>
               </div>
 
               <div className="pm-op-card-body">
@@ -445,11 +473,11 @@ export default function VehicleOperations() {
 
                   <div className="pm-form-row">
                     <div className="pm-form-field">
-                      <label className="pm-form-label">Mã đặt chỗ (nếu có):</label>
+                      <label className="pm-form-label">Token QR đặt chỗ (nếu có):</label>
                       <input
                         type="text"
                         className="pm-form-input"
-                        placeholder="BK-2026..."
+                        placeholder="Dán token QR"
                         value={checkInBooking}
                         onChange={(e) => setCheckInBooking(e.target.value)}
                       />
@@ -472,32 +500,60 @@ export default function VehicleOperations() {
 
                   <div className="pm-form-field">
                     <label className="pm-form-label">Cổng vào chỉ định:</label>
+                    {gateError && <p role="alert">{gateError}</p>}
                     <select
                       className="pm-form-select"
                       value={checkInGate}
                       onChange={(e) => setCheckInGate(e.target.value)}
                     >
-                      <option value="Cổng Vào G1">Cổng Vào G1 (Mặt đường Lê Lợi - Ô tô &amp; EV)</option>
-                      <option value="Cổng Vào G2">Cổng Vào G2 (Làn chuyên dụng Xe máy)</option>
+                      <option value="" disabled>Chọn cổng vào</option>
+                      {entryGates.map(gate => <option key={gate.id} value={gate.id}>{gate.label}</option>)}
                     </select>
                   </div>
 
                   <button
                     type="submit"
-                    disabled={checkInLoading}
+                    disabled={checkInLoading || !checkInGate}
                     className="pm-cta-btn pm-btn-teal"
                   >
                     <CheckCircle2 size={18} />
-                    <span>{checkInLoading ? "Đang xử lý..." : "Xác nhận Check-in & Mở Barrier"}</span>
+                    <span>{checkInLoading ? "Đang xử lý..." : "Xác nhận xe vào"}</span>
                   </button>
                 </form>
+
+                <section className="pm-fee-card" aria-label="Thu tiền mặt booking">
+                  <h3>Thu tiền mặt booking</h3>
+                  <label className="pm-form-label">ID đặt chỗ
+                    <input className="pm-form-input" value={cashBookingId} disabled={bookingCashBusy}
+                      onChange={event => { setCashBookingId(event.target.value); setBookingCash(null); }} />
+                  </label>
+                  <button type="button" onClick={() => void lookupBookingCash()} disabled={!cashBookingId.trim() || bookingCashBusy}>
+                    Tra cứu yêu cầu thu tiền
+                  </button>
+                  {bookingCash && (
+                    <>
+                      <p>{bookingCash.amount?.toLocaleString("vi-VN")} {bookingCash.currency} · {bookingCash.status === "SUCCESS" ? "Đã thu tiền" : bookingCash.status}</p>
+                      {bookingCash.status === "PENDING" && (
+                        <>
+                          <label className="pm-form-label">Ghi chú thu tiền booking
+                            <input className="pm-form-input" value={bookingCashReason} maxLength={500}
+                              onChange={event => setBookingCashReason(event.target.value)} />
+                          </label>
+                          <button type="button" onClick={() => void confirmBookingCash()}
+                            disabled={!bookingCashReason.trim() || bookingCashBusy}>Xác nhận đã thu tiền booking</button>
+                        </>
+                      )}
+                    </>
+                  )}
+                  {bookingCashError && <p role="alert">{bookingCashError}</p>}
+                </section>
 
                 {/* Check-In Success Box */}
                 {checkInSuccess && (
                   <div className="pm-success-box">
                     <div className="pm-success-header">
                       <CheckCircle2 size={20} color="#10b981" />
-                      <span>Check-in Thành công • Barrier Đã Mở</span>
+                      <span>Đã ghi nhận xe vào bãi</span>
                     </div>
                     <div className="pm-success-details">
                       <div>Biển số: <strong>{checkInSuccess.licensePlate}</strong></div>
@@ -534,7 +590,7 @@ export default function VehicleOperations() {
                     type="text"
                     className="pm-form-input pm-plate-input"
                     style={{ flex: 1 }}
-                    placeholder="Nhập Biển số xe hoặc Mã phiên..."
+                    placeholder="Nhập biển số xe"
                     value={checkOutQuery}
                     onChange={(e) => setCheckOutQuery(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleLookupFee()}
@@ -542,13 +598,23 @@ export default function VehicleOperations() {
                   <button
                     type="button"
                     onClick={() => handleLookupFee()}
-                    disabled={calculatingFee}
+                    disabled={calculatingFee || !exitGate || !!exitPermit || checkOutProcessing}
                     className="pm-search-action-btn"
                   >
                     <Search size={16} />
                     <span>{calculatingFee ? "Đang tìm..." : "Tra cứu"}</span>
                   </button>
                 </div>
+
+                <label className="pm-form-label">
+                  Cổng ra
+                  <select className="pm-form-select" value={exitGate} disabled={!!exitPermit || checkOutProcessing}
+                    onChange={event => { setExitGate(event.target.value); setFeeInfo(null); }}>
+                    <option value="" disabled>Chọn cổng ra</option>
+                    {exitGates.map(gate => <option key={gate.id} value={gate.id}>{gate.label}</option>)}
+                  </select>
+                </label>
+                {checkoutError && <p role="alert">{checkoutError}</p>}
 
                 {/* Fee Information Breakdown */}
                 {feeInfo && (
@@ -557,7 +623,7 @@ export default function VehicleOperations() {
                     <div className="pm-fee-lines">
                       <div className="pm-fee-line">
                         <span className="pm-text-muted">Biển số xe:</span>
-                        <strong className="pm-text-white">{feeInfo.licensePlate}</strong>
+                        <strong className="pm-text-white">{feeInfo.entryPlate}</strong>
                       </div>
                       <div className="pm-fee-line">
                         <span className="pm-text-muted">Vị trí đã đỗ:</span>
@@ -565,84 +631,47 @@ export default function VehicleOperations() {
                       </div>
                       <div className="pm-fee-line">
                         <span className="pm-text-muted">Thời gian vào:</span>
-                        <span>{new Date(feeInfo.checkinAt).toLocaleTimeString("vi-VN")}</span>
+                        <span>{new Date(feeInfo.entryAt).toLocaleTimeString("vi-VN")}</span>
                       </div>
                       <div className="pm-fee-line">
                         <span className="pm-text-muted">Tổng thời lượng:</span>
-                        <strong>{Math.floor(feeInfo.durationMinutes / 60)} giờ {feeInfo.durationMinutes % 60} phút</strong>
+                        <strong>{Math.floor(feeInfo.totalDurationMinutes / 60)} giờ {feeInfo.totalDurationMinutes % 60} phút</strong>
                       </div>
                       <div className="pm-fee-line">
                         <span className="pm-text-muted">Gói cước áp dụng:</span>
-                        <span>{feeInfo.pricingPlanName}</span>
+                        <span>Biểu giá chốt khi xe vào</span>
                       </div>
                       <div className="pm-fee-total-row">
                         <span>TỔNG TIỀN PHẢI THU:</span>
                         <strong className="pm-fee-total-amount">
-                          {feeInfo.estimatedFee.toLocaleString("vi-VN")} {feeInfo.currency}
+                          {feeInfo.totalAmountDue.toLocaleString("vi-VN")} VND
                         </strong>
                       </div>
                     </div>
 
-                    {/* Payment Method Selector */}
-                    <div className="pm-payment-section">
-                      <label className="pm-form-label">Hình thức thanh toán:</label>
-                      <div className="pm-payment-options">
-                        <button
-                          type="button"
-                          onClick={() => setCheckOutMethod("Cash")}
-                          className={`pm-pay-method-btn ${checkOutMethod === "Cash" ? "active" : ""}`}
-                        >
-                          <Banknote size={20} />
-                          <span>Tiền mặt</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCheckOutMethod("Card")}
-                          className={`pm-pay-method-btn ${checkOutMethod === "Card" ? "active" : ""}`}
-                        >
-                          <CreditCard size={20} />
-                          <span>Thẻ POS</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCheckOutMethod("Wallet")}
-                          className={`pm-pay-method-btn ${checkOutMethod === "Wallet" ? "active" : ""}`}
-                        >
-                          <QrCode size={20} />
-                          <span>VietQR</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Online payment check */}
-                    {feeInfo.bookingId && (
-                      <div className="pm-online-check-box">
-                        <div className="pm-online-row">
-                          <span className="pm-text-muted">Kiểm tra thanh toán online qua cổng:</span>
-                          <button
-                            type="button"
-                            onClick={handleCheckOnlinePayment}
-                            disabled={checkingOnlinePayment}
-                            className="pm-btn-secondary-sm"
-                          >
-                            {checkingOnlinePayment ? "Đang kiểm tra..." : "Tra cứu thanh toán"}
-                          </button>
-                        </div>
-                        {onlinePaymentStatus && (
-                          <div className="pm-online-status-text">{onlinePaymentStatus}</div>
-                        )}
-                      </div>
+                    {feeInfo.paymentRequired && !exitPermit && (
+                      <>
+                        <label className="pm-form-label">Số tiền mặt đã nhận
+                          <input className="pm-form-input" type="number" min={feeInfo.totalAmountDue}
+                            value={cashReceived} onChange={event => setCashReceived(event.target.value)} />
+                        </label>
+                        <label className="pm-form-label">Ghi chú thu tiền
+                          <input className="pm-form-input" value={cashNotes}
+                            onChange={event => setCashNotes(event.target.value)} />
+                        </label>
+                      </>
                     )}
+                    {exitPermit && <p>Đã được phép cho xe ra. Chỉ xác nhận khi xe đã rời cổng.</p>}
 
                     <button
                       type="button"
                       onClick={handleCheckOut}
-                      disabled={checkOutProcessing}
+                      disabled={checkOutProcessing || (!exitPermit && feeInfo.paymentRequired && (Number(cashReceived) < feeInfo.totalAmountDue || !cashNotes.trim()))}
                       className="pm-cta-btn pm-btn-teal"
                       style={{ marginTop: 18 }}
                     >
                       <CheckCircle2 size={18} />
-                      <span>{checkOutProcessing ? "Đang ghi nhận..." : "Xác nhận Đã Thu Tiền & Mở Barrier Ra"}</span>
+                      <span>{checkOutProcessing ? "Đang ghi nhận..." : exitPermit ? "Xác nhận xe đã rời cổng" : feeInfo.paymentRequired ? "Xác nhận thu tiền mặt và cho xe ra" : "Xác nhận cho xe ra"}</span>
                     </button>
                   </div>
                 )}
@@ -655,8 +684,8 @@ export default function VehicleOperations() {
                       <span>{checkOutSuccess.message}</span>
                     </div>
                     <div className="pm-success-details">
-                      <div>Số biên lai: <strong>{checkOutSuccess.receiptNumber}</strong></div>
-                      <div>Barrier: <strong>Đã tự động mở cho xe xuất bến</strong></div>
+
+                      <div>Barrier: <strong>Đã xác nhận xe rời cổng</strong></div>
                     </div>
                     <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
                       <button
@@ -1133,21 +1162,19 @@ export default function VehicleOperations() {
                 <th>THAO TÁC</th>
               </tr>
             </thead>
+            {sessionError && <caption role="alert">{sessionError}</caption>}
             <tbody>
-              {sessions.length === 0 ? (
+              {visibleSessions.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="pm-table-empty">
                     Không có lượt xe nào phù hợp.
                   </td>
                 </tr>
               ) : (
-                sessions.map((s) => (
+                visibleSessions.map((s) => (
                   <tr key={s.sessionId} className="pm-table-row">
                     <td>
                       <span className="pm-session-code">{s.sessionId}</span>
-                      {s.bookingCode && (
-                        <div className="pm-booking-sub">{s.bookingCode}</div>
-                      )}
                     </td>
                     <td>
                       <span className="pm-plate-cell">{s.licensePlate}</span>
@@ -1160,25 +1187,29 @@ export default function VehicleOperations() {
                       <div className="pm-level-sub">{s.levelName}</div>
                     </td>
                     <td>{new Date(s.checkinAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</td>
-                    <td>{s.durationMinutes} phút</td>
+                    <td>{Math.max(0, Math.floor(((s.checkoutAt ? Date.parse(s.checkoutAt) : Date.now()) - Date.parse(s.checkinAt)) / 60000))} phút</td>
                     <td>
                       <span
                         className={`pm-status-tag ${
-                          s.status === "Active" ? "tag-active" : "tag-completed"
+                          s.status !== "COMPLETED" ? "tag-active" : "tag-completed"
                         }`}
                       >
-                        {s.status === "Active" ? "Đang gửi" : "Đã ra"}
+                        {s.status !== "COMPLETED" ? "Đang gửi" : "Đã ra"}
                       </span>
                     </td>
                     <td>
-                      {s.status === "Active" ? (
+                      {s.status !== "COMPLETED" ? (
                         <button
                           type="button"
                           className="pm-action-btn-cyan"
                           onClick={() => {
                             setActiveTab("checkout");
                             setCheckOutQuery(s.licensePlate);
-                            handleLookupFee(s.licensePlate);
+                            const gate = exitGates.find(item => item.lotId === s.lotId);
+                            if (gate) {
+                              setExitGate(gate.id);
+                              void handleLookupFee(s.licensePlate, gate.id);
+                            }
                           }}
                         >
                           Thu phí ra bãi

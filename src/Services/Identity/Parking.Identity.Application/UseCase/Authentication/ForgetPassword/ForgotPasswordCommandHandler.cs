@@ -24,9 +24,11 @@ namespace Parking.Identity.Application.UseCase.Authentication.ForgetPassword
         {
             var email = request.Email.Trim().ToUpperInvariant();
 
+            await using var transaction = await unit.BeginTransactionAsync(cancellationToken);
+            await unit.AcquireLockAsync("password-reset:" + email, cancellationToken);
             var user = await accountRepository.GetUserByEmail(email);
 
-            if (user is null)
+            if (user is null || (user.LockedUntil.HasValue && user.LockedUntil.Value > DateTime.UtcNow))
             {
                 return new ForgotPasswordResult("If the account exists, the OTP will be sent");
             }
@@ -51,6 +53,7 @@ namespace Parking.Identity.Application.UseCase.Authentication.ForgetPassword
 
 
             await unit.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
 
 
             await emailService.SendPasswordResetOtpAsync(user.EmailNormalized!, otp, cancellationToken);

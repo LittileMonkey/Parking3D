@@ -1,4 +1,4 @@
-using FluentValidation;
+﻿using FluentValidation;
 using MediatR;
 using Parking.Parking.Application.DTOs;
 using Parking.Parking.Application.Interfaces;
@@ -132,6 +132,7 @@ public sealed class ShiftHandoverCommandHandlers(
     public async Task<ShiftHandoverDto> Handle(CreateShiftHandoverCommand command, CancellationToken ct)
     {
         await access.RequireAsync(command.ActorId, command.LotId, "HANDOVER", ct);
+        await access.RequireAsync(command.Request.ReceiverUserId, command.LotId, "HANDOVER", ct);
         return await repository.CreateShiftHandoverAsync(command.LotId, command.ActorId, command.Request, command.IdempotencyKey, ct);
     }
 
@@ -146,6 +147,7 @@ public sealed class ShiftHandoverCommandHandlers(
     public async Task<ShiftHandoverDto> Handle(ReassignReceiverCommand command, CancellationToken ct)
     {
         await access.RequireAsync(command.ActorId, command.LotId, "MANAGER", ct);
+        await access.RequireAsync(command.Request.ReceiverUserId, command.LotId, "HANDOVER", ct);
         return await repository.ReassignReceiverAsync(command.LotId, command.HandoverId, command.ActorId, command.Request, command.IdempotencyKey, ct);
     }
 }

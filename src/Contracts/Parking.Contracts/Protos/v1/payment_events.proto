@@ -3,6 +3,7 @@ package parking.payments.v1;
 option csharp_namespace = "Parking.Contracts.Payments.V1";
 service ParkingPaymentEvents {
   rpc DeliverPaymentSucceeded(PaymentSucceeded) returns (DeliveryReply);
+  rpc DeliverRefundSucceeded(RefundSucceeded) returns (DeliveryReply);
 }
 message PaymentSucceeded {
   string event_id = 1;
@@ -18,6 +19,7 @@ message DeliveryReply {
 }
 service BookingPaymentQuery {
   rpc GetQuote(BookingQuoteRequest) returns (BookingQuoteReply);
+  rpc GetRefundEligibility(BookingQuoteRequest) returns (RefundEligibilityReply);
 }
 message BookingQuoteRequest { string booking_id = 1; string user_id = 2; }
 message BookingQuoteReply {
@@ -27,3 +29,7 @@ message BookingQuoteReply {
   string lot_name = 8;
   string plate_number = 9;
 }
+
+message RefundEligibilityReply { bool eligible = 1; string lot_id = 2; string customer_id = 3; }
+
+message RefundSucceeded { string event_id = 1; string refund_id = 2; string booking_id = 3; int64 amount_minor = 4; }

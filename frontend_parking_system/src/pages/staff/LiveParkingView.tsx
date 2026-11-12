@@ -1,3 +1,4 @@
+import ReservationRelocation from "../../components/parking/ReservationRelocation";
 import { useState, useEffect } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import {
@@ -38,11 +39,12 @@ export default function LiveParkingView() {
 
   const loadData = async () => {
     try {
-      const lotId = selectedLotId || "lot-01";
+      if (!selectedLotId) return;
+      const lotId = selectedLotId;
       const data = await staffApi.getParkingLotLevels(lotId);
       setLevels(data.levels);
       setSlots(data.slots);
-      if (data.levels.length > 0 && !selectedLevelId) {
+      if (data.levels.length > 0 && !data.levels.some(level => level.levelId === selectedLevelId)) {
         setSelectedLevelId(data.levels[0].levelId);
       }
     } catch (err) {
@@ -67,18 +69,18 @@ export default function LiveParkingView() {
   });
 
   // Level statistics with exact defaults matching user's spec (40, 18, 19, 1, 2)
-  const totalCount = currentLevelSlots.length > 0 ? currentLevelSlots.length : 40;
-  const availableCount = currentLevelSlots.length > 0 ? currentLevelSlots.filter((s) => s.status === "Available").length : 18;
-  const occupiedCount = currentLevelSlots.length > 0 ? currentLevelSlots.filter((s) => s.status === "Occupied").length : 19;
-  const reservedCount = currentLevelSlots.length > 0 ? currentLevelSlots.filter((s) => s.status === "Reserved").length : 1;
-  const maintenanceCount = currentLevelSlots.length > 0 ? currentLevelSlots.filter((s) => s.status === "Maintenance").length : 2;
+  const totalCount = currentLevelSlots.length;
+  const availableCount = currentLevelSlots.filter((s) => s.status === "Available").length;
+  const occupiedCount = currentLevelSlots.filter((s) => s.status === "Occupied").length;
+  const reservedCount = currentLevelSlots.filter((s) => s.status === "Reserved").length;
+  const maintenanceCount = currentLevelSlots.filter((s) => s.status === "Maintenance").length;
 
   // Handle Staff Slot Override (Available, Maintenance, Disabled)
   const handleUpdateStatus = async (newStatus: SlotStatus) => {
     if (!activeSlot) return;
     setOverrideLoading(true);
     try {
-      await staffApi.updateSlotStatus(activeSlot.slotCode, newStatus, overrideReason || undefined);
+      await staffApi.updateSlotStatus(selectedLotId!, activeSlot, newStatus, overrideReason);
       setActiveSlot({ ...activeSlot, status: newStatus });
       setOverrideReason("");
       loadData();
@@ -117,6 +119,7 @@ export default function LiveParkingView() {
 
   return (
     <div className="pm-layout-wrapper">
+      <ReservationRelocation key={selectedLotId} lotId={selectedLotId ?? ""} onMoved={() => void loadData()} />
       {/* ─── 1. Page Header & Theme Unification ───────────────────────────── */}
       <div className="pm-header-row">
         <div>

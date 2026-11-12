@@ -1,0 +1,35 @@
+{
+  "commit": "11e5652",
+  "generatedUtc": "2026-10-20T01:18:43.928Z",
+  "automated": {
+    "passed": 50,
+    "failed": 1,
+    "skipped": 1,
+    "total": 52,
+    "trxCounters": "<Counters total=\"52\" executed=\"51\" passed=\"50\" failed=\"1\" error=\"0\" timeout=\"0\" aborted=\"0\" inconclusive=\"0\" passedButRunAborted=\"0\" notRunnable=\"0\" notExecuted=\"0\" disconnected=\"0\" warning=\"0\" completed=\"0\" inProgress=\"0\" pending=\"0\" /"
+  },
+  "http": {
+    "passed": 1,
+    "failed": 3,
+    "observed": 1,
+    "total": 5,
+    "standardEnvelopeFailures": [
+      "HTTP-02",
+      "HTTP-03"
+    ]
+  },
+  "acceptance": {
+    "total": 32,
+    "pass": 0,
+    "partialFail": 1,
+    "sourceReviewFinding": 1,
+    "notRun": 30
+  },
+  "limitations": [
+    "PostgreSQL18.4 supplemental, PostgreSQL17 not verified",
+    "No full HTTP Identity/Payment/Staff UI acceptance",
+    "Existing team tests rerun, not all authored by TV2",
+    "No Jira/GitHub/GitLab update"
+  ],
+  "httpEvidenceUtc": "2026-10-20T01:15:17.518Z"
+}

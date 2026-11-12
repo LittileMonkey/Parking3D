@@ -17,7 +17,7 @@ namespace Parking.Identity.Application.UseCase.Authentication.ResetPassword
         private readonly IAuthTokenRepository authTokenRepository;
         private readonly IMemoryCache memory;
 
-        private const int MaxAttempts = 5;
+        private const int MaxAttempts = 3;
 
         public ResetPasswordCommandHandler(
             IMemoryCache memory,
@@ -48,6 +48,8 @@ namespace Parking.Identity.Application.UseCase.Authentication.ResetPassword
 
             var emailNormalized = request.Email.Trim().ToUpperInvariant();
 
+            await using var transaction = await unit.BeginTransactionAsync(cancellationToken);
+            await unit.AcquireLockAsync("password-reset:" + emailNormalized, cancellationToken);
             var user = await accountRepository.GetUserByEmail(emailNormalized);
             if (user is null)
             {
@@ -77,8 +79,7 @@ namespace Parking.Identity.Application.UseCase.Authentication.ResetPassword
 
             var cacheKey = $"reset-password-otp-attempts:{user.Id}:{otpEntity.Id}";
 
-            if ((memory.TryGetValue(cacheKey, out int cachedAttempts) && cachedAttempts >= MaxAttempts) ||
-                otpEntity.AttemptCount >= MaxAttempts)
+            if (otpEntity.AttemptCount >= MaxAttempts)
             {
                 throw new AppException(ErrorCode.OtpMaxAttemptsExceeded, "Maximum verification attempts exceeded. Please request a new code.");
             }
@@ -88,27 +89,26 @@ namespace Parking.Identity.Application.UseCase.Authentication.ResetPassword
             if (!isOtpValid)
             {
                 otpEntity.AttemptCount++;
-                cachedAttempts++;
 
-                memory.Set(cacheKey, cachedAttempts, new MemoryCacheEntryOptions
-                {
-                    AbsoluteExpiration = otpEntity.ExpiresAt
-                });
 
                 if (otpEntity.AttemptCount >= MaxAttempts)
                 {
                     otpEntity.UsedAt = DateTimeOffset.UtcNow;
+                    user.LockedUntil = DateTime.UtcNow.AddMinutes(15);
+                    await accountRepository.UpdateAccount(user);
                     await unit.SaveChangesAsync(cancellationToken);
+                    await transaction.CommitAsync(cancellationToken);
                     throw new AppException(ErrorCode.OtpMaxAttemptsExceeded, "Maximum verification attempts exceeded. Please request a new code.");
                 }
 
                 await unit.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
 
                 var remainingAttempts = MaxAttempts - otpEntity.AttemptCount;
                 throw new AppException(ErrorCode.OtpInvalid, $"The verification code is incorrect. You have {remainingAttempts} attempt(s) remaining.");
             }
 
-            using var transaction = await unit.BeginTransactionAsync(cancellationToken);
+
             try
             {
                 var newPasswordHash = passwordHasherService.HashPassword(user, request.NewPassword);

@@ -11,6 +11,8 @@ namespace Parking.Parking.Application.Interfaces
     {
         // Yêu cầu: Trả về danh sách bãi xe ĐANG HOẠT ĐỘNG, đúng LOẠI XE, và CÒN CHỖ TRỐNG
         Task<List<ParkingLot>> GetAvailableLotsAsync(string vehicleType, CancellationToken cancellationToken = default);
+        Task<List<ParkingLot>> GetAvailableLotsAsync(string vehicleType, DateTimeOffset startsAt, DateTimeOffset endsAt, CancellationToken cancellationToken = default)
+            => GetAvailableLotsAsync(vehicleType, cancellationToken);
 
 
         /// <summary>

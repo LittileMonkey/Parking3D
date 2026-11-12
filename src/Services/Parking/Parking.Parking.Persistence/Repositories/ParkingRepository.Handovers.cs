@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Npgsql;
@@ -48,6 +48,22 @@ public sealed partial class ParkingRepository
             return existingOutcome!;
         }
 
+        await using (var shifts = new NpgsqlCommand("""
+            SELECT id,staff_user_id FROM staff_shifts WHERE lot_id=@lot AND ended_at IS NULL
+              AND id IN (@sender,@receiver) ORDER BY id FOR UPDATE
+            """, conn, tx))
+        {
+            shifts.Parameters.AddWithValue("lot",lotId); shifts.Parameters.AddWithValue("sender",request.SenderShiftId); shifts.Parameters.AddWithValue("receiver",request.ReceiverShiftId);
+            await using var reader=await shifts.ExecuteReaderAsync(ct); var sender=false; var receiver=false;
+            while(await reader.ReadAsync(ct))
+            { sender |= reader.GetGuid(0)==request.SenderShiftId && reader.GetGuid(1)==actorId; receiver |= reader.GetGuid(0)==request.ReceiverShiftId && reader.GetGuid(1)==request.ReceiverUserId; }
+            if(!sender || !receiver) throw new ServiceException(409,"Both staff must have active shifts in this lot.");
+        }
+        await using (var pending = new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM shift_handovers WHERE sender_shift_id IN (@sender,@receiver) AND status='PendingConfirmation')",conn,tx))
+        {
+            pending.Parameters.AddWithValue("sender",request.SenderShiftId);pending.Parameters.AddWithValue("receiver",request.ReceiverShiftId);
+            if((bool)(await pending.ExecuteScalarAsync(ct))!)throw new ServiceException(409,"A shift already has a pending handover.");
+        }
         var handoverId = Guid.NewGuid();
         var now = clock.GetUtcNow();
 
@@ -350,13 +366,34 @@ public sealed partial class ParkingRepository
             throw new ServiceException(409, $"Xung đột dữ liệu: Phiên bản hiện tại là {version}, mong muốn {request.ExpectedVersion}.");
         }
 
+        var now = clock.GetUtcNow();
+
+        // Both shifts must still be active at the handshake, not only when it was proposed.
+        await using (var shifts = new NpgsqlCommand("""
+            SELECT s.id FROM staff_shifts s
+            JOIN shift_handovers h ON s.id IN (h.sender_shift_id,h.receiver_shift_id)
+            WHERE h.id=@handoverId AND h.lot_id=@lotId AND s.lot_id=@lotId
+              AND s.ended_at IS NULL
+            ORDER BY s.id FOR UPDATE OF s
+            """, conn, tx))
+        {
+            shifts.Parameters.AddWithValue("lotId", lotId);
+            shifts.Parameters.AddWithValue("handoverId", handoverId);
+            await using var reader = await shifts.ExecuteReaderAsync(ct);
+            var active = 0;
+            while (await reader.ReadAsync(ct)) active++;
+            if (active != 2) throw new ServiceException(409, "Ca giao hoặc ca nhận đã kết thúc. Hãy cập nhật người nhận ca.");
+        }
+
         await using (var updateCmd = new NpgsqlCommand("""
             UPDATE shift_handovers
             SET status = 'Confirmed',
                 confirmed_at = @now,
                 confirmed_by_user_id = @actorId,
                 version = version + 1
-            WHERE lot_id = @lotId AND id = @handoverId
+            WHERE lot_id = @lotId AND id = @handoverId;
+            UPDATE staff_shifts SET ended_at=@now WHERE id=(SELECT sender_shift_id FROM shift_handovers WHERE id=@handoverId AND lot_id=@lotId)
+              AND lot_id=@lotId AND ended_at IS NULL
             """, conn, tx))
         {
             updateCmd.Parameters.AddWithValue("now", now);
@@ -485,10 +522,16 @@ public sealed partial class ParkingRepository
         await using (var updateCmd = new NpgsqlCommand("""
             UPDATE shift_handovers
             SET receiver_user_id = @newReceiver,
+                receiver_shift_id = @newShift,
                 version = version + 1
             WHERE lot_id = @lotId AND id = @handoverId
             """, conn, tx))
         {
+            await using var shiftCmd=new NpgsqlCommand("SELECT id FROM staff_shifts WHERE lot_id=@lot AND staff_user_id=@user AND ended_at IS NULL FOR UPDATE",conn,tx);
+            shiftCmd.Parameters.AddWithValue("lot",lotId);shiftCmd.Parameters.AddWithValue("user",request.ReceiverUserId);
+            var shiftId=await shiftCmd.ExecuteScalarAsync(ct);
+            if(shiftId is not Guid)throw new ServiceException(409,"Receiver must start a shift in this lot first.");
+            updateCmd.Parameters.AddWithValue("newShift",(Guid)shiftId);
             updateCmd.Parameters.AddWithValue("newReceiver", request.ReceiverUserId);
             updateCmd.Parameters.AddWithValue("lotId", lotId);
             updateCmd.Parameters.AddWithValue("handoverId", handoverId);

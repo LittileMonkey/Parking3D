@@ -1,4 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Parking.Parking.Application;
@@ -56,6 +56,12 @@ public sealed class HoldExpiryWorker(
                 try
                 {
                     await ProcessCycleAsync(stoppingToken);
+                    await using (var scope = scopeFactory.CreateAsyncScope())
+                    {
+                        var repository = scope.ServiceProvider.GetRequiredService<IParkingRepository>();
+                        var noShows = await repository.ExpireNoShowsAsync(stoppingToken);
+                        if (noShows > 0) logger.LogInformation("Marked {Count} bookings no-show.", noShows);
+                    }
                 }
                 catch (OperationCanceledException)
                     when (stoppingToken.IsCancellationRequested)

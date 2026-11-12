@@ -1,0 +1,583 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="641642a9-a711-4432-bd05-ab8c1ef00498" name="Admin@VNQ 2026-10-27 08:08:15" runUser="VNQ\Admin" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-10-27T08:08:15.2169903+07:00" queuing="2026-10-27T08:08:15.2169908+07:00" start="2026-10-27T08:08:11.6292798+07:00" finish="2026-10-27T08:08:17.0903604+07:00" />
+  <TestSettings name="default" id="49c59835-2f4d-40f2-b55b-64346708dae8">
+    <Deployment runDeploymentRoot="Admin_VNQ_2026-10-27_08_08_15" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="d5ea14f7-4637-488b-88c1-63df4a58dc79" testId="6e0ea71b-69d0-cad5-f474-46c8fb2b8441" testName="Parking.Microservices.Tests.ParkingWorkflowTests.ArrivalDeadlineBlocksOtherwiseValidSignedQr" computerName="VNQ" duration="00:00:00.0010000" startTime="2026-10-27T08:08:15.1624327+07:00" endTime="2026-10-27T08:08:15.1625010+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d5ea14f7-4637-488b-88c1-63df4a58dc79">
+      <Output>
+        <ErrorInfo>
+          <Message>Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="c7985261-16d0-4e86-bb3c-e25fe8fdf5ac" testId="53d7459d-2d31-7cb0-3a55-603db13e8bdc" testName="Parking.Microservices.Tests.CoreInvariantTests.OwnershipCheckDeniesNonOwnerAndNonStaff" computerName="VNQ" duration="00:00:00.0004629" startTime="2026-10-27T08:08:15.6633159+07:00" endTime="2026-10-27T08:08:15.6634166+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="c7985261-16d0-4e86-bb3c-e25fe8fdf5ac" />
+    <UnitTestResult executionId="816bc3fa-a571-4b4d-98b6-4a0d3ffa7891" testId="421f560a-9b9b-4d21-d264-84a00cd559c1" testName="Parking.Microservices.Tests.CoreInvariantTests.PaymentDoesNotOverwriteInvalidReservation(state: &quot;CONFIRMED&quot;, expired: False, paid: 60000, quote: 60000, available: True, expected: &quot;RECONCILIATION_REQUIRED&quot;)" computerName="VNQ" duration="00:00:00.0004131" startTime="2026-10-27T08:08:15.6416506+07:00" endTime="2026-10-27T08:08:15.6418221+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="816bc3fa-a571-4b4d-98b6-4a0d3ffa7891" />
+    <UnitTestResult executionId="dfed87c8-fce2-4cbe-ae5f-a92fc3a272d4" testId="d8667043-ab56-6a7b-4f33-c37c77c59588" testName="Parking.Microservices.Tests.ParkingWorkflowTests.ConfirmedQrCreatesOneSessionAndOccupancyThenRetryIsSafe" computerName="VNQ" duration="00:00:00.0010000" startTime="2026-10-27T08:08:15.1471208+07:00" endTime="2026-10-27T08:08:15.1471916+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="dfed87c8-fce2-4cbe-ae5f-a92fc3a272d4">
+      <Output>
+        <ErrorInfo>
+          <Message>Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="0543aee4-5ae2-472e-8059-9a9c64cade09" testId="6e7154c9-34f3-1de1-0d5d-d947a8cb598c" testName="Parking.Microservices.Tests.AiServiceInvariantTests.ReviewPlateSanitization_AllowsFormattedPlateInputWithoutFailing" computerName="VNQ" duration="00:00:00.7168440" startTime="2026-10-27T08:08:15.0612252+07:00" endTime="2026-10-27T08:08:15.6027542+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="0543aee4-5ae2-472e-8059-9a9c64cade09" />
+    <UnitTestResult executionId="e5cd3790-ea58-4797-ba0b-45bb0356c547" testId="b0651b6c-7cda-eac9-0bd6-9133445ce186" testName="Parking.Microservices.Tests.PricingEngineTests.Calculate_ShouldApplyGoldStarDiscount_WhenCustomerIsGoldStarMember" computerName="VNQ" duration="00:00:00.0005328" startTime="2026-10-27T08:08:15.9354421+07:00" endTime="2026-10-27T08:08:15.9355621+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="e5cd3790-ea58-4797-ba0b-45bb0356c547" />
+    <UnitTestResult executionId="10287e57-b86a-4e18-87f5-ded6a73bb6b7" testId="29784596-ed99-d7c8-b27c-8e695528527f" testName="Parking.Microservices.Tests.CoreInvariantTests.PriceUsesFullDurationBlocksAndCap(minutes: 120, expected: 60000)" computerName="VNQ" duration="00:00:00.0000319" startTime="2026-10-27T08:08:15.6825951+07:00" endTime="2026-10-27T08:08:15.6827199+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="10287e57-b86a-4e18-87f5-ded6a73bb6b7" />
+    <UnitTestResult executionId="0276d271-9a4f-4032-b193-9274e8c219d6" testId="e92f516f-1b92-a999-f791-520de52ec73a" testName="Parking.Microservices.Tests.CoreInvariantTests.ImagesMustMatchSupportedMagicAndSize" computerName="VNQ" duration="00:00:00.2969364" startTime="2026-10-27T08:08:15.6919710+07:00" endTime="2026-10-27T08:08:15.9192818+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="0276d271-9a4f-4032-b193-9274e8c219d6" />
+    <UnitTestResult executionId="34749652-4fb8-4d7e-8985-f8ccfb908b6f" testId="70ffff19-79c3-16b6-6880-634784181d9c" testName="Parking.Microservices.Tests.CoreInvariantTests.PasswordIsSaltedAndVerifiedWithoutPlaintext" computerName="VNQ" duration="00:00:01.0308928" startTime="2026-10-27T08:08:15.9299187+07:00" endTime="2026-10-27T08:08:16.9507701+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="34749652-4fb8-4d7e-8985-f8ccfb908b6f" />
+    <UnitTestResult executionId="738e134e-7697-4ba6-86bd-eaaa4f35720e" testId="eaa34a72-b766-1135-f992-ff3640bbf10e" testName="Parking.Microservices.Tests.QrTokenTests.MalformedQrIsRejected(value: &quot;anything&quot;)" computerName="VNQ" duration="00:00:00.0004612" startTime="2026-10-27T08:08:16.3033015+07:00" endTime="2026-10-27T08:08:16.3034374+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="738e134e-7697-4ba6-86bd-eaaa4f35720e" />
+    <UnitTestResult executionId="deeae346-a985-495f-ae22-4689c0785a5a" testId="9a60066e-01af-88d3-122e-ba7ee6bf4989" testName="Parking.Microservices.Tests.ParkingArchitectureTests.DomainDoesNotReferenceApplicationOrInfrastructure" computerName="VNQ" duration="00:00:00.7189041" startTime="2026-10-27T08:08:15.0611318+07:00" endTime="2026-10-27T08:08:15.6079062+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="deeae346-a985-495f-ae22-4689c0785a5a" />
+    <UnitTestResult executionId="3647e3c4-cbda-47ac-b0e9-3d269f7c9eef" testId="463b7011-961a-f447-1df6-6bd3448fd1b5" testName="Parking.Microservices.Tests.AiServiceInvariantTests.PlateSeparation_ProducesValidAlphanumericForDatabaseAndFormattedForDisplay(rawInput: &quot;51K-888.88&quot;, expectedDbPlate: &quot;51K88888&quot;, expectedDisplayPlate: &quot;51K-888.88&quot;)" computerName="VNQ" duration="00:00:00.0000167" startTime="2026-10-27T08:08:16.0495966+07:00" endTime="2026-10-27T08:08:16.0496773+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="3647e3c4-cbda-47ac-b0e9-3d269f7c9eef" />
+    <UnitTestResult executionId="3f0b1f9d-d70f-47a8-99a8-9d4a764c3a4d" testId="e1bd57f5-a2e9-9d0f-4869-80a4a477443e" testName="Parking.Microservices.Tests.CoreInvariantTests.PaymentDoesNotOverwriteInvalidReservation(state: &quot;PENDING_PAYMENT&quot;, expired: False, paid: 30000, quote: 60000, available: True, expected: &quot;PARTIAL_PAYMENT&quot;)" computerName="VNQ" duration="00:00:00.0000151" startTime="2026-10-27T08:08:15.6481299+07:00" endTime="2026-10-27T08:08:15.6482185+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="3f0b1f9d-d70f-47a8-99a8-9d4a764c3a4d" />
+    <UnitTestResult executionId="d8f8b942-30d2-4f30-8e97-bed55eeebf75" testId="4f8fa584-e6a2-24c7-4aa9-e3a54e80206f" testName="Parking.Microservices.Tests.CoreInvariantTests.SlotAvailabilityStatePriorityIsStrict(opStatus: &quot;ACTIVE&quot;, physicallyOccupied: False, isReserved: False, expectedStatus: &quot;AVAILABLE&quot;)" computerName="VNQ" duration="00:00:00.0000041" startTime="2026-10-27T08:08:15.6291060+07:00" endTime="2026-10-27T08:08:15.6292474+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d8f8b942-30d2-4f30-8e97-bed55eeebf75" />
+    <UnitTestResult executionId="84cf63b5-2203-4021-ab2e-ead376b4f6e7" testId="9964c4d9-af6a-3058-5861-64760dc24f22" testName="Parking.Microservices.Tests.PricingEngineTests.Calculate_ShouldCapAtDailyLimit_WhenTotalCostExceedsDailyCap" computerName="VNQ" duration="00:00:00.0010636" startTime="2026-10-27T08:08:15.9462170+07:00" endTime="2026-10-27T08:08:15.9463287+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="84cf63b5-2203-4021-ab2e-ead376b4f6e7" />
+    <UnitTestResult executionId="cb12f96d-75ed-4b14-8c70-8481d5fab4c8" testId="ebff1897-bba1-cdf6-2034-d0f3aa2d76f8" testName="Parking.Microservices.Tests.QrTokenTests.ObservedPlateRequiresSupportedCharacters(value: &quot;51a-123.45&quot;, valid: True, normalized: &quot;51A12345&quot;)" computerName="VNQ" duration="00:00:00.0000190" startTime="2026-10-27T08:08:16.3203372+07:00" endTime="2026-10-27T08:08:16.3204569+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="cb12f96d-75ed-4b14-8c70-8481d5fab4c8" />
+    <UnitTestResult executionId="ea578ac7-c335-4488-a8f9-439fc2853c3d" testId="a0858109-b79d-2770-0410-be02c8da00c5" testName="Parking.Microservices.Tests.QrTokenTests.ObservedPlateRequiresSupportedCharacters(value: &quot;&quot;, valid: False, normalized: &quot;&quot;)" computerName="VNQ" duration="00:00:00.0004042" startTime="2026-10-27T08:08:16.3163832+07:00" endTime="2026-10-27T08:08:16.3164998+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="ea578ac7-c335-4488-a8f9-439fc2853c3d" />
+    <UnitTestResult executionId="2a5ad5c2-52ab-42ec-824d-2fb6f1d5d4d6" testId="9e627a91-3ebf-ae5f-b3cd-ac31150f859a" testName="Parking.Microservices.Tests.CoreInvariantTests.PaymentDoesNotOverwriteInvalidReservation(state: &quot;PENDING_PAYMENT&quot;, expired: False, paid: 70000, quote: 60000, available: True, expected: &quot;OVERPAYMENT_RECONCILIATION&quot;)" computerName="VNQ" duration="00:00:00.0000039" startTime="2026-10-27T08:08:15.6550846+07:00" endTime="2026-10-27T08:08:15.6552218+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="2a5ad5c2-52ab-42ec-824d-2fb6f1d5d4d6" />
+    <UnitTestResult executionId="d41a8d6d-e839-46a0-b1b2-932f7fce16b4" testId="e467c0c4-9397-4769-d2bb-0c4e052b1be0" testName="Parking.Microservices.Tests.ParkingWorkflowTests.PendingBookingCannotIssueQrAndHoldExpiryReleasesOnlyReservation" computerName="VNQ" duration="00:00:00.0010000" startTime="2026-10-27T08:08:15.1725979+07:00" endTime="2026-10-27T08:08:15.1726718+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d41a8d6d-e839-46a0-b1b2-932f7fce16b4">
+      <Output>
+        <ErrorInfo>
+          <Message>Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="c18c5567-01aa-4f7a-8134-2c93043629fd" testId="0f31308b-4b85-99a1-2d98-69f469e1078f" testName="Parking.Microservices.Tests.PricingEngineTests.Calculate_ShouldChargeInitialRate_WhenDurationWithinFirst60Minutes" computerName="VNQ" duration="00:00:00.0020393" startTime="2026-10-27T08:08:15.9426224+07:00" endTime="2026-10-27T08:08:15.9427377+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="c18c5567-01aa-4f7a-8134-2c93043629fd" />
+    <UnitTestResult executionId="e49ec3fa-f286-43eb-bf32-cd6c914ce015" testId="b44cce19-a6ef-fdcb-1e14-45c44736f405" testName="Parking.Microservices.Tests.AiServiceInvariantTests.PlateSeparation_ProducesValidAlphanumericForDatabaseAndFormattedForDisplay(rawInput: &quot;59-P1 678.90&quot;, expectedDbPlate: &quot;59P167890&quot;, expectedDisplayPlate: &quot;59-P1 678.90&quot;)" computerName="VNQ" duration="00:00:00.0013593" startTime="2026-10-27T08:08:16.0381310+07:00" endTime="2026-10-27T08:08:16.0382595+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="e49ec3fa-f286-43eb-bf32-cd6c914ce015" />
+    <UnitTestResult executionId="cd0671ec-c8a6-4c8c-adc9-70f58c714116" testId="3fc1d5f9-e681-a7d0-bbac-3d8d39230829" testName="Parking.Microservices.Tests.CoreInvariantTests.SlotAvailabilityStatePriorityIsStrict(opStatus: &quot;ACTIVE&quot;, physicallyOccupied: False, isReserved: True, expectedStatus: &quot;HELD&quot;)" computerName="VNQ" duration="00:00:00.0006419" startTime="2026-10-27T08:08:15.6188057+07:00" endTime="2026-10-27T08:08:15.6188933+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="cd0671ec-c8a6-4c8c-adc9-70f58c714116" />
+    <UnitTestResult executionId="527e93dc-cf39-4c49-b85a-2427d1d59c2d" testId="00178c12-733b-2346-5d8f-bb740652be59" testName="Parking.Microservices.Tests.QrTokenTests.ObservedPlateRequiresSupportedCharacters(value: &quot;51A 12345&quot;, valid: True, normalized: &quot;51A12345&quot;)" computerName="VNQ" duration="00:00:00.0000041" startTime="2026-10-27T08:08:16.3234820+07:00" endTime="2026-10-27T08:08:16.3235546+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="527e93dc-cf39-4c49-b85a-2427d1d59c2d" />
+    <UnitTestResult executionId="ea962ba0-7bf0-4a4f-a88a-073f13087d78" testId="e414e452-f572-ed31-a601-1ece2808fa16" testName="Parking.Microservices.Tests.AiServiceInvariantTests.ImageRules_ValidatesMagicBytes_ForJpegAndPng" computerName="VNQ" duration="00:00:00.0005058" startTime="2026-10-27T08:08:16.0536061+07:00" endTime="2026-10-27T08:08:16.0536991+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="ea962ba0-7bf0-4a4f-a88a-073f13087d78" />
+    <UnitTestResult executionId="b35ef872-6aec-476f-a477-5efe4eacf8ba" testId="79d480ce-1109-07e3-8738-f33ea778297f" testName="Parking.Microservices.Tests.ParkingWorkflowTests.AvailabilityValidatesRangeLevelVehicleTypeClosureAndOverlappingBookings" computerName="VNQ" duration="00:00:00.0010000" startTime="2026-10-27T08:08:15.1218747+07:00" endTime="2026-10-27T08:08:15.1219515+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="b35ef872-6aec-476f-a477-5efe4eacf8ba">
+      <Output>
+        <ErrorInfo>
+          <Message>Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="720a2c23-f172-423c-9273-6bb3fa2953f6" testId="3196e1db-94a0-b9a0-b3a9-b5b735bb2d6c" testName="Parking.Microservices.Tests.CalculateFeeQueryValidatorTests.ShouldHaveError_WhenExitTimeEqualsEntryTime" computerName="VNQ" duration="00:00:00.0012978" startTime="2026-10-27T08:08:16.3419043+07:00" endTime="2026-10-27T08:08:16.3420276+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="720a2c23-f172-423c-9273-6bb3fa2953f6" />
+    <UnitTestResult executionId="5223ed19-8294-4c3d-bdd4-7b99eb2ad587" testId="870a88b4-bf9f-972d-d8b7-f85be0cc930f" testName="Parking.Microservices.Tests.ParkingWorkflowTests.ConcurrentScansHaveExactlyOneEffect" computerName="VNQ" duration="00:00:00.0010000" startTime="2026-10-27T08:08:15.1419013+07:00" endTime="2026-10-27T08:08:15.1419748+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="5223ed19-8294-4c3d-bdd4-7b99eb2ad587">
+      <Output>
+        <ErrorInfo>
+          <Message>Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="6e0bbe89-9ab0-4b53-a23b-bfcbf3c25372" testId="7594c362-e095-57c3-383e-5af7585da249" testName="Parking.Microservices.Tests.CoreInvariantTests.SlotAvailabilityStatePriorityIsStrict(opStatus: &quot;MAINTENANCE&quot;, physicallyOccupied: False, isReserved: False, expectedStatus: &quot;MAINTENANCE&quot;)" computerName="VNQ" duration="00:00:00.0000113" startTime="2026-10-27T08:08:15.6228803+07:00" endTime="2026-10-27T08:08:15.6230210+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="6e0bbe89-9ab0-4b53-a23b-bfcbf3c25372" />
+    <UnitTestResult executionId="66b53e12-39d9-4ae5-b27d-5b1ca624f4f0" testId="c4ebe56e-5b9c-fccf-46f5-3ae45f338efb" testName="Parking.Microservices.Tests.PricingEngineTests.Calculate_ShouldRoundUpToNext15MinBlock_WhenDurationExceedsInitialBlock" computerName="VNQ" duration="00:00:01.0485774" startTime="2026-10-27T08:08:15.0613068+07:00" endTime="2026-10-27T08:08:15.9300680+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="66b53e12-39d9-4ae5-b27d-5b1ca624f4f0" />
+    <UnitTestResult executionId="d0a94e52-f9c3-4dc6-b224-ce0621b3ad75" testId="ab553183-beef-f2d6-a28b-9a9e7418534b" testName="Parking.Microservices.Tests.AiServiceInvariantTests.PlateSeparation_ProducesValidAlphanumericForDatabaseAndFormattedForDisplay(rawInput: &quot;30H99999&quot;, expectedDbPlate: &quot;30H99999&quot;, expectedDisplayPlate: &quot;30H-999.99&quot;)" computerName="VNQ" duration="00:00:00.4292773" startTime="2026-10-27T08:08:15.6186956+07:00" endTime="2026-10-27T08:08:16.0317282+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d0a94e52-f9c3-4dc6-b224-ce0621b3ad75" />
+    <UnitTestResult executionId="c0ee5885-3634-4c2f-ae07-98eca6dfbca8" testId="ebd3cd7e-24ee-6d7d-1d80-d4200918e4a7" testName="Parking.Microservices.Tests.PricingEngineTests.Calculate_ShouldApplyPeakMultiplier_WhenBlocksFallIntoPeakHours" computerName="VNQ" duration="00:00:00.0004458" startTime="2026-10-27T08:08:15.9525647+07:00" endTime="2026-10-27T08:08:15.9526474+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="c0ee5885-3634-4c2f-ae07-98eca6dfbca8" />
+    <UnitTestResult executionId="b8135d56-8998-4b4b-9837-ff3ccaaf31a7" testId="bea5ec60-ba8e-a244-9358-e86f629da359" testName="Parking.Microservices.Tests.CoreInvariantTests.PriceUsesFullDurationBlocksAndCap(minutes: 300, expected: 120000)" computerName="VNQ" duration="00:00:00.0079395" startTime="2026-10-27T08:08:15.6670139+07:00" endTime="2026-10-27T08:08:15.6671402+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="b8135d56-8998-4b4b-9837-ff3ccaaf31a7" />
+    <UnitTestResult executionId="a3b56d9c-b29a-4277-bd33-2f3fe30a39ef" testId="fdf04c04-e289-a624-9fea-1988c24bafaa" testName="Parking.Microservices.Tests.ParkingArchitectureTests.ApplicationDoesNotReferenceTransportOrPersistence" computerName="VNQ" duration="00:00:00.3168647" startTime="2026-10-27T08:08:15.6185810+07:00" endTime="2026-10-27T08:08:15.9215853+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="a3b56d9c-b29a-4277-bd33-2f3fe30a39ef" />
+    <UnitTestResult executionId="f6e68332-4774-4ce0-a166-5e7bc2baa602" testId="1a5b1d8b-c1b1-39f9-32f5-bf3e6b5d1b46" testName="Parking.Microservices.Tests.PricingEngineTests.Calculate_ShouldThrowArgumentException_WhenExitTimeBeforeOrEqualToEntryTime" computerName="VNQ" duration="00:00:00.0011494" startTime="2026-10-27T08:08:15.9392510+07:00" endTime="2026-10-27T08:08:15.9393322+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="f6e68332-4774-4ce0-a166-5e7bc2baa602" />
+    <UnitTestResult executionId="6c72edf4-5f60-4f65-9967-5bdd7bc53ad1" testId="eaf0c61e-8d6d-1dff-13ab-cd1fd1938357" testName="Parking.Microservices.Tests.QrTokenTests.QrBindsBookingLotVehicleAndRejectsTamperWrongKeyAndExpiry" computerName="VNQ" duration="00:00:01.4139246" startTime="2026-10-27T08:08:15.0588214+07:00" endTime="2026-10-27T08:08:16.2954320+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="6c72edf4-5f60-4f65-9967-5bdd7bc53ad1" />
+    <UnitTestResult executionId="dc560243-4e6e-49f4-87f2-339ac70a1924" testId="e4c23215-1556-0599-f254-40047e632660" testName="Parking.Microservices.Tests.ParkingWorkflowTests.FailureAfterConsumeRollsBackAllBusinessWrites" computerName="VNQ" duration="00:00:00.0010000" startTime="2026-10-27T08:08:15.1904779+07:00" endTime="2026-10-27T08:08:15.1905249+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="dc560243-4e6e-49f4-87f2-339ac70a1924">
+      <Output>
+        <ErrorInfo>
+          <Message>Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="f534f5c3-9096-4f68-83ab-41e5373ccfb6" testId="6c0bfe57-02b1-6af7-d927-10b7a1903552" testName="Parking.Microservices.Tests.ParkingWorkflowTests.RealHttpJwtGrpcScopePaymentAndSingleUseQrWorkflow" computerName="VNQ" duration="00:00:00.0010000" startTime="2026-10-27T08:08:15.1527187+07:00" endTime="2026-10-27T08:08:15.1528142+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="f534f5c3-9096-4f68-83ab-41e5373ccfb6">
+      <Output>
+        <ErrorInfo>
+          <Message>Set local test DB connection and PARKING_TEST_API_DLL / PARKING_TEST_IDENTITY_DLL to freshly built hosts.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="b9e38cd7-982c-48ff-9dc3-d8923d9952b9" testId="2677961e-b134-2938-42fd-cd165d4921ed" testName="Parking.Microservices.Tests.ParkingWorkflowTests.TooEarlyIsRejectedWithoutConsumingQr" computerName="VNQ" duration="00:00:00.0010000" startTime="2026-10-27T08:08:15.1578098+07:00" endTime="2026-10-27T08:08:15.1578833+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="b9e38cd7-982c-48ff-9dc3-d8923d9952b9">
+      <Output>
+        <ErrorInfo>
+          <Message>Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="8f21e223-aee0-41c5-beed-656cf1af1dcf" testId="66d0cc6c-e1ee-923d-992c-2926a8b25b05" testName="Parking.Microservices.Tests.CalculateFeeQueryValidatorTests.ShouldNotHaveError_WhenQueryIsValid" computerName="VNQ" duration="00:00:00.0015074" startTime="2026-10-27T08:08:16.3323784+07:00" endTime="2026-10-27T08:08:16.3324777+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="8f21e223-aee0-41c5-beed-656cf1af1dcf" />
+    <UnitTestResult executionId="651375c6-aad9-4e63-95f0-83e3ddafc6fd" testId="0b891af1-8775-19bc-0d4d-873f9d96d89c" testName="Parking.Microservices.Tests.ParkingWorkflowTests.StaffScopeCustomerDeniedAndRevokedAssignmentAreCheckedAgainstIdentityDatabase" computerName="VNQ" duration="00:00:00.0010000" startTime="2026-10-27T08:08:15.0609947+07:00" endTime="2026-10-27T08:08:15.0623780+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="651375c6-aad9-4e63-95f0-83e3ddafc6fd">
+      <Output>
+        <ErrorInfo>
+          <Message>Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="4bbb51a3-8c2c-4b07-97b1-daf98b4d7010" testId="f4215fe4-ac31-f276-27bd-cc19797b07be" testName="Parking.Microservices.Tests.ParkingWorkflowTests.HoldExpiryNeverReleasesPhysicalOccupancyEvenForAnotherExpiredHold" computerName="VNQ" duration="00:00:00.0010000" startTime="2026-10-27T08:08:15.1121639+07:00" endTime="2026-10-27T08:08:15.1123115+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="4bbb51a3-8c2c-4b07-97b1-daf98b4d7010">
+      <Output>
+        <ErrorInfo>
+          <Message>Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="388fac99-58e4-4b74-affb-9282fa3b0035" testId="a1b01072-42ee-51b8-b0b6-a8610d61ff4a" testName="Parking.Microservices.Tests.AiServiceInvariantTests.PlateSeparation_ProducesValidAlphanumericForDatabaseAndFormattedForDisplay(rawInput: &quot;51k 888.88&quot;, expectedDbPlate: &quot;51K88888&quot;, expectedDisplayPlate: &quot;51K-888.88&quot;)" computerName="VNQ" duration="00:00:00.0006208" startTime="2026-10-27T08:08:16.0349866+07:00" endTime="2026-10-27T08:08:16.0350575+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="388fac99-58e4-4b74-affb-9282fa3b0035" />
+    <UnitTestResult executionId="d06b889b-6a90-4fcf-bd28-e3ba6601e2cc" testId="18ed3568-d41c-0c15-f667-86b9a4672a54" testName="Parking.Microservices.Tests.CoreInvariantTests.NearestDistanceIsGeographic" computerName="VNQ" duration="00:00:00.0072429" startTime="2026-10-27T08:08:15.6854565+07:00" endTime="2026-10-27T08:08:15.6855371+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d06b889b-6a90-4fcf-bd28-e3ba6601e2cc" />
+    <UnitTestResult executionId="2b5bf557-6726-4d35-a8e8-8cab315f7029" testId="6de286c5-367d-9caf-57b2-fe946a25e154" testName="Parking.Microservices.Tests.CoreInvariantTests.SlotAvailabilityStatePriorityIsStrict(opStatus: &quot;DISABLED&quot;, physicallyOccupied: False, isReserved: False, expectedStatus: &quot;MAINTENANCE&quot;)" computerName="VNQ" duration="00:00:00.7168741" startTime="2026-10-27T08:08:15.0612681+07:00" endTime="2026-10-27T08:08:15.6102090+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="2b5bf557-6726-4d35-a8e8-8cab315f7029" />
+    <UnitTestResult executionId="ceb1cca7-4d0c-457f-937f-c08d6d5f5f67" testId="e9759334-a89e-0d2c-fe2f-353a23267530" testName="Parking.Microservices.Tests.CoreInvariantTests.PriceUsesFullDurationBlocksAndCap(minutes: 16, expected: 15000)" computerName="VNQ" duration="00:00:00.0006215" startTime="2026-10-27T08:08:15.6760074+07:00" endTime="2026-10-27T08:08:15.6761554+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="ceb1cca7-4d0c-457f-937f-c08d6d5f5f67" />
+    <UnitTestResult executionId="d522b974-d569-48ff-857e-6a2441d2c3ec" testId="3485455e-9fa1-16e1-3fdf-d6253408e4b8" testName="Parking.Microservices.Tests.QrTokenTests.MalformedQrIsRejected(value: &quot;&quot;)" computerName="VNQ" duration="00:00:00.0000222" startTime="2026-10-27T08:08:16.3072034+07:00" endTime="2026-10-27T08:08:16.3073224+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d522b974-d569-48ff-857e-6a2441d2c3ec" />
+    <UnitTestResult executionId="68a39844-c87f-4796-ba09-e102f0ba9532" testId="59d556ce-40db-72ee-f560-41a3e6ed6fe3" testName="Parking.Microservices.Tests.CoreInvariantTests.SlotAvailabilityStatePriorityIsStrict(opStatus: &quot;ACTIVE&quot;, physicallyOccupied: True, isReserved: False, expectedStatus: &quot;OCCUPIED&quot;)" computerName="VNQ" duration="00:00:00.0000028" startTime="2026-10-27T08:08:15.6348770+07:00" endTime="2026-10-27T08:08:15.6374968+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="68a39844-c87f-4796-ba09-e102f0ba9532" />
+    <UnitTestResult executionId="bd09f5fe-7eb7-4351-a981-a47572c7523f" testId="63b05737-1311-e9a4-f8fa-357fe126f8ec" testName="Parking.Microservices.Tests.ParkingWorkflowTests.MaintenanceBlocksOtherwiseValidCheckIn" computerName="VNQ" duration="00:00:00.0010000" startTime="2026-10-27T08:08:15.1776057+07:00" endTime="2026-10-27T08:08:15.1776737+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="bd09f5fe-7eb7-4351-a981-a47572c7523f">
+      <Output>
+        <ErrorInfo>
+          <Message>Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="e61b515f-ea61-4fd0-b6cc-fc8986a477f5" testId="067e4d3e-255c-7372-db94-bc3bf142b797" testName="Parking.Microservices.Tests.CoreInvariantTests.HoldExpiryMustNotReleasePhysicallyOccupiedSlot" computerName="VNQ" duration="00:00:00.0001562" startTime="2026-10-27T08:08:15.6884518+07:00" endTime="2026-10-27T08:08:15.6885700+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="e61b515f-ea61-4fd0-b6cc-fc8986a477f5" />
+    <UnitTestResult executionId="a4199e9f-68aa-4ee9-959b-cbf7342c8b0d" testId="b906ea5d-7006-35be-061e-206bc0bf2630" testName="Parking.Microservices.Tests.CoreInvariantTests.PaymentDoesNotOverwriteInvalidReservation(state: &quot;PENDING_PAYMENT&quot;, expired: False, paid: 60000, quote: 60000, available: False, expected: &quot;LATE_PAYMENT_RECONCILIATION&quot;)" computerName="VNQ" duration="00:00:00.0000036" startTime="2026-10-27T08:08:15.6585383+07:00" endTime="2026-10-27T08:08:15.6586988+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="a4199e9f-68aa-4ee9-959b-cbf7342c8b0d" />
+    <UnitTestResult executionId="1e70f7a4-c81d-4366-9d14-cb153d2155df" testId="41b10a75-3395-48aa-f3f8-c5a11b473999" testName="Parking.Microservices.Tests.CoreInvariantTests.PriceUsesFullDurationBlocksAndCap(minutes: 15, expected: 7500)" computerName="VNQ" duration="00:00:00.0000222" startTime="2026-10-27T08:08:15.6790880+07:00" endTime="2026-10-27T08:08:15.6791792+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="1e70f7a4-c81d-4366-9d14-cb153d2155df" />
+    <UnitTestResult executionId="1b3a6438-9d51-471d-ab46-680864f09867" testId="2a733699-05f7-38ae-efef-db230d012141" testName="Parking.Microservices.Tests.PricingEngineTests.Calculate_ShouldSplitAtMidnight_WhenParkingAcrossMultipleDays" computerName="VNQ" duration="00:00:00.0039941" startTime="2026-10-27T08:08:15.9493507+07:00" endTime="2026-10-27T08:08:15.9494286+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="1b3a6438-9d51-471d-ab46-680864f09867" />
+    <UnitTestResult executionId="31687a2f-825d-4b1d-9b0d-0eb813eb24b4" testId="6707802a-ef68-f388-4a76-8a5b33408974" testName="Parking.Microservices.Tests.QrTokenTests.MalformedQrIsRejected(value: &quot;PARK1.%%%..&quot;)" computerName="VNQ" duration="00:00:00.0004259" startTime="2026-10-27T08:08:16.2995892+07:00" endTime="2026-10-27T08:08:16.2996719+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="31687a2f-825d-4b1d-9b0d-0eb813eb24b4" />
+    <UnitTestResult executionId="11986ca1-006c-41da-8674-a86deb8cf497" testId="498c70e8-7833-6e85-0692-c5467ee43119" testName="Parking.Microservices.Tests.CoreInvariantTests.PaymentDoesNotOverwriteInvalidReservation(state: &quot;PENDING_PAYMENT&quot;, expired: False, paid: 60000, quote: 60000, available: True, expected: &quot;CONFIRMED&quot;)" computerName="VNQ" duration="00:00:00.0008567" startTime="2026-10-27T08:08:15.6449443+07:00" endTime="2026-10-27T08:08:15.6450400+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="11986ca1-006c-41da-8674-a86deb8cf497" />
+    <UnitTestResult executionId="09ca29a6-dea5-425c-abae-1785bd2c4360" testId="0b7ce539-0338-e628-41bb-5544923daed2" testName="Parking.Microservices.Tests.CoreInvariantTests.CapsArePerLocalDay" computerName="VNQ" duration="00:00:00.0003154" startTime="2026-10-27T08:08:15.9255913+07:00" endTime="2026-10-27T08:08:15.9260097+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="09ca29a6-dea5-425c-abae-1785bd2c4360" />
+    <UnitTestResult executionId="d357e06b-dc69-45a1-97b8-8fd738040911" testId="c1b583e3-3ce3-7d92-1a76-3c3f8a2221e7" testName="Parking.Microservices.Tests.AiServiceInvariantTests.PlateSeparation_ProducesValidAlphanumericForDatabaseAndFormattedForDisplay(rawInput: &quot;43A-123.45&quot;, expectedDbPlate: &quot;43A12345&quot;, expectedDisplayPlate: &quot;43A-123.45&quot;)" computerName="VNQ" duration="00:00:00.0000441" startTime="2026-10-27T08:08:16.0461721+07:00" endTime="2026-10-27T08:08:16.0462467+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d357e06b-dc69-45a1-97b8-8fd738040911" />
+    <UnitTestResult executionId="5b87e717-d2f0-45e6-9d09-d2a703ada70c" testId="891bad3a-5ac5-662c-5cf6-524d2aa0d257" testName="Parking.Microservices.Tests.ParkingWorkflowTests.ReissueRevokesOldQrAndWrongPlateOrGateDoesNotConsumeNewQr" computerName="VNQ" duration="00:00:00.0010000" startTime="2026-10-27T08:08:15.1677407+07:00" endTime="2026-10-27T08:08:15.1677892+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="5b87e717-d2f0-45e6-9d09-d2a703ada70c">
+      <Output>
+        <ErrorInfo>
+          <Message>Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="0dccc30b-60ed-4ecc-b396-51f3be7d2931" testId="87ff0600-83b2-c7c6-894e-ec5753e1cf12" testName="Parking.Microservices.Tests.CoreInvariantTests.PaymentDoesNotOverwriteInvalidReservation(state: &quot;PENDING_PAYMENT&quot;, expired: True, paid: 60000, quote: 60000, available: True, expected: &quot;LATE_PAYMENT_RECONCILIATION&quot;)" computerName="VNQ" duration="00:00:00.0000044" startTime="2026-10-27T08:08:15.6512209+07:00" endTime="2026-10-27T08:08:15.6513231+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="0dccc30b-60ed-4ecc-b396-51f3be7d2931" />
+    <UnitTestResult executionId="ef08706d-2f30-45ba-8e4e-bee50cbee558" testId="bdbd5fc7-d200-44ea-952e-6229d66c0bc1" testName="Parking.Microservices.Tests.CoreInvariantTests.OcrWithoutProviderFailsInsteadOfInventingPlate" computerName="VNQ" duration="00:00:00.0167474" startTime="2026-10-27T08:08:16.9600315+07:00" endTime="2026-10-27T08:08:16.9676567+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="ef08706d-2f30-45ba-8e4e-bee50cbee558" />
+    <UnitTestResult executionId="049c8134-1c12-4120-8076-0d8f78d55b93" testId="0847e5af-3504-bf99-1f4c-945e40c76d44" testName="Parking.Microservices.Tests.QrTokenTests.ObservedPlateRequiresSupportedCharacters(value: &quot;51A/12345&quot;, valid: False, normalized: &quot;&quot;)" computerName="VNQ" duration="00:00:00.0044484" startTime="2026-10-27T08:08:16.3111590+07:00" endTime="2026-10-27T08:08:16.3112770+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="049c8134-1c12-4120-8076-0d8f78d55b93" />
+    <UnitTestResult executionId="4753e271-8a49-4788-a2b7-f4f84faf9da4" testId="d9b63bae-f980-a30c-24d5-a79d0f22cf28" testName="Parking.Microservices.Tests.CalculateFeeQueryValidatorTests.ShouldHaveError_WhenParkingLotIdIsEmpty" computerName="VNQ" duration="00:00:00.0039387" startTime="2026-10-27T08:08:16.3376054+07:00" endTime="2026-10-27T08:08:16.3377270+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="4753e271-8a49-4788-a2b7-f4f84faf9da4" />
+    <UnitTestResult executionId="ff727d54-c59c-4412-9ba8-fe511e8f4bec" testId="3d281c13-2d72-d7dd-259a-58f494516f92" testName="Parking.Microservices.Tests.CalculateFeeQueryValidatorTests.ShouldHaveError_WhenExitTimeIsBeforeEntryTime" computerName="VNQ" duration="00:00:01.4316548" startTime="2026-10-27T08:08:15.0611847+07:00" endTime="2026-10-27T08:08:16.3252777+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="ff727d54-c59c-4412-9ba8-fe511e8f4bec" />
+    <UnitTestResult executionId="25ab6267-cc16-48fc-8a4a-d83ad660625b" testId="5ebb157c-ad86-4e2c-8b50-114c5287e288" testName="Parking.Microservices.Tests.CalculateFeeQueryValidatorTests.ShouldHaveError_WhenParkingDurationExceeds30Days" computerName="VNQ" duration="00:00:00.0037418" startTime="2026-10-27T08:08:16.3286678+07:00" endTime="2026-10-27T08:08:16.3288261+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="25ab6267-cc16-48fc-8a4a-d83ad660625b" />
+    <UnitTestResult executionId="159784f8-129a-4568-8207-766a9f53be72" testId="d5ca7ae5-75fa-0b6b-6834-39404a809eba" testName="Parking.Microservices.Tests.ParkingWorkflowTests.ReplayKeyCannotBeReusedForAnotherBodyAndExitGateCannotAdmit" computerName="VNQ" duration="00:00:00.0010000" startTime="2026-10-27T08:08:15.1822375+07:00" endTime="2026-10-27T08:08:15.1823010+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="159784f8-129a-4568-8207-766a9f53be72">
+      <Output>
+        <ErrorInfo>
+          <Message>Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="2976b727-f58f-438d-b4b2-8ae1a3969c8e" testId="70715734-2cd1-1916-9042-5b09af68b297" testName="Parking.Microservices.Tests.AiServiceInvariantTests.PythonPlateDetectionResponse_DeserializesLayoutEnrichedResponse" computerName="VNQ" duration="00:00:00.2446461" startTime="2026-10-27T08:08:16.0575832+07:00" endTime="2026-10-27T08:08:16.2795784+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="2976b727-f58f-438d-b4b2-8ae1a3969c8e" />
+    <UnitTestResult executionId="0bcc1f3f-df23-48f2-93c5-06eb3b95796a" testId="c031ac26-ba8b-cbf7-d48c-6381ba63ddac" testName="Parking.Microservices.Tests.ParkingWorkflowTests.DatabaseExpiryAndArrivalDeadlineAreRechecked" computerName="VNQ" duration="00:00:00.0010000" startTime="2026-10-27T08:08:15.1273273+07:00" endTime="2026-10-27T08:08:15.1273976+07:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="0bcc1f3f-df23-48f2-93c5-06eb3b95796a">
+      <Output>
+        <ErrorInfo>
+          <Message>Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.</Message>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="Parking.Microservices.Tests.ParkingWorkflowTests.TooEarlyIsRejectedWithoutConsumingQr" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="2677961e-b134-2938-42fd-cd165d4921ed">
+      <Execution id="b9e38cd7-982c-48ff-9dc3-d8923d9952b9" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.ParkingWorkflowTests" name="TooEarlyIsRejectedWithoutConsumingQr" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.NearestDistanceIsGeographic" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="18ed3568-d41c-0c15-f667-86b9a4672a54">
+      <Execution id="d06b889b-6a90-4fcf-bd28-e3ba6601e2cc" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="NearestDistanceIsGeographic" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.PricingEngineTests.Calculate_ShouldThrowArgumentException_WhenExitTimeBeforeOrEqualToEntryTime" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="1a5b1d8b-c1b1-39f9-32f5-bf3e6b5d1b46">
+      <Execution id="f6e68332-4774-4ce0-a166-5e7bc2baa602" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.PricingEngineTests" name="Calculate_ShouldThrowArgumentException_WhenExitTimeBeforeOrEqualToEntryTime" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.ParkingWorkflowTests.ConfirmedQrCreatesOneSessionAndOccupancyThenRetryIsSafe" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="d8667043-ab56-6a7b-4f33-c37c77c59588">
+      <Execution id="dfed87c8-fce2-4cbe-ae5f-a92fc3a272d4" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.ParkingWorkflowTests" name="ConfirmedQrCreatesOneSessionAndOccupancyThenRetryIsSafe" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.QrTokenTests.ObservedPlateRequiresSupportedCharacters(value: &quot;51a-123.45&quot;, valid: True, normalized: &quot;51A12345&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="ebff1897-bba1-cdf6-2034-d0f3aa2d76f8">
+      <Execution id="cb12f96d-75ed-4b14-8c70-8481d5fab4c8" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.QrTokenTests" name="ObservedPlateRequiresSupportedCharacters" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.ParkingWorkflowTests.MaintenanceBlocksOtherwiseValidCheckIn" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="63b05737-1311-e9a4-f8fa-357fe126f8ec">
+      <Execution id="bd09f5fe-7eb7-4351-a981-a47572c7523f" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.ParkingWorkflowTests" name="MaintenanceBlocksOtherwiseValidCheckIn" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.PaymentDoesNotOverwriteInvalidReservation(state: &quot;PENDING_PAYMENT&quot;, expired: False, paid: 70000, quote: 60000, available: True, expected: &quot;OVERPAYMENT_RECONCILIATION&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="9e627a91-3ebf-ae5f-b3cd-ac31150f859a">
+      <Execution id="2a5ad5c2-52ab-42ec-824d-2fb6f1d5d4d6" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="PaymentDoesNotOverwriteInvalidReservation" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.PaymentDoesNotOverwriteInvalidReservation(state: &quot;CONFIRMED&quot;, expired: False, paid: 60000, quote: 60000, available: True, expected: &quot;RECONCILIATION_REQUIRED&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="421f560a-9b9b-4d21-d264-84a00cd559c1">
+      <Execution id="816bc3fa-a571-4b4d-98b6-4a0d3ffa7891" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="PaymentDoesNotOverwriteInvalidReservation" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CalculateFeeQueryValidatorTests.ShouldHaveError_WhenParkingDurationExceeds30Days" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="5ebb157c-ad86-4e2c-8b50-114c5287e288">
+      <Execution id="25ab6267-cc16-48fc-8a4a-d83ad660625b" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CalculateFeeQueryValidatorTests" name="ShouldHaveError_WhenParkingDurationExceeds30Days" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.QrTokenTests.MalformedQrIsRejected(value: &quot;anything&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="eaa34a72-b766-1135-f992-ff3640bbf10e">
+      <Execution id="738e134e-7697-4ba6-86bd-eaaa4f35720e" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.QrTokenTests" name="MalformedQrIsRejected" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.ParkingArchitectureTests.ApplicationDoesNotReferenceTransportOrPersistence" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="fdf04c04-e289-a624-9fea-1988c24bafaa">
+      <Execution id="a3b56d9c-b29a-4277-bd33-2f3fe30a39ef" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.ParkingArchitectureTests" name="ApplicationDoesNotReferenceTransportOrPersistence" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.PasswordIsSaltedAndVerifiedWithoutPlaintext" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="70ffff19-79c3-16b6-6880-634784181d9c">
+      <Execution id="34749652-4fb8-4d7e-8985-f8ccfb908b6f" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="PasswordIsSaltedAndVerifiedWithoutPlaintext" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.PriceUsesFullDurationBlocksAndCap(minutes: 300, expected: 120000)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="bea5ec60-ba8e-a244-9358-e86f629da359">
+      <Execution id="b8135d56-8998-4b4b-9837-ff3ccaaf31a7" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="PriceUsesFullDurationBlocksAndCap" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.ParkingWorkflowTests.ConcurrentScansHaveExactlyOneEffect" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="870a88b4-bf9f-972d-d8b7-f85be0cc930f">
+      <Execution id="5223ed19-8294-4c3d-bdd4-7b99eb2ad587" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.ParkingWorkflowTests" name="ConcurrentScansHaveExactlyOneEffect" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.SlotAvailabilityStatePriorityIsStrict(opStatus: &quot;ACTIVE&quot;, physicallyOccupied: False, isReserved: True, expectedStatus: &quot;HELD&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="3fc1d5f9-e681-a7d0-bbac-3d8d39230829">
+      <Execution id="cd0671ec-c8a6-4c8c-adc9-70f58c714116" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="SlotAvailabilityStatePriorityIsStrict" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.ParkingWorkflowTests.FailureAfterConsumeRollsBackAllBusinessWrites" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="e4c23215-1556-0599-f254-40047e632660">
+      <Execution id="dc560243-4e6e-49f4-87f2-339ac70a1924" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.ParkingWorkflowTests" name="FailureAfterConsumeRollsBackAllBusinessWrites" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.SlotAvailabilityStatePriorityIsStrict(opStatus: &quot;ACTIVE&quot;, physicallyOccupied: True, isReserved: False, expectedStatus: &quot;OCCUPIED&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="59d556ce-40db-72ee-f560-41a3e6ed6fe3">
+      <Execution id="68a39844-c87f-4796-ba09-e102f0ba9532" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="SlotAvailabilityStatePriorityIsStrict" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.ParkingWorkflowTests.DatabaseExpiryAndArrivalDeadlineAreRechecked" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="c031ac26-ba8b-cbf7-d48c-6381ba63ddac">
+      <Execution id="0bcc1f3f-df23-48f2-93c5-06eb3b95796a" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.ParkingWorkflowTests" name="DatabaseExpiryAndArrivalDeadlineAreRechecked" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.QrTokenTests.ObservedPlateRequiresSupportedCharacters(value: &quot;51A/12345&quot;, valid: False, normalized: &quot;&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="0847e5af-3504-bf99-1f4c-945e40c76d44">
+      <Execution id="049c8134-1c12-4120-8076-0d8f78d55b93" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.QrTokenTests" name="ObservedPlateRequiresSupportedCharacters" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.ParkingWorkflowTests.ArrivalDeadlineBlocksOtherwiseValidSignedQr" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="6e0ea71b-69d0-cad5-f474-46c8fb2b8441">
+      <Execution id="d5ea14f7-4637-488b-88c1-63df4a58dc79" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.ParkingWorkflowTests" name="ArrivalDeadlineBlocksOtherwiseValidSignedQr" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CalculateFeeQueryValidatorTests.ShouldHaveError_WhenParkingLotIdIsEmpty" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="d9b63bae-f980-a30c-24d5-a79d0f22cf28">
+      <Execution id="4753e271-8a49-4788-a2b7-f4f84faf9da4" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CalculateFeeQueryValidatorTests" name="ShouldHaveError_WhenParkingLotIdIsEmpty" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.PricingEngineTests.Calculate_ShouldSplitAtMidnight_WhenParkingAcrossMultipleDays" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="2a733699-05f7-38ae-efef-db230d012141">
+      <Execution id="1b3a6438-9d51-471d-ab46-680864f09867" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.PricingEngineTests" name="Calculate_ShouldSplitAtMidnight_WhenParkingAcrossMultipleDays" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.PricingEngineTests.Calculate_ShouldRoundUpToNext15MinBlock_WhenDurationExceedsInitialBlock" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="c4ebe56e-5b9c-fccf-46f5-3ae45f338efb">
+      <Execution id="66b53e12-39d9-4ae5-b27d-5b1ca624f4f0" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.PricingEngineTests" name="Calculate_ShouldRoundUpToNext15MinBlock_WhenDurationExceedsInitialBlock" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.ImagesMustMatchSupportedMagicAndSize" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="e92f516f-1b92-a999-f791-520de52ec73a">
+      <Execution id="0276d271-9a4f-4032-b193-9274e8c219d6" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="ImagesMustMatchSupportedMagicAndSize" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.ParkingWorkflowTests.HoldExpiryNeverReleasesPhysicalOccupancyEvenForAnotherExpiredHold" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="f4215fe4-ac31-f276-27bd-cc19797b07be">
+      <Execution id="4bbb51a3-8c2c-4b07-97b1-daf98b4d7010" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.ParkingWorkflowTests" name="HoldExpiryNeverReleasesPhysicalOccupancyEvenForAnotherExpiredHold" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.AiServiceInvariantTests.PlateSeparation_ProducesValidAlphanumericForDatabaseAndFormattedForDisplay(rawInput: &quot;59-P1 678.90&quot;, expectedDbPlate: &quot;59P167890&quot;, expectedDisplayPlate: &quot;59-P1 678.90&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="b44cce19-a6ef-fdcb-1e14-45c44736f405">
+      <Execution id="e49ec3fa-f286-43eb-bf32-cd6c914ce015" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.AiServiceInvariantTests" name="PlateSeparation_ProducesValidAlphanumericForDatabaseAndFormattedForDisplay" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.PricingEngineTests.Calculate_ShouldApplyGoldStarDiscount_WhenCustomerIsGoldStarMember" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="b0651b6c-7cda-eac9-0bd6-9133445ce186">
+      <Execution id="e5cd3790-ea58-4797-ba0b-45bb0356c547" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.PricingEngineTests" name="Calculate_ShouldApplyGoldStarDiscount_WhenCustomerIsGoldStarMember" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.ParkingWorkflowTests.ReplayKeyCannotBeReusedForAnotherBodyAndExitGateCannotAdmit" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="d5ca7ae5-75fa-0b6b-6834-39404a809eba">
+      <Execution id="159784f8-129a-4568-8207-766a9f53be72" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.ParkingWorkflowTests" name="ReplayKeyCannotBeReusedForAnotherBodyAndExitGateCannotAdmit" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.ParkingArchitectureTests.DomainDoesNotReferenceApplicationOrInfrastructure" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="9a60066e-01af-88d3-122e-ba7ee6bf4989">
+      <Execution id="deeae346-a985-495f-ae22-4689c0785a5a" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.ParkingArchitectureTests" name="DomainDoesNotReferenceApplicationOrInfrastructure" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.SlotAvailabilityStatePriorityIsStrict(opStatus: &quot;DISABLED&quot;, physicallyOccupied: False, isReserved: False, expectedStatus: &quot;MAINTENANCE&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="6de286c5-367d-9caf-57b2-fe946a25e154">
+      <Execution id="2b5bf557-6726-4d35-a8e8-8cab315f7029" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="SlotAvailabilityStatePriorityIsStrict" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.PricingEngineTests.Calculate_ShouldApplyPeakMultiplier_WhenBlocksFallIntoPeakHours" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="ebd3cd7e-24ee-6d7d-1d80-d4200918e4a7">
+      <Execution id="c0ee5885-3634-4c2f-ae07-98eca6dfbca8" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.PricingEngineTests" name="Calculate_ShouldApplyPeakMultiplier_WhenBlocksFallIntoPeakHours" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CalculateFeeQueryValidatorTests.ShouldHaveError_WhenExitTimeEqualsEntryTime" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="3196e1db-94a0-b9a0-b3a9-b5b735bb2d6c">
+      <Execution id="720a2c23-f172-423c-9273-6bb3fa2953f6" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CalculateFeeQueryValidatorTests" name="ShouldHaveError_WhenExitTimeEqualsEntryTime" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.QrTokenTests.MalformedQrIsRejected(value: &quot;PARK1.%%%..&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="6707802a-ef68-f388-4a76-8a5b33408974">
+      <Execution id="31687a2f-825d-4b1d-9b0d-0eb813eb24b4" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.QrTokenTests" name="MalformedQrIsRejected" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.AiServiceInvariantTests.ReviewPlateSanitization_AllowsFormattedPlateInputWithoutFailing" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="6e7154c9-34f3-1de1-0d5d-d947a8cb598c">
+      <Execution id="0543aee4-5ae2-472e-8059-9a9c64cade09" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.AiServiceInvariantTests" name="ReviewPlateSanitization_AllowsFormattedPlateInputWithoutFailing" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.PaymentDoesNotOverwriteInvalidReservation(state: &quot;PENDING_PAYMENT&quot;, expired: False, paid: 30000, quote: 60000, available: True, expected: &quot;PARTIAL_PAYMENT&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="e1bd57f5-a2e9-9d0f-4869-80a4a477443e">
+      <Execution id="3f0b1f9d-d70f-47a8-99a8-9d4a764c3a4d" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="PaymentDoesNotOverwriteInvalidReservation" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.PaymentDoesNotOverwriteInvalidReservation(state: &quot;PENDING_PAYMENT&quot;, expired: False, paid: 60000, quote: 60000, available: False, expected: &quot;LATE_PAYMENT_RECONCILIATION&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="b906ea5d-7006-35be-061e-206bc0bf2630">
+      <Execution id="a4199e9f-68aa-4ee9-959b-cbf7342c8b0d" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="PaymentDoesNotOverwriteInvalidReservation" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.ParkingWorkflowTests.ReissueRevokesOldQrAndWrongPlateOrGateDoesNotConsumeNewQr" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="891bad3a-5ac5-662c-5cf6-524d2aa0d257">
+      <Execution id="5b87e717-d2f0-45e6-9d09-d2a703ada70c" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.ParkingWorkflowTests" name="ReissueRevokesOldQrAndWrongPlateOrGateDoesNotConsumeNewQr" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CalculateFeeQueryValidatorTests.ShouldHaveError_WhenExitTimeIsBeforeEntryTime" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="3d281c13-2d72-d7dd-259a-58f494516f92">
+      <Execution id="ff727d54-c59c-4412-9ba8-fe511e8f4bec" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CalculateFeeQueryValidatorTests" name="ShouldHaveError_WhenExitTimeIsBeforeEntryTime" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.SlotAvailabilityStatePriorityIsStrict(opStatus: &quot;ACTIVE&quot;, physicallyOccupied: False, isReserved: False, expectedStatus: &quot;AVAILABLE&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="4f8fa584-e6a2-24c7-4aa9-e3a54e80206f">
+      <Execution id="d8f8b942-30d2-4f30-8e97-bed55eeebf75" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="SlotAvailabilityStatePriorityIsStrict" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.PricingEngineTests.Calculate_ShouldCapAtDailyLimit_WhenTotalCostExceedsDailyCap" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="9964c4d9-af6a-3058-5861-64760dc24f22">
+      <Execution id="84cf63b5-2203-4021-ab2e-ead376b4f6e7" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.PricingEngineTests" name="Calculate_ShouldCapAtDailyLimit_WhenTotalCostExceedsDailyCap" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.AiServiceInvariantTests.PlateSeparation_ProducesValidAlphanumericForDatabaseAndFormattedForDisplay(rawInput: &quot;30H99999&quot;, expectedDbPlate: &quot;30H99999&quot;, expectedDisplayPlate: &quot;30H-999.99&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="ab553183-beef-f2d6-a28b-9a9e7418534b">
+      <Execution id="d0a94e52-f9c3-4dc6-b224-ce0621b3ad75" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.AiServiceInvariantTests" name="PlateSeparation_ProducesValidAlphanumericForDatabaseAndFormattedForDisplay" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.PaymentDoesNotOverwriteInvalidReservation(state: &quot;PENDING_PAYMENT&quot;, expired: True, paid: 60000, quote: 60000, available: True, expected: &quot;LATE_PAYMENT_RECONCILIATION&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="87ff0600-83b2-c7c6-894e-ec5753e1cf12">
+      <Execution id="0dccc30b-60ed-4ecc-b396-51f3be7d2931" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="PaymentDoesNotOverwriteInvalidReservation" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.PricingEngineTests.Calculate_ShouldChargeInitialRate_WhenDurationWithinFirst60Minutes" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="0f31308b-4b85-99a1-2d98-69f469e1078f">
+      <Execution id="c18c5567-01aa-4f7a-8134-2c93043629fd" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.PricingEngineTests" name="Calculate_ShouldChargeInitialRate_WhenDurationWithinFirst60Minutes" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.AiServiceInvariantTests.PythonPlateDetectionResponse_DeserializesLayoutEnrichedResponse" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="70715734-2cd1-1916-9042-5b09af68b297">
+      <Execution id="2976b727-f58f-438d-b4b2-8ae1a3969c8e" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.AiServiceInvariantTests" name="PythonPlateDetectionResponse_DeserializesLayoutEnrichedResponse" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.HoldExpiryMustNotReleasePhysicallyOccupiedSlot" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="067e4d3e-255c-7372-db94-bc3bf142b797">
+      <Execution id="e61b515f-ea61-4fd0-b6cc-fc8986a477f5" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="HoldExpiryMustNotReleasePhysicallyOccupiedSlot" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.PaymentDoesNotOverwriteInvalidReservation(state: &quot;PENDING_PAYMENT&quot;, expired: False, paid: 60000, quote: 60000, available: True, expected: &quot;CONFIRMED&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="498c70e8-7833-6e85-0692-c5467ee43119">
+      <Execution id="11986ca1-006c-41da-8674-a86deb8cf497" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="PaymentDoesNotOverwriteInvalidReservation" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.QrTokenTests.MalformedQrIsRejected(value: &quot;&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="3485455e-9fa1-16e1-3fdf-d6253408e4b8">
+      <Execution id="d522b974-d569-48ff-857e-6a2441d2c3ec" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.QrTokenTests" name="MalformedQrIsRejected" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.ParkingWorkflowTests.StaffScopeCustomerDeniedAndRevokedAssignmentAreCheckedAgainstIdentityDatabase" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="0b891af1-8775-19bc-0d4d-873f9d96d89c">
+      <Execution id="651375c6-aad9-4e63-95f0-83e3ddafc6fd" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.ParkingWorkflowTests" name="StaffScopeCustomerDeniedAndRevokedAssignmentAreCheckedAgainstIdentityDatabase" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.OwnershipCheckDeniesNonOwnerAndNonStaff" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="53d7459d-2d31-7cb0-3a55-603db13e8bdc">
+      <Execution id="c7985261-16d0-4e86-bb3c-e25fe8fdf5ac" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="OwnershipCheckDeniesNonOwnerAndNonStaff" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.QrTokenTests.ObservedPlateRequiresSupportedCharacters(value: &quot;&quot;, valid: False, normalized: &quot;&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="a0858109-b79d-2770-0410-be02c8da00c5">
+      <Execution id="ea578ac7-c335-4488-a8f9-439fc2853c3d" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.QrTokenTests" name="ObservedPlateRequiresSupportedCharacters" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CalculateFeeQueryValidatorTests.ShouldNotHaveError_WhenQueryIsValid" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="66d0cc6c-e1ee-923d-992c-2926a8b25b05">
+      <Execution id="8f21e223-aee0-41c5-beed-656cf1af1dcf" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CalculateFeeQueryValidatorTests" name="ShouldNotHaveError_WhenQueryIsValid" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.PriceUsesFullDurationBlocksAndCap(minutes: 120, expected: 60000)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="29784596-ed99-d7c8-b27c-8e695528527f">
+      <Execution id="10287e57-b86a-4e18-87f5-ded6a73bb6b7" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="PriceUsesFullDurationBlocksAndCap" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.SlotAvailabilityStatePriorityIsStrict(opStatus: &quot;MAINTENANCE&quot;, physicallyOccupied: False, isReserved: False, expectedStatus: &quot;MAINTENANCE&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="7594c362-e095-57c3-383e-5af7585da249">
+      <Execution id="6e0bbe89-9ab0-4b53-a23b-bfcbf3c25372" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="SlotAvailabilityStatePriorityIsStrict" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.QrTokenTests.QrBindsBookingLotVehicleAndRejectsTamperWrongKeyAndExpiry" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="eaf0c61e-8d6d-1dff-13ab-cd1fd1938357">
+      <Execution id="6c72edf4-5f60-4f65-9967-5bdd7bc53ad1" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.QrTokenTests" name="QrBindsBookingLotVehicleAndRejectsTamperWrongKeyAndExpiry" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.ParkingWorkflowTests.RealHttpJwtGrpcScopePaymentAndSingleUseQrWorkflow" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="6c0bfe57-02b1-6af7-d927-10b7a1903552">
+      <Execution id="f534f5c3-9096-4f68-83ab-41e5373ccfb6" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.ParkingWorkflowTests" name="RealHttpJwtGrpcScopePaymentAndSingleUseQrWorkflow" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.AiServiceInvariantTests.ImageRules_ValidatesMagicBytes_ForJpegAndPng" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="e414e452-f572-ed31-a601-1ece2808fa16">
+      <Execution id="ea962ba0-7bf0-4a4f-a88a-073f13087d78" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.AiServiceInvariantTests" name="ImageRules_ValidatesMagicBytes_ForJpegAndPng" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.PriceUsesFullDurationBlocksAndCap(minutes: 15, expected: 7500)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="41b10a75-3395-48aa-f3f8-c5a11b473999">
+      <Execution id="1e70f7a4-c81d-4366-9d14-cb153d2155df" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="PriceUsesFullDurationBlocksAndCap" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.ParkingWorkflowTests.AvailabilityValidatesRangeLevelVehicleTypeClosureAndOverlappingBookings" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="79d480ce-1109-07e3-8738-f33ea778297f">
+      <Execution id="b35ef872-6aec-476f-a477-5efe4eacf8ba" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.ParkingWorkflowTests" name="AvailabilityValidatesRangeLevelVehicleTypeClosureAndOverlappingBookings" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.PriceUsesFullDurationBlocksAndCap(minutes: 16, expected: 15000)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="e9759334-a89e-0d2c-fe2f-353a23267530">
+      <Execution id="ceb1cca7-4d0c-457f-937f-c08d6d5f5f67" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="PriceUsesFullDurationBlocksAndCap" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.QrTokenTests.ObservedPlateRequiresSupportedCharacters(value: &quot;51A 12345&quot;, valid: True, normalized: &quot;51A12345&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="00178c12-733b-2346-5d8f-bb740652be59">
+      <Execution id="527e93dc-cf39-4c49-b85a-2427d1d59c2d" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.QrTokenTests" name="ObservedPlateRequiresSupportedCharacters" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.AiServiceInvariantTests.PlateSeparation_ProducesValidAlphanumericForDatabaseAndFormattedForDisplay(rawInput: &quot;43A-123.45&quot;, expectedDbPlate: &quot;43A12345&quot;, expectedDisplayPlate: &quot;43A-123.45&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="c1b583e3-3ce3-7d92-1a76-3c3f8a2221e7">
+      <Execution id="d357e06b-dc69-45a1-97b8-8fd738040911" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.AiServiceInvariantTests" name="PlateSeparation_ProducesValidAlphanumericForDatabaseAndFormattedForDisplay" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.AiServiceInvariantTests.PlateSeparation_ProducesValidAlphanumericForDatabaseAndFormattedForDisplay(rawInput: &quot;51k 888.88&quot;, expectedDbPlate: &quot;51K88888&quot;, expectedDisplayPlate: &quot;51K-888.88&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="a1b01072-42ee-51b8-b0b6-a8610d61ff4a">
+      <Execution id="388fac99-58e4-4b74-affb-9282fa3b0035" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.AiServiceInvariantTests" name="PlateSeparation_ProducesValidAlphanumericForDatabaseAndFormattedForDisplay" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.CapsArePerLocalDay" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="0b7ce539-0338-e628-41bb-5544923daed2">
+      <Execution id="09ca29a6-dea5-425c-abae-1785bd2c4360" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="CapsArePerLocalDay" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.CoreInvariantTests.OcrWithoutProviderFailsInsteadOfInventingPlate" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="bdbd5fc7-d200-44ea-952e-6229d66c0bc1">
+      <Execution id="ef08706d-2f30-45ba-8e4e-bee50cbee558" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.CoreInvariantTests" name="OcrWithoutProviderFailsInsteadOfInventingPlate" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.ParkingWorkflowTests.PendingBookingCannotIssueQrAndHoldExpiryReleasesOnlyReservation" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="e467c0c4-9397-4769-d2bb-0c4e052b1be0">
+      <Execution id="d41a8d6d-e839-46a0-b1b2-932f7fce16b4" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.ParkingWorkflowTests" name="PendingBookingCannotIssueQrAndHoldExpiryReleasesOnlyReservation" />
+    </UnitTest>
+    <UnitTest name="Parking.Microservices.Tests.AiServiceInvariantTests.PlateSeparation_ProducesValidAlphanumericForDatabaseAndFormattedForDisplay(rawInput: &quot;51K-888.88&quot;, expectedDbPlate: &quot;51K88888&quot;, expectedDisplayPlate: &quot;51K-888.88&quot;)" storage="d:\ojt26_park_auua\project_ojt\parking-system-group2\tests\parking.microservices.tests\bin\debug\net9.0\parking.microservices.tests.dll" id="463b7011-961a-f447-1df6-6bd3448fd1b5">
+      <Execution id="3647e3c4-cbda-47ac-b0e9-3d269f7c9eef" />
+      <TestMethod codeBase="D:\OJT26_PARK_AUUA\PROJECT_OJT\parking-system-group2\tests\Parking.Microservices.Tests\bin\Debug\net9.0\Parking.Microservices.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="Parking.Microservices.Tests.AiServiceInvariantTests" name="PlateSeparation_ProducesValidAlphanumericForDatabaseAndFormattedForDisplay" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="6e0ea71b-69d0-cad5-f474-46c8fb2b8441" executionId="d5ea14f7-4637-488b-88c1-63df4a58dc79" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="53d7459d-2d31-7cb0-3a55-603db13e8bdc" executionId="c7985261-16d0-4e86-bb3c-e25fe8fdf5ac" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="421f560a-9b9b-4d21-d264-84a00cd559c1" executionId="816bc3fa-a571-4b4d-98b6-4a0d3ffa7891" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="d8667043-ab56-6a7b-4f33-c37c77c59588" executionId="dfed87c8-fce2-4cbe-ae5f-a92fc3a272d4" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="6e7154c9-34f3-1de1-0d5d-d947a8cb598c" executionId="0543aee4-5ae2-472e-8059-9a9c64cade09" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="b0651b6c-7cda-eac9-0bd6-9133445ce186" executionId="e5cd3790-ea58-4797-ba0b-45bb0356c547" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="29784596-ed99-d7c8-b27c-8e695528527f" executionId="10287e57-b86a-4e18-87f5-ded6a73bb6b7" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="e92f516f-1b92-a999-f791-520de52ec73a" executionId="0276d271-9a4f-4032-b193-9274e8c219d6" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="70ffff19-79c3-16b6-6880-634784181d9c" executionId="34749652-4fb8-4d7e-8985-f8ccfb908b6f" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="eaa34a72-b766-1135-f992-ff3640bbf10e" executionId="738e134e-7697-4ba6-86bd-eaaa4f35720e" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="9a60066e-01af-88d3-122e-ba7ee6bf4989" executionId="deeae346-a985-495f-ae22-4689c0785a5a" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="463b7011-961a-f447-1df6-6bd3448fd1b5" executionId="3647e3c4-cbda-47ac-b0e9-3d269f7c9eef" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="e1bd57f5-a2e9-9d0f-4869-80a4a477443e" executionId="3f0b1f9d-d70f-47a8-99a8-9d4a764c3a4d" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="4f8fa584-e6a2-24c7-4aa9-e3a54e80206f" executionId="d8f8b942-30d2-4f30-8e97-bed55eeebf75" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="9964c4d9-af6a-3058-5861-64760dc24f22" executionId="84cf63b5-2203-4021-ab2e-ead376b4f6e7" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="ebff1897-bba1-cdf6-2034-d0f3aa2d76f8" executionId="cb12f96d-75ed-4b14-8c70-8481d5fab4c8" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="a0858109-b79d-2770-0410-be02c8da00c5" executionId="ea578ac7-c335-4488-a8f9-439fc2853c3d" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="9e627a91-3ebf-ae5f-b3cd-ac31150f859a" executionId="2a5ad5c2-52ab-42ec-824d-2fb6f1d5d4d6" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="e467c0c4-9397-4769-d2bb-0c4e052b1be0" executionId="d41a8d6d-e839-46a0-b1b2-932f7fce16b4" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="0f31308b-4b85-99a1-2d98-69f469e1078f" executionId="c18c5567-01aa-4f7a-8134-2c93043629fd" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="b44cce19-a6ef-fdcb-1e14-45c44736f405" executionId="e49ec3fa-f286-43eb-bf32-cd6c914ce015" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="3fc1d5f9-e681-a7d0-bbac-3d8d39230829" executionId="cd0671ec-c8a6-4c8c-adc9-70f58c714116" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="00178c12-733b-2346-5d8f-bb740652be59" executionId="527e93dc-cf39-4c49-b85a-2427d1d59c2d" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="e414e452-f572-ed31-a601-1ece2808fa16" executionId="ea962ba0-7bf0-4a4f-a88a-073f13087d78" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="79d480ce-1109-07e3-8738-f33ea778297f" executionId="b35ef872-6aec-476f-a477-5efe4eacf8ba" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="3196e1db-94a0-b9a0-b3a9-b5b735bb2d6c" executionId="720a2c23-f172-423c-9273-6bb3fa2953f6" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="870a88b4-bf9f-972d-d8b7-f85be0cc930f" executionId="5223ed19-8294-4c3d-bdd4-7b99eb2ad587" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="7594c362-e095-57c3-383e-5af7585da249" executionId="6e0bbe89-9ab0-4b53-a23b-bfcbf3c25372" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="c4ebe56e-5b9c-fccf-46f5-3ae45f338efb" executionId="66b53e12-39d9-4ae5-b27d-5b1ca624f4f0" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="ab553183-beef-f2d6-a28b-9a9e7418534b" executionId="d0a94e52-f9c3-4dc6-b224-ce0621b3ad75" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="ebd3cd7e-24ee-6d7d-1d80-d4200918e4a7" executionId="c0ee5885-3634-4c2f-ae07-98eca6dfbca8" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="bea5ec60-ba8e-a244-9358-e86f629da359" executionId="b8135d56-8998-4b4b-9837-ff3ccaaf31a7" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="fdf04c04-e289-a624-9fea-1988c24bafaa" executionId="a3b56d9c-b29a-4277-bd33-2f3fe30a39ef" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="1a5b1d8b-c1b1-39f9-32f5-bf3e6b5d1b46" executionId="f6e68332-4774-4ce0-a166-5e7bc2baa602" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="eaf0c61e-8d6d-1dff-13ab-cd1fd1938357" executionId="6c72edf4-5f60-4f65-9967-5bdd7bc53ad1" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="e4c23215-1556-0599-f254-40047e632660" executionId="dc560243-4e6e-49f4-87f2-339ac70a1924" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="6c0bfe57-02b1-6af7-d927-10b7a1903552" executionId="f534f5c3-9096-4f68-83ab-41e5373ccfb6" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="2677961e-b134-2938-42fd-cd165d4921ed" executionId="b9e38cd7-982c-48ff-9dc3-d8923d9952b9" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="66d0cc6c-e1ee-923d-992c-2926a8b25b05" executionId="8f21e223-aee0-41c5-beed-656cf1af1dcf" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="0b891af1-8775-19bc-0d4d-873f9d96d89c" executionId="651375c6-aad9-4e63-95f0-83e3ddafc6fd" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="f4215fe4-ac31-f276-27bd-cc19797b07be" executionId="4bbb51a3-8c2c-4b07-97b1-daf98b4d7010" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="a1b01072-42ee-51b8-b0b6-a8610d61ff4a" executionId="388fac99-58e4-4b74-affb-9282fa3b0035" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="18ed3568-d41c-0c15-f667-86b9a4672a54" executionId="d06b889b-6a90-4fcf-bd28-e3ba6601e2cc" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="6de286c5-367d-9caf-57b2-fe946a25e154" executionId="2b5bf557-6726-4d35-a8e8-8cab315f7029" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="e9759334-a89e-0d2c-fe2f-353a23267530" executionId="ceb1cca7-4d0c-457f-937f-c08d6d5f5f67" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="3485455e-9fa1-16e1-3fdf-d6253408e4b8" executionId="d522b974-d569-48ff-857e-6a2441d2c3ec" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="59d556ce-40db-72ee-f560-41a3e6ed6fe3" executionId="68a39844-c87f-4796-ba09-e102f0ba9532" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="63b05737-1311-e9a4-f8fa-357fe126f8ec" executionId="bd09f5fe-7eb7-4351-a981-a47572c7523f" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="067e4d3e-255c-7372-db94-bc3bf142b797" executionId="e61b515f-ea61-4fd0-b6cc-fc8986a477f5" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="b906ea5d-7006-35be-061e-206bc0bf2630" executionId="a4199e9f-68aa-4ee9-959b-cbf7342c8b0d" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="41b10a75-3395-48aa-f3f8-c5a11b473999" executionId="1e70f7a4-c81d-4366-9d14-cb153d2155df" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="2a733699-05f7-38ae-efef-db230d012141" executionId="1b3a6438-9d51-471d-ab46-680864f09867" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="6707802a-ef68-f388-4a76-8a5b33408974" executionId="31687a2f-825d-4b1d-9b0d-0eb813eb24b4" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="498c70e8-7833-6e85-0692-c5467ee43119" executionId="11986ca1-006c-41da-8674-a86deb8cf497" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="0b7ce539-0338-e628-41bb-5544923daed2" executionId="09ca29a6-dea5-425c-abae-1785bd2c4360" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="c1b583e3-3ce3-7d92-1a76-3c3f8a2221e7" executionId="d357e06b-dc69-45a1-97b8-8fd738040911" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="891bad3a-5ac5-662c-5cf6-524d2aa0d257" executionId="5b87e717-d2f0-45e6-9d09-d2a703ada70c" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="87ff0600-83b2-c7c6-894e-ec5753e1cf12" executionId="0dccc30b-60ed-4ecc-b396-51f3be7d2931" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="bdbd5fc7-d200-44ea-952e-6229d66c0bc1" executionId="ef08706d-2f30-45ba-8e4e-bee50cbee558" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="0847e5af-3504-bf99-1f4c-945e40c76d44" executionId="049c8134-1c12-4120-8076-0d8f78d55b93" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="d9b63bae-f980-a30c-24d5-a79d0f22cf28" executionId="4753e271-8a49-4788-a2b7-f4f84faf9da4" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="3d281c13-2d72-d7dd-259a-58f494516f92" executionId="ff727d54-c59c-4412-9ba8-fe511e8f4bec" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="5ebb157c-ad86-4e2c-8b50-114c5287e288" executionId="25ab6267-cc16-48fc-8a4a-d83ad660625b" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="d5ca7ae5-75fa-0b6b-6834-39404a809eba" executionId="159784f8-129a-4568-8207-766a9f53be72" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="70715734-2cd1-1916-9042-5b09af68b297" executionId="2976b727-f58f-438d-b4b2-8ae1a3969c8e" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="c031ac26-ba8b-cbf7-d48c-6381ba63ddac" executionId="0bcc1f3f-df23-48f2-93c5-06eb3b95796a" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="Results Not in a List" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="All Loaded Results" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Completed">
+    <Counters total="66" executed="52" passed="52" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.0.2+dd36e86129 (64-bit .NET 10.0.12)&#xD;
+[xUnit.net 00:00:01.44]   Discovering: Parking.Microservices.Tests&#xD;
+[xUnit.net 00:00:01.57]   Discovered:  Parking.Microservices.Tests&#xD;
+[xUnit.net 00:00:01.64]   Starting:    Parking.Microservices.Tests&#xD;
+[xUnit.net 00:00:01.88]       Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.&#xD;
+[xUnit.net 00:00:01.93]       Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.&#xD;
+[xUnit.net 00:00:01.94]       Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.&#xD;
+[xUnit.net 00:00:01.95]       Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.&#xD;
+Test 'Parking.Microservices.Tests.ParkingWorkflowTests.StaffScopeCustomerDeniedAndRevokedAssignmentAreCheckedAgainstIdentityDatabase' was skipped in the test run.&#xD;
+Test 'Parking.Microservices.Tests.ParkingWorkflowTests.HoldExpiryNeverReleasesPhysicalOccupancyEvenForAnotherExpiredHold' was skipped in the test run.&#xD;
+Test 'Parking.Microservices.Tests.ParkingWorkflowTests.AvailabilityValidatesRangeLevelVehicleTypeClosureAndOverlappingBookings' was skipped in the test run.&#xD;
+Test 'Parking.Microservices.Tests.ParkingWorkflowTests.DatabaseExpiryAndArrivalDeadlineAreRechecked' was skipped in the test run.&#xD;
+[xUnit.net 00:00:01.96]       Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.&#xD;
+[xUnit.net 00:00:01.97]       Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.&#xD;
+[xUnit.net 00:00:01.97]       Set local test DB connection and PARKING_TEST_API_DLL / PARKING_TEST_IDENTITY_DLL to freshly built hosts.&#xD;
+[xUnit.net 00:00:01.98]       Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.&#xD;
+[xUnit.net 00:00:01.98]       Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.&#xD;
+[xUnit.net 00:00:01.99]       Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.&#xD;
+[xUnit.net 00:00:01.99]       Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.&#xD;
+[xUnit.net 00:00:02.00]       Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.&#xD;
+[xUnit.net 00:00:02.00]       Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.&#xD;
+Test 'Parking.Microservices.Tests.ParkingWorkflowTests.ConcurrentScansHaveExactlyOneEffect' was skipped in the test run.&#xD;
+Test 'Parking.Microservices.Tests.ParkingWorkflowTests.ConfirmedQrCreatesOneSessionAndOccupancyThenRetryIsSafe' was skipped in the test run.&#xD;
+Test 'Parking.Microservices.Tests.ParkingWorkflowTests.RealHttpJwtGrpcScopePaymentAndSingleUseQrWorkflow' was skipped in the test run.&#xD;
+Test 'Parking.Microservices.Tests.ParkingWorkflowTests.TooEarlyIsRejectedWithoutConsumingQr' was skipped in the test run.&#xD;
+Test 'Parking.Microservices.Tests.ParkingWorkflowTests.ArrivalDeadlineBlocksOtherwiseValidSignedQr' was skipped in the test run.&#xD;
+Test 'Parking.Microservices.Tests.ParkingWorkflowTests.ReissueRevokesOldQrAndWrongPlateOrGateDoesNotConsumeNewQr' was skipped in the test run.&#xD;
+Test 'Parking.Microservices.Tests.ParkingWorkflowTests.PendingBookingCannotIssueQrAndHoldExpiryReleasesOnlyReservation' was skipped in the test run.&#xD;
+Test 'Parking.Microservices.Tests.ParkingWorkflowTests.MaintenanceBlocksOtherwiseValidCheckIn' was skipped in the test run.&#xD;
+Test 'Parking.Microservices.Tests.ParkingWorkflowTests.ReplayKeyCannotBeReusedForAnotherBodyAndExitGateCannotAdmit' was skipped in the test run.&#xD;
+[xUnit.net 00:00:02.01]       Set PARKING_TEST_ADMIN_CONNECTION to a local PostgreSQL login with CREATEDB; uses isolated temporary databases.&#xD;
+Test 'Parking.Microservices.Tests.ParkingWorkflowTests.FailureAfterConsumeRollsBackAllBusinessWrites' was skipped in the test run.&#xD;
+[xUnit.net 00:00:03.79]   Finished:    Parking.Microservices.Tests&#xD;
+</StdOut>
+    </Output>
+    <RunInfos>
+      <RunInfo computerName="VNQ" outcome="Warning" timestamp="2026-10-27T08:08:15.0649302+07:00">
+        <Text>[xUnit.net 00:00:01.88]     Parking.Microservices.Tests.ParkingWorkflowTests.StaffScopeCustomerDeniedAndRevokedAssignmentAreCheckedAgainstIdentityDatabase [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="VNQ" outcome="Warning" timestamp="2026-10-27T08:08:15.1129582+07:00">
+        <Text>[xUnit.net 00:00:01.93]     Parking.Microservices.Tests.ParkingWorkflowTests.HoldExpiryNeverReleasesPhysicalOccupancyEvenForAnotherExpiredHold [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="VNQ" outcome="Warning" timestamp="2026-10-27T08:08:15.1227189+07:00">
+        <Text>[xUnit.net 00:00:01.94]     Parking.Microservices.Tests.ParkingWorkflowTests.AvailabilityValidatesRangeLevelVehicleTypeClosureAndOverlappingBookings [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="VNQ" outcome="Warning" timestamp="2026-10-27T08:08:15.1279962+07:00">
+        <Text>[xUnit.net 00:00:01.95]     Parking.Microservices.Tests.ParkingWorkflowTests.DatabaseExpiryAndArrivalDeadlineAreRechecked [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="VNQ" outcome="Warning" timestamp="2026-10-27T08:08:15.2296799+07:00">
+        <Text>[xUnit.net 00:00:01.96]     Parking.Microservices.Tests.ParkingWorkflowTests.ConcurrentScansHaveExactlyOneEffect [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="VNQ" outcome="Warning" timestamp="2026-10-27T08:08:15.2297262+07:00">
+        <Text>[xUnit.net 00:00:01.97]     Parking.Microservices.Tests.ParkingWorkflowTests.ConfirmedQrCreatesOneSessionAndOccupancyThenRetryIsSafe [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="VNQ" outcome="Warning" timestamp="2026-10-27T08:08:15.2297569+07:00">
+        <Text>[xUnit.net 00:00:01.97]     Parking.Microservices.Tests.ParkingWorkflowTests.RealHttpJwtGrpcScopePaymentAndSingleUseQrWorkflow [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="VNQ" outcome="Warning" timestamp="2026-10-27T08:08:15.2297864+07:00">
+        <Text>[xUnit.net 00:00:01.98]     Parking.Microservices.Tests.ParkingWorkflowTests.TooEarlyIsRejectedWithoutConsumingQr [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="VNQ" outcome="Warning" timestamp="2026-10-27T08:08:15.2298146+07:00">
+        <Text>[xUnit.net 00:00:01.98]     Parking.Microservices.Tests.ParkingWorkflowTests.ArrivalDeadlineBlocksOtherwiseValidSignedQr [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="VNQ" outcome="Warning" timestamp="2026-10-27T08:08:15.2298725+07:00">
+        <Text>[xUnit.net 00:00:01.99]     Parking.Microservices.Tests.ParkingWorkflowTests.ReissueRevokesOldQrAndWrongPlateOrGateDoesNotConsumeNewQr [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="VNQ" outcome="Warning" timestamp="2026-10-27T08:08:15.2299027+07:00">
+        <Text>[xUnit.net 00:00:01.99]     Parking.Microservices.Tests.ParkingWorkflowTests.PendingBookingCannotIssueQrAndHoldExpiryReleasesOnlyReservation [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="VNQ" outcome="Warning" timestamp="2026-10-27T08:08:15.2299414+07:00">
+        <Text>[xUnit.net 00:00:02.00]     Parking.Microservices.Tests.ParkingWorkflowTests.MaintenanceBlocksOtherwiseValidCheckIn [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="VNQ" outcome="Warning" timestamp="2026-10-27T08:08:15.2299717+07:00">
+        <Text>[xUnit.net 00:00:02.00]     Parking.Microservices.Tests.ParkingWorkflowTests.ReplayKeyCannotBeReusedForAnotherBodyAndExitGateCannotAdmit [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="VNQ" outcome="Warning" timestamp="2026-10-27T08:08:15.2332417+07:00">
+        <Text>[xUnit.net 00:00:02.01]     Parking.Microservices.Tests.ParkingWorkflowTests.FailureAfterConsumeRollsBackAllBusinessWrites [SKIP]</Text>
+      </RunInfo>
+      <RunInfo computerName="VNQ" outcome="Warning" timestamp="2026-10-27T08:08:17.0352903+07:00">
+        <Text>Data collector 'Blame' message: All tests finished running, Sequence file will not be generated.</Text>
+      </RunInfo>
+    </RunInfos>
+  </ResultSummary>
+</TestRun>

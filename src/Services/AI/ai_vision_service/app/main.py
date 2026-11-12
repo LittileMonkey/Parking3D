@@ -277,12 +277,6 @@ def _process_image_array(image: np.ndarray, start_time: float) -> tuple[str, flo
         except Exception as e:
             print(f"[OCR] General OCR recognition error: {e}")
 
-    # Fallback an toàn nếu mô hình OCR không đọc được chữ
-    if not plate_text:
-        plate_text = "29C1 99999"
-        ocr_conf = 0.90
-        plate_type = "TwoLine"
-
     # 3. Đánh giá chất lượng và định dạng biển số
     _, format_valid, status = assess_plate_text(plate_text, ocr_conf)
 

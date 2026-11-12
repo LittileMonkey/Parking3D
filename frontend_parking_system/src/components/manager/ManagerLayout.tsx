@@ -1,3 +1,4 @@
+import NotificationBell from "../customer/NotificationBell";
 import { useState, useEffect } from "react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
@@ -31,7 +32,8 @@ export default function ManagerLayout() {
     return (localStorage.getItem("pm-manager-theme") as "dark" | "light") || "dark";
   });
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [facilities, setFacilities] = useState<ManagerFacilitySummary[]>([]);
+  const [facilities, setFacilities] = useState<Pick<ManagerFacilitySummary, "lotId" | "code" | "name" | "address">[]>([]);
+  const [facilityError, setFacilityError] = useState("");
   const [selectedLotId, setSelectedLotId] = useState<string>("all");
   const [period, setPeriod] = useState<ReportingPeriod>("today");
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -51,12 +53,15 @@ export default function ManagerLayout() {
       try {
         const facs = await managerApi.getManagedFacilities();
         setFacilities(facs);
+        setSelectedLotId(current => current === "all" && facs.length === 1 ? facs[0].lotId : current);
+        setFacilityError("");
       } catch (err) {
-        console.error("ManagerLayout load facilities error:", err);
+        setFacilities([]);
+        setFacilityError(err instanceof Error ? err.message : "Không tải được danh sách bãi.");
       }
     }
     loadFacilities();
-  }, []);
+  }, [refreshKey]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
@@ -94,7 +99,7 @@ export default function ManagerLayout() {
       label: "Ngoại lệ",
       fullName: "Phê duyệt ngoại lệ",
       icon: <AlertTriangle size={21} />,
-      badge: 3,
+
     },
     {
       to: "/manager/reports-audit",
@@ -136,7 +141,7 @@ export default function ManagerLayout() {
                   aria-label={item.fullName}
                 >
                   {item.icon}
-                  {item.badge && <span className="pm-dock-badge" />}
+                  
                 </NavLink>
                 {/* Floating Tooltip just like the "Overview" tooltip in screenshot! */}
                 <div className="pm-dock-tooltip">{item.label}</div>
@@ -192,10 +197,10 @@ export default function ManagerLayout() {
                 onChange={(e) => setSelectedLotId(e.target.value)}
                 aria-label="Chọn cơ sở bãi xe"
               >
-                <option value="all">Metropolis Central Hub (PKM-METRO-01)</option>
+                <option value="all">Tất cả bãi được quản lý</option>
                 {facilities.map((fac) => (
                   <option key={fac.lotId} value={fac.lotId}>
-                    {fac.name} ({fac.totalCapacity} chỗ)
+                    {fac.name} ({fac.code})
                   </option>
                 ))}
               </select>
@@ -261,13 +266,14 @@ export default function ManagerLayout() {
             <button
               type="button"
               className="pm-header-icon-btn"
-              onClick={() => navigate("/staff/incidents")}
+              onClick={() => navigate("/manager/incidents-approvals")}
               title="Thông báo vận hành"
             >
               <Bell size={17} />
-              <span className="pm-badge-dot" />
+              
             </button>
 
+            <NotificationBell />
             {/* Profile Avatar Chip */}
             <div
               className="pm-profile-chip"
@@ -335,6 +341,7 @@ export default function ManagerLayout() {
         </header>
 
         {/* Outlet for Dashboard and Sub-views */}
+        {facilityError && <p role="alert">{facilityError}</p>}
         <Outlet
           context={{
             selectedLotId,

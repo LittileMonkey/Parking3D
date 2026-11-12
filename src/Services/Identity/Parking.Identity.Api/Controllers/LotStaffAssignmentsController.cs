@@ -10,6 +10,9 @@ using Parking.Identity.Application.UseCase.StaffAssignment.AddAssignment;
 using Parking.Identity.Application.UseCase.StaffAssignment.GetAssignment;
 using Parking.Identity.Application.UseCase.StaffAssignment.RevokeAssignment;
 using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
+using Parking.Identity.Application.Common.Interface;
+using Parking.Identity.Persistence.DataAccessLayer;
 
 namespace Parking.Identity.Api.Controllers
 {
@@ -43,6 +46,23 @@ namespace Parking.Identity.Api.Controllers
             var response = ApiResponse<IReadOnlyList<LotsAssignmentDto>>.Success(result, "Get Your Assignment Successfully!!", 200);
 
             return Ok(response);
+        }
+        [HttpGet]
+        [Authorize(Roles = "PARKING_MANAGER,ADMIN")]
+        public async Task<IActionResult> ListForLot([FromQuery] Guid lotId,
+            [FromServices] IAssignedLotRepository access, [FromServices] ParkingDatabaseV4Context db, CancellationToken cancellationToken)
+        {
+            var subject=User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+            if(!Guid.TryParse(subject,out var actor))return Unauthorized();
+            if(!await access.CheckAccessAsync(actor,lotId,"MANAGER",cancellationToken) &&
+               !await access.CheckAccessAsync(actor,lotId,"ADMIN",cancellationToken))
+                return StatusCode(403,ApiResponse<object>.Failure("Assigned Manager required.",403,ErrorCode.InvalidAccount));
+            var rows=await db.LotStaffAssignments.AsNoTracking().Where(a=>a.LotId==lotId && a.RevokedAt==null)
+                .OrderBy(a=>a.User.FullName).Select(a=>new {
+                    assignmentId=a.Id,staffUserId=a.UserId,name=a.User.FullName,roleCode=a.RoleCode,
+                    validFrom=a.ValidFrom,validUntil=a.ValidUntil,canManageStaffAssignments=a.CanManageStaffAssignments
+                }).ToListAsync(cancellationToken);
+            return Ok(ApiResponse<object>.Success(rows,"Staff assignments",200));
         }
         [HttpPost]
         [Authorize(Roles = "ADMIN,PARKING_MANAGER")]

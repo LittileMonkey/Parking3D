@@ -1,0 +1,384 @@
+{
+  "info": {
+    "name": "TV2 Sprint2 runtime preparation - NOT RUN",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Isolated Development only. Run individual requests after fixing build/Identity contracts. Set bookingId of existing payable fixture; tokens locally. No login URL assumed until Identity/Gateway contract reviewed. HTTP assertions alone do not prove DB idempotency. QR endpoints intentionally omitted pending actual contract."
+  },
+  "item": [
+    {
+      "name": "READY",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/health/ready",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Standard envelope', () => { const b=pm.response.json(); ['result','isSuccess','statusCode','message'].forEach(k=>pm.expect(b).to.have.property(k)); pm.expect(b.statusCode).to.eql(pm.response.code); pm.expect(b.isSuccess).to.eql(pm.response.code>=200 && pm.response.code<300); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "PUBLIC LOTS",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/parking-lots",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Standard envelope', () => { const b=pm.response.json(); ['result','isSuccess','statusCode','message'].forEach(k=>pm.expect(b).to.have.property(k)); pm.expect(b.statusCode).to.eql(pm.response.code); pm.expect(b.isSuccess).to.eql(pm.response.code>=200 && pm.response.code<300); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "BOOKING OWNER",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/bookings/{{bookingId}}",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{customerToken}}"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Standard envelope', () => { const b=pm.response.json(); ['result','isSuccess','statusCode','message'].forEach(k=>pm.expect(b).to.have.property(k)); pm.expect(b.statusCode).to.eql(pm.response.code); pm.expect(b.isSuccess).to.eql(pm.response.code>=200 && pm.response.code<300); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "BOOKING ANONYMOUS",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/bookings/{{bookingId}}",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+              "pm.test('Standard envelope', () => { const b=pm.response.json(); ['result','isSuccess','statusCode','message'].forEach(k=>pm.expect(b).to.have.property(k)); pm.expect(b.statusCode).to.eql(pm.response.code); pm.expect(b.isSuccess).to.eql(pm.response.code>=200 && pm.response.code<300); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "CREATE CASH",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/payments",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{customerToken}}"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{cashKey}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"bookingId\": \"{{bookingId}}\",\n  \"method\": \"CASH\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Standard envelope', () => { const b=pm.response.json(); ['result','isSuccess','statusCode','message'].forEach(k=>pm.expect(b).to.have.property(k)); pm.expect(b.statusCode).to.eql(pm.response.code); pm.expect(b.isSuccess).to.eql(pm.response.code>=200 && pm.response.code<300); });",
+              "if(pm.response.code===200){ const b=pm.response.json(); pm.expect(b.result.id).to.be.a('string'); pm.environment.set('paymentId',b.result.id); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "CUSTOMER CANNOT CONFIRM",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{lotA}}/payments/{{paymentId}}/cash-confirmation",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{customerToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"version\": 1,\n  \"reason\": \"Synthetic QA confirmation\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 403', () => pm.response.to.have.status(403));",
+              "pm.test('Standard envelope', () => { const b=pm.response.json(); ['result','isSuccess','statusCode','message'].forEach(k=>pm.expect(b).to.have.property(k)); pm.expect(b.statusCode).to.eql(pm.response.code); pm.expect(b.isSuccess).to.eql(pm.response.code>=200 && pm.response.code<300); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "STAFF B CANNOT CONFIRM A",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{lotA}}/payments/{{paymentId}}/cash-confirmation",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{staffBToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"version\": 1,\n  \"reason\": \"Synthetic QA confirmation\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 403', () => pm.response.to.have.status(403));",
+              "pm.test('Standard envelope', () => { const b=pm.response.json(); ['result','isSuccess','statusCode','message'].forEach(k=>pm.expect(b).to.have.property(k)); pm.expect(b.statusCode).to.eql(pm.response.code); pm.expect(b.isSuccess).to.eql(pm.response.code>=200 && pm.response.code<300); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "STAFF A EMPTY REASON",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{lotA}}/payments/{{paymentId}}/cash-confirmation",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{staffAToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"version\": 1,\n  \"reason\": \"\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+              "pm.test('Standard envelope', () => { const b=pm.response.json(); ['result','isSuccess','statusCode','message'].forEach(k=>pm.expect(b).to.have.property(k)); pm.expect(b.statusCode).to.eql(pm.response.code); pm.expect(b.isSuccess).to.eql(pm.response.code>=200 && pm.response.code<300); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "STAFF A STALE VERSION",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{lotA}}/payments/{{paymentId}}/cash-confirmation",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{staffAToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"version\": 999,\n  \"reason\": \"Synthetic QA stale version\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+              "pm.test('Standard envelope', () => { const b=pm.response.json(); ['result','isSuccess','statusCode','message'].forEach(k=>pm.expect(b).to.have.property(k)); pm.expect(b.statusCode).to.eql(pm.response.code); pm.expect(b.isSuccess).to.eql(pm.response.code>=200 && pm.response.code<300); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "STAFF A CONFIRM",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{lotA}}/payments/{{paymentId}}/cash-confirmation",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{staffAToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"version\": 1,\n  \"reason\": \"Synthetic QA confirmation\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Standard envelope', () => { const b=pm.response.json(); ['result','isSuccess','statusCode','message'].forEach(k=>pm.expect(b).to.have.property(k)); pm.expect(b.statusCode).to.eql(pm.response.code); pm.expect(b.isSuccess).to.eql(pm.response.code>=200 && pm.response.code<300); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "STAFF A REPEAT",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{lotA}}/payments/{{paymentId}}/cash-confirmation",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{staffAToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"version\": 1,\n  \"reason\": \"Synthetic QA confirmation\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Standard envelope', () => { const b=pm.response.json(); ['result','isSuccess','statusCode','message'].forEach(k=>pm.expect(b).to.have.property(k)); pm.expect(b.statusCode).to.eql(pm.response.code); pm.expect(b.isSuccess).to.eql(pm.response.code>=200 && pm.response.code<300); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

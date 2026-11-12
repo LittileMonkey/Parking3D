@@ -1,0 +1,154 @@
+{
+  "checkedAt": "2026-11-09T08:39:00.690Z",
+  "server": "18.4",
+  "databases": [
+    {
+      "owner": "identity",
+      "database": "parking_identity",
+      "tables": 11,
+      "versions": [
+        1
+      ],
+      "missing": {
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "indexes": []
+      },
+      "typeMismatches": [],
+      "invalidConstraints": [],
+      "counts": {
+        "app_users": 3,
+        "audit_logs": 0,
+        "auth_tokens": 0,
+        "integration_inbox": 0,
+        "integration_outbox": 0,
+        "lot_staff_assignments": 1,
+        "password_reset_otps": 0,
+        "platform_user_roles": 3,
+        "service_schema_versions": 1,
+        "user_memberships": 0,
+        "user_vehicles": 0
+      },
+      "schemaMatches": true
+    },
+    {
+      "owner": "parking",
+      "database": "parking_parking",
+      "tables": 39,
+      "versions": [
+        1,
+        2,
+        3
+      ],
+      "missing": {
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "indexes": []
+      },
+      "typeMismatches": [],
+      "invalidConstraints": [],
+      "counts": {
+        "app_settings": 0,
+        "audit_logs": 0,
+        "bookings": 0,
+        "device_events": 0,
+        "devices": 0,
+        "incident_history": 0,
+        "integration_inbox": 0,
+        "integration_outbox": 0,
+        "lot_closures": 0,
+        "lot_gates": 0,
+        "lot_opening_intervals": 0,
+        "lot_vehicle_policies": 0,
+        "map_objects": 0,
+        "map_versions": 0,
+        "notifications": 0,
+        "outbox_events": 0,
+        "parking_issues": 0,
+        "parking_levels": 0,
+        "parking_lots": 0,
+        "parking_sessions": 0,
+        "parking_slots": 0,
+        "payment_receipts": 0,
+        "pricing_plans": 0,
+        "pricing_rules": 0,
+        "pricing_snapshots": 0,
+        "qr_tokens": 0,
+        "service_schema_versions": 3,
+        "session_slot_assignments": 0,
+        "shift_handover_history": 0,
+        "shift_handovers": 0,
+        "slot_feature_links": 0,
+        "slot_features": 0,
+        "slot_observations": 0,
+        "slot_reservations": 0,
+        "slot_vehicle_types": 0,
+        "user_vehicle_access": 0,
+        "vehicle_types": 0,
+        "vehicles": 0,
+        "zones": 0
+      },
+      "schemaMatches": true
+    },
+    {
+      "owner": "payment",
+      "database": "parking_payment",
+      "tables": 10,
+      "versions": [
+        1
+      ],
+      "missing": {
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "indexes": []
+      },
+      "typeMismatches": [],
+      "invalidConstraints": [],
+      "counts": {
+        "audit_logs": 0,
+        "billing_accounts": 0,
+        "billing_lines": 0,
+        "integration_inbox": 0,
+        "integration_outbox": 0,
+        "payment_attempts": 0,
+        "payment_webhook_events": 0,
+        "payments": 0,
+        "refunds": 0,
+        "service_schema_versions": 1
+      },
+      "schemaMatches": true
+    },
+    {
+      "owner": "ai",
+      "database": "parking_ai",
+      "tables": 10,
+      "versions": [
+        1
+      ],
+      "missing": {
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "indexes": []
+      },
+      "typeMismatches": [],
+      "invalidConstraints": [],
+      "counts": {
+        "ai_lot_catalog": 0,
+        "ai_plate_recognitions": 0,
+        "assistant_document_chunks": 0,
+        "assistant_documents": 0,
+        "audit_logs": 0,
+        "integration_inbox": 0,
+        "integration_outbox": 0,
+        "occupancy_forecasts": 0,
+        "occupancy_snapshots": 0,
+        "service_schema_versions": 1
+      },
+      "schemaMatches": true
+    }
+  ]
+}

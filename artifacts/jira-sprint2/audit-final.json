@@ -1,0 +1,130 @@
+[
+  {
+    "key": "SCRUM-45",
+    "assignee": "Thiên Nhật Lương",
+    "epic": "SCRUM-11 Integration & Testing",
+    "sprint": "SCRUM Sprint 2",
+    "due": "2026-10-20",
+    "priority": "High"
+  },
+  {
+    "key": "SCRUM-46",
+    "assignee": "Ngọc Đức",
+    "epic": "SCRUM-9 Backend Development",
+    "sprint": "SCRUM Sprint 2",
+    "due": "2026-10-20",
+    "priority": "High"
+  },
+  {
+    "key": "SCRUM-47",
+    "assignee": "Sơn Phạm",
+    "epic": "SCRUM-9 Backend Development",
+    "sprint": "SCRUM Sprint 2",
+    "due": "2026-10-20",
+    "priority": "High"
+  },
+  {
+    "key": "SCRUM-48",
+    "assignee": "lexuanhan105",
+    "epic": "SCRUM-9 Backend Development",
+    "sprint": "SCRUM Sprint 2",
+    "due": "2026-10-20",
+    "priority": "High"
+  },
+  {
+    "key": "SCRUM-49",
+    "assignee": "lexuanhan105",
+    "epic": "SCRUM-9 Backend Development",
+    "sprint": "SCRUM Sprint 2",
+    "due": "2026-10-20",
+    "priority": "High"
+  },
+  {
+    "key": "SCRUM-50",
+    "assignee": "Sơn Phạm",
+    "epic": "SCRUM-9 Backend Development",
+    "sprint": "SCRUM Sprint 2",
+    "due": "2026-10-20",
+    "priority": "High"
+  },
+  {
+    "key": "SCRUM-51",
+    "assignee": "totrieutien",
+    "epic": "SCRUM-10 Frontend Development",
+    "sprint": "SCRUM Sprint 2",
+    "due": "2026-10-20",
+    "priority": "High"
+  },
+  {
+    "key": "SCRUM-52",
+    "assignee": "vonhatquang817",
+    "epic": "SCRUM-11 Integration & Testing",
+    "sprint": "SCRUM Sprint 2",
+    "due": "2026-10-20",
+    "priority": "High"
+  },
+  {
+    "key": "SCRUM-53",
+    "assignee": "Lương Công Phát",
+    "epic": "SCRUM-7 Project Initiation & Requirements Gathering",
+    "sprint": "SCRUM Sprint 2",
+    "due": "2026-10-20",
+    "priority": "High"
+  },
+  {
+    "key": "SCRUM-54",
+    "assignee": "Lương Công Phát",
+    "epic": "SCRUM-11 Integration & Testing",
+    "sprint": "SCRUM Sprint 2",
+    "due": "2026-10-20",
+    "priority": "High"
+  },
+  {
+    "key": "SCRUM-55",
+    "assignee": "vonhatquang817",
+    "epic": "SCRUM-7 Project Initiation & Requirements Gathering",
+    "sprint": "SCRUM Sprint 2",
+    "due": "2026-10-20",
+    "priority": "High"
+  },
+  {
+    "key": "SCRUM-56",
+    "assignee": "Sơn Phạm",
+    "epic": "SCRUM-9 Backend Development",
+    "sprint": "SCRUM Sprint 2",
+    "due": "2026-10-20",
+    "priority": "Medium"
+  },
+  {
+    "key": "SCRUM-57",
+    "assignee": "Ngọc Đức",
+    "epic": "SCRUM-9 Backend Development",
+    "sprint": "SCRUM Sprint 2",
+    "due": "2026-10-20",
+    "priority": "Medium"
+  },
+  {
+    "key": "SCRUM-58",
+    "assignee": "Sơn Phạm",
+    "epic": "SCRUM-9 Backend Development",
+    "sprint": "SCRUM Sprint 2",
+    "due": "2026-10-20",
+    "priority": "Medium"
+  },
+  {
+    "key": "SCRUM-59",
+    "assignee": "Thiên Nhật Lương",
+    "epic": "SCRUM-10 Frontend Development",
+    "sprint": "SCRUM Sprint 2",
+    "due": "2026-10-20",
+    "priority": "Medium"
+  },
+  {
+    "key": "SCRUM-60",
+    "assignee": "Vũ Đức",
+    "epic": "SCRUM-10 Frontend Development",
+    "sprint": "SCRUM Sprint 2",
+    "due": "2026-10-20",
+    "priority": "High"
+  }
+]
