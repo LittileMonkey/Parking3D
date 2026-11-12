@@ -112,6 +112,14 @@ public sealed partial class ParkingRepository
             vehicleType = reader.GetString(1);
             var bookedPlate = reader.GetString(2);
             var normalizedVehiclePlate = reader.GetString(3);
+            var startsAt = reader.GetFieldValue<DateTimeOffset>(4);
+            endsAt = reader.GetFieldValue<DateTimeOffset>(5);
+            var arrivalDeadline = reader.GetFieldValue<DateTimeOffset>(6);
+            var earlyMinutes = reader.GetInt32(7);
+            timezone = reader.GetString(8);
+            entryAt = reader.GetFieldValue<DateTimeOffset>(9);
+            slotCode = reader.GetString(10);
+            await reader.CloseAsync();
             if (plate != bookedPlate || plate != normalizedVehiclePlate)
             {
                 if (!request.AllowMismatchOverride)
@@ -139,13 +147,6 @@ public sealed partial class ParkingRepository
                 resolveInc.Parameters.AddWithValue("overrideReason", request.OverrideReason ?? "Staff confirmed matching vehicle/driver");
                 await resolveInc.ExecuteNonQueryAsync(ct);
             }
-            var startsAt = reader.GetFieldValue<DateTimeOffset>(4);
-            endsAt = reader.GetFieldValue<DateTimeOffset>(5);
-            var arrivalDeadline = reader.GetFieldValue<DateTimeOffset>(6);
-            var earlyMinutes = reader.GetInt32(7);
-            timezone = reader.GetString(8);
-            entryAt = reader.GetFieldValue<DateTimeOffset>(9);
-            slotCode = reader.GetString(10);
             if (entryAt < startsAt.AddMinutes(-earlyMinutes) || entryAt > arrivalDeadline || entryAt >= endsAt)
                 throw new ServiceException(409, "Check-in is outside the allowed arrival window.");
         }
@@ -345,11 +346,11 @@ public sealed partial class ParkingRepository
         await using (var ensureVehicle = Command("""
             INSERT INTO vehicles (id, plate_country, plate_normalized, vehicle_type, fuel_type, is_active)
             VALUES (gen_random_uuid(), 'VN', @plate, @type, 'GASOLINE', true)
-            ON CONFLICT (plate_country, plate_normalized) DO UPDATE SET is_active=true
-            RETURNING id;
+            ON CONFLICT (plate_country, plate_normalized) DO NOTHING;
+            SELECT id FROM vehicles WHERE plate_country='VN' AND plate_normalized=@plate AND vehicle_type=@type AND is_active;
             """))
         {
-            vehicleId = (Guid)(await ensureVehicle.ExecuteScalarAsync(ct))!;
+            vehicleId = await ensureVehicle.ExecuteScalarAsync(ct) is Guid foundVehicle ? foundVehicle : throw new ServiceException(409,"Vehicle is inactive or type differs from its registration");
         }
 
         await using (var vehicleLock = Command("SELECT lock_parking_resource('VEHICLE', @vehicle)"))
@@ -391,17 +392,19 @@ public sealed partial class ParkingRepository
               AND NOT EXISTS (
                   SELECT 1 FROM slot_reservations sr
                   WHERE sr.slot_id = s.id
-                    AND sr.status = 'CONFIRMED'
-                    AND tstzrange(sr.starts_at, sr.ends_at) && tstzrange(clock_timestamp(), clock_timestamp() + interval '2 hours')
+                    AND sr.status IN ('HELD','CONFIRMED')
+                    AND tstzrange(sr.starts_at, sr.ends_at) && tstzrange(@entry,@end,'[)')
               )
             ORDER BY
               COALESCE(SQRT(POWER(mo_slot.x - mo_gate.x, 2) + POWER(mo_slot.y - mo_gate.y, 2) + POWER(mo_slot.z - mo_gate.z, 2)), 99999) ASC,
               lvl.display_order ASC,
               s.code ASC
             LIMIT 1
-            FOR UPDATE SKIP LOCKED;
+            ;
             """))
         {
+            slotSearch.Parameters.AddWithValue("entry",entryAt.UtcDateTime);
+            slotSearch.Parameters.AddWithValue("end",entryAt.AddMinutes(maxBookingMinutes).UtcDateTime);
             await using var reader = await slotSearch.ExecuteReaderAsync(ct);
             if (!await reader.ReadAsync(ct))
                 throw new ServiceException(409, "No available slots for this vehicle type at this parking lot.");
@@ -415,25 +418,25 @@ public sealed partial class ParkingRepository
             await slotLock.ExecuteNonQueryAsync(ct);
         }
 
-        // 8. Lấy Pricing Snapshot còn hiệu lực
-        Guid snapshotId;
-        await using (var snapshotQuery = Command("""
-            SELECT ps.id FROM pricing_snapshots ps
-            JOIN pricing_plans p ON p.id = ps.plan_id AND p.lot_id = ps.lot_id AND p.vehicle_type = ps.vehicle_type
-            WHERE ps.lot_id = @lot AND ps.vehicle_type = @type AND p.status = 'ACTIVE'
-            ORDER BY ps.created_at DESC LIMIT 1;
+        await using(var recheck=Command("""
+            SELECT EXISTS(SELECT 1 FROM parking_slots s WHERE s.id=@slot AND s.operational_status='ACTIVE'
+              AND NOT EXISTS(SELECT 1 FROM session_slot_assignments a WHERE a.slot_id=s.id AND a.vacated_at IS NULL)
+              AND NOT EXISTS(SELECT 1 FROM slot_reservations r WHERE r.slot_id=s.id AND r.status IN ('HELD','CONFIRMED')
+                AND tstzrange(r.starts_at,r.ends_at,'[)') && tstzrange(@entry,@end,'[)')))
             """))
-        {
-            var found = await snapshotQuery.ExecuteScalarAsync(ct);
-            if (found is null)
-            {
-                await using var fallbackQuery = Command("SELECT id FROM pricing_snapshots WHERE lot_id=@lot AND vehicle_type=@type ORDER BY created_at DESC LIMIT 1;");
-                found = await fallbackQuery.ExecuteScalarAsync(ct);
-            }
-            if (found is not Guid snap)
-                throw new ServiceException(503, "Active pricing snapshot not found for lot and vehicle type.");
-            snapshotId = snap;
-        }
+        {recheck.Parameters.AddWithValue("slot",slotId);recheck.Parameters.AddWithValue("entry",entryAt.UtcDateTime);recheck.Parameters.AddWithValue("end",entryAt.AddMinutes(maxBookingMinutes).UtcDateTime);if(!(bool)(await recheck.ExecuteScalarAsync(ct))!)throw new ServiceException(409,"Slot changed during check-in; retry allocation");}
+        // Freeze the currently published tariff for this walk-in; never reuse another booking's snapshot.
+        Guid snapshotId;
+        await using(var snapshot=Command("""
+            INSERT INTO pricing_snapshots(id,lot_id,plan_id,vehicle_type,engine_version,resolved_rules,policy_snapshot,currency)
+            SELECT gen_random_uuid(),p.lot_id,p.id,p.vehicle_type,'block-v1',r.parameters,'{}'::jsonb,p.currency
+            FROM pricing_plans p JOIN pricing_rules r ON r.plan_id=p.id AND r.rule_type='FLAT_BLOCK'
+            WHERE p.lot_id=@lot AND p.vehicle_type=@type AND p.status='PUBLISHED' AND p.currency='VND'
+              AND p.effective_from<=@entry AND (p.effective_until IS NULL OR p.effective_until>@entry)
+              AND NOT EXISTS(SELECT 1 FROM pricing_rules other WHERE other.plan_id=p.id AND other.id<>r.id)
+            ORDER BY p.version_no DESC LIMIT 1 RETURNING id
+            """))
+        {snapshot.Parameters.AddWithValue("entry",entryAt.UtcDateTime);snapshotId=await snapshot.ExecuteScalarAsync(ct) is Guid id?id:throw new ServiceException(409,"No supported published tariff for walk-in");}
 
         // 9. Tạo ParkingSession mới và gán Chỗ đỗ vật lý (session_slot_assignments)
         var sessionId = Guid.NewGuid();

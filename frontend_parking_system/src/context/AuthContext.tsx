@@ -4,7 +4,8 @@ import { api, type AuthTokens, type AuthUser } from "../services/api";
 export interface AuthContextValue {
   user: AuthUser | null;
   isAuthenticated: boolean;
-  login: (userName: string, password: string) => Promise<AuthUser>;
+  guestLogin: (email: string, code: string, mfaCode?: string) => Promise<AuthUser>;
+  login: (userName: string, password: string, mfaCode?: string) => Promise<AuthUser>;
   logout: () => Promise<void>;
   getRedirectPath: (targetUser?: AuthUser | null) => string;
 }
@@ -116,6 +117,8 @@ export function getRedirectPathForUser(targetUser?: AuthUser | null): string {
 function getSavedUser(): AuthUser | null {
   const savedUser = sessionStorage.getItem("parking.user");
   const token = sessionStorage.getItem("parking.accessToken");
+  const claims = token ? parseJwtPayload(token) : null;
+  if (!claims || typeof claims.exp !== "number" || claims.exp * 1000 <= Date.now()) return null;
 
   let parsed: AuthUser | null = null;
   if (savedUser) {
@@ -173,8 +176,12 @@ function normalizeUser(tokens: AuthTokens, userName: string): AuthUser {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(getSavedUser);
 
-  const login = async (userName: string, password: string): Promise<AuthUser> => {
-    const response = await api.login(userName, password);
+  const login = async (userName: string, password: string, mfaCode?: string): Promise<AuthUser> => {
+    const response = await api.login(userName, password, mfaCode);
+    return acceptLogin(response,userName);
+  };
+  const guestLogin = async (email: string, code: string, mfaCode?: string): Promise<AuthUser> => acceptLogin(await api.guestLogin(email,code,mfaCode),email);
+  const acceptLogin = async (response: AuthTokens, userName: string): Promise<AuthUser> => {
     const accessToken = response.accessToken ?? response.token;
     if (!accessToken) {
       throw new Error("Máy chủ không trả access token. Vui lòng kiểm tra cấu hình API đăng nhập.");
@@ -236,6 +243,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isAuthenticated: user !== null,
         login,
+        guestLogin,
         logout,
         getRedirectPath,
       }}

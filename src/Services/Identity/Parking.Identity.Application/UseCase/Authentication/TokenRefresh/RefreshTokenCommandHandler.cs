@@ -93,18 +93,14 @@ namespace Parking.Identity.Application.UseCase.Authentication.TokenRefresh
             }
 
             // 9. Kiểm tra trạng thái tài khoản
-            if (user.Status != AppUserStatus.Active)
+            if (user.Status != AppUserStatus.Active || user.LockedUntil > DateTime.UtcNow)
             {
                 throw new AppException(
                     ErrorCode.AccountInactive,
                     "The account is currently inactive.");
             }
 
-            // 10. Đánh dấu token cũ đã sử dụng
-            authToken.ConsumedAt = DateTime.UtcNow;
-
-            // TODO: Lưu authToken.ConsumedAt bằng repository.
-            // Tốt nhất thực hiện cùng transaction với bước tạo token mới.
+            // Consume and replace atomically below; concurrent refresh must not issue two sessions.
 
             // 11. Sinh access token mới
             var newAccessToken =
@@ -129,9 +125,11 @@ namespace Parking.Identity.Application.UseCase.Authentication.TokenRefresh
                 CreatedAt = DateTime.UtcNow
             };
 
-            await authTokenRepository.AddAsync(
-                newAuthToken,
-                cancellationToken);
+            if(!await authTokenRepository.RotateAsync(authToken.Id,newAuthToken,cancellationToken))
+            {
+                await authTokenRepository.RevokedFamilyAsync(authToken.FamilyId,cancellationToken);
+                throw new AppException(ErrorCode.InvalidToken,"Refresh token was already consumed or revoked. Sign in again.");
+            }
 
             // 14. Trả về thông tin xác thực mới
             return new AuthenticationResponseDto

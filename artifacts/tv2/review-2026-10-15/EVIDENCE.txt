@@ -1,0 +1,20 @@
+TV2 review 2026-10-15; source review only
+GitHub dev: d4a37fa8128922d8471e2f07aef5bf07d521d57a
+GitHub main: b3b788384e26dfc8e043174c096746417a7d3097
+Artifact validation PASS: JSON parses, 32 unique case IDs, CSV=32, all NOT_RUN, Postman=11, environment parses.
+Artifact validation does not prove product runtime PASS.
+dotnet test attempted in isolated exported dev source; interrupted while restore had not completed; no result/TRX; current build unverified.
+Source evidence follows:
+github/dev:src/Services/Parking/Parking.Parking.Api/Program.cs:19:builder.Services.AddScoped<IParkingRepository, ParkingRepository>();
+github/dev:src/Services/Parking/Parking.Parking.Api/Program.cs:21:builder.Services.AddHostedService<HoldExpiryWorker>();
+github/dev:src/Services/Parking/Parking.Parking.Api/Program.cs:23:builder.Services.AddScoped<IEstimatedPriceService, FakeEstimatedPriceService>();
+github/dev:src/Services/Payment/Parking.Payment.Api/Controllers/PaymentsController.cs:56:        [HttpPost("cash/confirm")]
+github/dev:src/Services/Payment/Parking.Payment.Api/Controllers/PaymentsController.cs:59:            // 1. Trích xuất tên nhân viên từ Token (fallback về "staff_01" nếu test qua Postman chưa có Token)
+github/dev:src/Services/Payment/Parking.Payment.Api/Controllers/PaymentsController.cs:63:                              ?? "staff_01";
+github/dev:src/Services/Payment/Parking.Payment.Infrastructure/Repositories/PaymentRepository.cs:24:                PaymentId = Guid.NewGuid(),
+github/dev:src/Services/Payment/Parking.Payment.Infrastructure/Repositories/PaymentRepository.cs:29:            return Task.FromResult(result);
+github/dev:src/Services/Payment/Parking.Payment.Infrastructure/Repositories/PaymentRepository.cs:39:            PaymentId = Guid.NewGuid(),
+github/dev:src/Services/Payment/Parking.Payment.Infrastructure/Repositories/PaymentRepository.cs:42:            TotalAmount = 45000,
+github/dev:src/Services/Payment/Parking.Payment.Infrastructure/Repositories/PaymentRepository.cs:46:            return Task.FromResult<PaymentStatusDto?>(mockStatus);
+ .../BackgroundServices/HoldExpiryWorker.cs         | 67 ++++++++++++++++------
+ 1 file changed, 48 insertions(+), 19 deletions(-)

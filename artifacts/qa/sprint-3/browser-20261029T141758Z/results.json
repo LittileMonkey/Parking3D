@@ -1,0 +1,65 @@
+{
+  "scope": "Rendering only; no API mocks or business acceptance",
+  "routes": [
+    {
+      "name": "home",
+      "status": 200,
+      "finalPath": "/",
+      "headings": [
+        "Tìm Chỗ Đỗ Xe Thông Minh,Nhanh Chóng & Chuẩn Xác",
+        "Trung Tâm Bản Đồ Không Gian GIS",
+        "Giải Pháp Toàn Diện Cho Đô Thị Thông Minh",
+        "Tình Trạng Chỗ Theo Thời Gian Thực",
+        "Đặt Trước Vị Trí Đỗ Xe",
+        "Thanh Toán Đa Phương Thức",
+        "Tự Động Nhận Diện Biển Số (ANPR)",
+        "Quản Lý Đa Phương Tiện & EV",
+        "Lịch Sử & Hóa Đơn Điện Tử",
+        "Đèn dẫn hướng LED từng ô đỗ",
+        "ANPR AI mở Barie trong 0.3s",
+        "Trạm sạc nhanh DC thế hệ mới",
+        "Sẵn sàng nâng tầm trải nghiệm đỗ xe thông minh cùng ParkMatrix?",
+        "Trung Tâm Hỗ Trợ",
+        "Độ Phủ Hạ Tầng",
+        "Dành Cho Doanh Nghiệp"
+      ]
+    },
+    {
+      "name": "booking",
+      "status": 200,
+      "finalPath": "/booking",
+      "headings": [
+        "Tìm và đặt chỗ",
+        "Kết quả tìm kiếm"
+      ]
+    },
+    {
+      "name": "search",
+      "status": 200,
+      "finalPath": "/booking",
+      "headings": [
+        "Tìm và đặt chỗ",
+        "Kết quả tìm kiếm"
+      ]
+    },
+    {
+      "name": "staff",
+      "status": 200,
+      "finalPath": "/staff/dashboard",
+      "headings": [
+        "Tổng quan ca trực",
+        "Tra cứu nhanh Biển số / Mã vé",
+        "Xe và hoạt động ca trực",
+        "Barrier & Equipment Status",
+        "Alerts & Handover Notes",
+        "Real time log list"
+      ]
+    },
+    {
+      "name": "booking-mobile",
+      "viewport": 390,
+      "documentWidth": 390
+    }
+  ],
+  "pageErrors": []
+}

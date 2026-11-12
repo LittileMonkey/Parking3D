@@ -1,3 +1,4 @@
+using Parking.ServiceDefaults;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Text.Json;
@@ -65,7 +66,7 @@ public class PythonFastApiClient(
 
     /// <summary>
     /// Gửi mảng byte ảnh tới endpoint Python <c>/detect-plate</c> bằng giao thức HTTP POST Multipart Form-Data.
-    /// Nếu dịch vụ Python offline hoặc lỗi kết nối, phương thức sẽ tự động chuyển sang chế độ giả lập cục bộ an toàn.
+    /// Nếu dịch vụ Python không khả dụng, phương thức trả lỗi để nhân viên xác minh thủ công.
     /// </summary>
     /// <param name="imageBytes">Mảng byte thô của ảnh cần quét biển số</param>
     /// <param name="ct">Mã thông báo hủy tác vụ bất đồng bộ (<see cref="CancellationToken"/>)</param>
@@ -99,34 +100,12 @@ public class PythonFastApiClient(
 
             logger.LogWarning("Python AI Vision service responded with status {StatusCode}", response.StatusCode);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or SocketException)
+        catch (Exception ex) when (!ct.IsCancellationRequested && ex is (HttpRequestException or TaskCanceledException or SocketException))
         {
             // Exception Filter: Chỉ bắt các lỗi mất mạng, timeout hoặc server Python chưa bật
-            logger.LogWarning(ex, "Không thể kết nối đến Python FastAPI tại {Url}. Kích hoạt chế độ giả lập cục bộ an toàn.", targetUrl);
+            logger.LogWarning(ex, "Không thể kết nối đến Python FastAPI tại {Url}. Yêu cầu nhân viên xác minh thủ công.", targetUrl);
         }
 
-        // Fallback mô phỏng: Giúp hệ thống nghiệp vụ (Gate In/Out) tiếp tục hoạt động liên tục khi service AI chưa bật
-        return GenerateFallbackDetectionResult();
-    }
-
-    /// <summary>
-    /// Hàm sinh kết quả giả lập ngẫu nhiên các biển số xe hợp lệ theo chuẩn Việt Nam.
-    /// Được kích hoạt khi Microservice Python chưa khởi động nhằm đảm bảo luồng kiểm thử không bị gián đoạn.
-    /// </summary>
-    private static PythonPlateDetectionResponse GenerateFallbackDetectionResult()
-    {
-        var samplePlates = new[] { "51K-888.88", "30H-999.99", "59-P1 678.90", "43A-123.45" };
-        var random = new Random();
-        var selectedPlate = samplePlates[random.Next(samplePlates.Length)];
-
-        return new PythonPlateDetectionResponse
-        {
-            PlateText = selectedPlate,
-            Confidence = 0.94,
-            PlateType = selectedPlate.Contains("-P1") ? "TwoLine" : "OneLine",
-            CroppedImageBase64 = null,
-            ProcessingTimeMs = 45,
-            IsFallback = true
-        };
+        throw new ServiceException(503, "Không thể nhận diện biển số lúc này. Vui lòng xác minh và nhập biển số thủ công.");
     }
 }

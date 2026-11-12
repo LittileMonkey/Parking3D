@@ -1,3 +1,4 @@
+import NotificationBell from "../customer/NotificationBell";
 import React, { useState, useEffect } from "react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
@@ -42,7 +43,7 @@ export default function StaffLayout() {
         if (facilityList.length > 0 && !selectedLotId) {
           setSelectedLotId(facilityList[0].lotId);
         }
-        const incidents: Incident[] = await staffApi.getIncidents();
+        const incidents: Incident[] = selectedLotId || facilityList[0]?.lotId ? await staffApi.getIncidents(selectedLotId || facilityList[0].lotId) : [];
         const active = incidents.filter((i) => i.status === "Open" || i.status === "InProgress");
         setOpenIncidentCount(active.length);
       } catch (err) {
@@ -77,11 +78,13 @@ export default function StaffLayout() {
         severity: "Critical",
         description: emergencyText,
         detectedAt: new Date().toISOString(),
-      });
+      }, selectedLotId);
       setShowEmergencyModal(false);
       setEmergencyText("");
       setOpenIncidentCount((prev) => prev + 1);
       navigate("/staff/incidents");
+    } catch (err: any) {
+      alert(err.message || "Không gửi được báo cáo khẩn cấp.");
     } finally {
       setEmergencySubmitting(false);
     }
@@ -206,9 +209,10 @@ export default function StaffLayout() {
             onClick={() => navigate("/staff/incidents")}
           >
             <Bell size={18} />
-            <span className="pm-notif-badge">{openIncidentCount > 0 ? openIncidentCount : 1}</span>
+            {openIncidentCount > 0 && <span className="pm-notif-badge">{openIncidentCount}</span>}
           </button>
 
+          <NotificationBell />
           {/* Staff Profile Chip */}
           <div className="pm-profile-chip">
             <div className="pm-profile-avatar">

@@ -1,0 +1,101 @@
+{
+  "commit": "11e5652",
+  "utc": "2026-10-20T01:15:17.518Z",
+  "scope": "Anonymous HTTP probes against isolated Payment and Gateway; no seeded payment or real user; no successful payment mutation; no live Identity/provider",
+  "engine": "PostgreSQL 18.4",
+  "results": [
+    {
+      "id": "HTTP-01",
+      "method": "GET",
+      "path": "/api/v1/payments/12345678-1234-4234-8234-123456789099/status",
+      "host": "55581",
+      "authentication": "none",
+      "expectedStatus": 401,
+      "actualStatus": 404,
+      "result": "FAIL",
+      "response": {
+        "isSuccess": false,
+        "statusCode": 404,
+        "message": "Payment record not found for the specified booking.",
+        "result": null
+      }
+    },
+    {
+      "id": "HTTP-02",
+      "method": "POST",
+      "path": "/api/v1/payments/cash/confirm",
+      "host": "55581",
+      "authentication": "none",
+      "expectedStatus": 401,
+      "actualStatus": 404,
+      "result": "FAIL",
+      "response": {
+        "Message": "Payment record not found for the specified booking.",
+        "ErrorDetails": [
+          {
+            "ErrorMessage": "Payment record not found for the specified booking.",
+            "ErrorCode": "HTTP_404",
+            "ErrorField": ""
+          }
+        ]
+      }
+    },
+    {
+      "id": "HTTP-03",
+      "method": "POST",
+      "path": "/api/v1/payments/cash/confirm",
+      "host": "55581",
+      "authentication": "none",
+      "expectedStatus": 401,
+      "actualStatus": 400,
+      "result": "FAIL",
+      "response": {
+        "Message": "Dữ liệu không hợp lệ.",
+        "ErrorDetails": [
+          {
+            "ErrorMessage": "Lý do xác nhận thu tiền mặt không được để trống.",
+            "ErrorCode": "NotEmptyValidator",
+            "ErrorField": "StaffReason"
+          },
+          {
+            "ErrorMessage": "Phiên bản (Version) phải lớn hơn hoặc bằng 1.",
+            "ErrorCode": "GreaterThanOrEqualValidator",
+            "ErrorField": "Version"
+          }
+        ]
+      }
+    },
+    {
+      "id": "HTTP-04",
+      "method": "POST",
+      "path": "/api/v1/payments",
+      "host": "55581",
+      "authentication": "none",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "result": "PASS",
+      "response": {
+        "result": null,
+        "isSuccess": false,
+        "statusCode": 401,
+        "message": "Authentication required"
+      }
+    },
+    {
+      "id": "HTTP-05",
+      "method": "POST",
+      "path": "/api/v1/check-in",
+      "host": "55580",
+      "authentication": "none",
+      "expectedStatus": null,
+      "actualStatus": 404,
+      "result": "OBSERVED",
+      "response": {
+        "result": null,
+        "isSuccess": false,
+        "statusCode": 404,
+        "message": "Endpoint not found"
+      }
+    }
+  ]
+}

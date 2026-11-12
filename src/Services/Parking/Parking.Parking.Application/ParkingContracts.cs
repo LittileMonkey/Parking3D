@@ -3,7 +3,7 @@ using Parking.Parking.Application.DTOs;
 namespace Parking.Parking.Application;
 
 public sealed record LotView(Guid Id, string Code, string Name, string Address, double Latitude, double Longitude, string Timezone);
-public sealed record BookingRequest(Guid LotId, Guid SlotId, Guid VehicleId, DateTimeOffset StartsAt, DateTimeOffset EndsAt);
+public sealed record BookingRequest(Guid LotId, Guid SlotId, Guid VehicleId, DateTimeOffset StartsAt, DateTimeOffset EndsAt, string Mode = "EXACT_SLOT");
 public sealed record BookingView(Guid Id, string Code, string Status, long EstimatedAmount, DateTimeOffset HoldExpiresAt, int Version);
 public sealed record RecognitionUpload(string ImageBase64, string ContentType);
 public sealed record RecognitionView(Guid Id, string Status, string? CandidatePlate, double? Confidence, string ModelVersion);

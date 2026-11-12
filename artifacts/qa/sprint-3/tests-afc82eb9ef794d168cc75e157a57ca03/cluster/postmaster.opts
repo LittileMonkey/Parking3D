@@ -1,0 +1,1 @@
+D:/postGREDB/bin/postgres.exe "-D" "D:/OJT26_PARK_AUUA/PROJECT_OJT/parking-system-group2/artifacts/qa/sprint-3/tests-afc82eb9ef794d168cc75e157a57ca03/cluster" "-p" "55484" "-h" "127.0.0.1"

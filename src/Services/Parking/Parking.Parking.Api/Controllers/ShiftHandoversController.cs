@@ -1,4 +1,4 @@
-using System.Security.Claims;
+using Parking.Parking.Application;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,15 +11,12 @@ namespace Parking.Parking.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/v1/parking-lots/{lotId:guid}/shift-handovers")]
-public sealed class ShiftHandoversController(ISender sender) : ControllerBase
+public sealed class ShiftHandoversController(ISender sender, IFacilityAccess access) : ControllerBase
 {
-    private bool IsManagerUser()
+    private async Task<bool> IsManagerUser(Guid lotId, CancellationToken ct)
     {
-        return User.IsInRole("PARKING_MANAGER") ||
-               User.IsInRole("ADMIN") ||
-               User.IsInRole("PARKING_ADMIN") ||
-               User.HasClaim(c => c.Type == ClaimTypes.Role &&
-                   (c.Value == "PARKING_MANAGER" || c.Value == "ADMIN" || c.Value == "PARKING_ADMIN"));
+        try { await access.RequireAsync(User.Subject(),lotId,"MANAGER",ct); return true; }
+        catch(ServiceException error) when(error.StatusCode==403) { return false; }
     }
 
     /// <summary>
@@ -49,7 +46,7 @@ public sealed class ShiftHandoversController(ISender sender) : ControllerBase
         CancellationToken ct = default)
     {
         var result = await sender.Send(new ListShiftHandoversQuery(
-            lotId, User.Subject(), IsManagerUser(), status, page, pageSize), ct);
+            lotId, User.Subject(), await IsManagerUser(lotId, ct), status, page, pageSize), ct);
         return Ok(new ApiResponse<PagedResult<ShiftHandoverSummaryDto>>(result, true, 200, "Đã tải danh sách bàn giao ca."));
     }
 
@@ -63,7 +60,7 @@ public sealed class ShiftHandoversController(ISender sender) : ControllerBase
         CancellationToken ct)
     {
         var result = await sender.Send(new GetShiftHandoverByIdQuery(
-            lotId, handoverId, User.Subject(), IsManagerUser()), ct);
+            lotId, handoverId, User.Subject(), await IsManagerUser(lotId, ct)), ct);
         return Ok(new ApiResponse<ShiftHandoverDto>(result, true, 200, "Đã lấy chi tiết biên bản bàn giao ca."));
     }
 

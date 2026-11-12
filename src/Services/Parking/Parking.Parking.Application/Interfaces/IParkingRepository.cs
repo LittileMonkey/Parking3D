@@ -38,6 +38,7 @@ public interface IParkingRepository
 
     /// <summary>Hết hạn hold chưa thanh toán; không giải phóng reservation xác nhận hay chỗ có xe.</summary>
     Task<int> ExpireHoldsAsync(CancellationToken ct);
+    Task<int> ExpireNoShowsAsync(CancellationToken ct) => Task.FromResult(0);
 
     /// <summary>Đọc thông tin nội bộ cần cho kiểm tra quyền và điều kiện phát hành QR.</summary>
     Task<BookingQrContextDto?> GetBookingQrContextAsync(Guid bookingId, CancellationToken ct);

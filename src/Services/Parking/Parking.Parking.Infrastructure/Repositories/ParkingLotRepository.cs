@@ -13,7 +13,10 @@ public class ParkingLotRepository : IParkingLotRepository
         _db = db;
     }
 
-    public async Task<List<ParkingLot>> GetAvailableLotsAsync(string vehicleType, CancellationToken cancellationToken = default)
+    public Task<List<ParkingLot>> GetAvailableLotsAsync(string vehicleType, CancellationToken cancellationToken = default)
+        => GetAvailableLotsAsync(vehicleType, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(1), cancellationToken);
+
+    public async Task<List<ParkingLot>> GetAvailableLotsAsync(string vehicleType, DateTimeOffset startsAt, DateTimeOffset endsAt, CancellationToken cancellationToken = default)
     {
         var normalizedType = vehicleType.Trim().ToUpperInvariant();
 
@@ -49,15 +52,28 @@ public class ParkingLotRepository : IParkingLotRepository
                       WHERE sr.slot_id = s.id 
                         AND sr.status IN ('HELD', 'CONFIRMED')
                         AND b.status IN ('PENDING_PAYMENT', 'CONFIRMED')
-                        AND sr.ends_at > now() AND sr.starts_at <= now()
+                        AND (b.status='CONFIRMED' OR b.hold_expires_at>now())
+                        AND tstzrange(sr.starts_at,sr.ends_at,'[)') && tstzrange(@start,@end,'[)')
                   )
                 GROUP BY s.lot_id
             ) slots_stat ON slots_stat.lot_id = l.id
-            WHERE l.status = 'ACTIVE';
+            WHERE l.status = 'ACTIVE'
+              AND NOT EXISTS(SELECT 1 FROM lot_closures c WHERE c.lot_id=l.id
+                AND tstzrange(c.starts_at,c.ends_at,'[)') && tstzrange(@start,@end,'[)'))
+              AND NOT EXISTS (
+                SELECT 1 FROM generate_series(date_trunc('minute',@start::timestamptz),@end::timestamptz-interval '1 microsecond',interval '1 minute') t(at)
+                WHERE NOT EXISTS(SELECT 1 FROM lot_opening_intervals o WHERE o.lot_id=l.id
+                  AND ((extract(isodow FROM t.at AT TIME ZONE l.timezone)-1)*1440
+                    + extract(hour FROM t.at AT TIME ZONE l.timezone)*60 + extract(minute FROM t.at AT TIME ZONE l.timezone)) >= o.start_minute
+                  AND ((extract(isodow FROM t.at AT TIME ZONE l.timezone)-1)*1440
+                    + extract(hour FROM t.at AT TIME ZONE l.timezone)*60 + extract(minute FROM t.at AT TIME ZONE l.timezone)) < o.end_minute)
+              );
             """;
 
         await using var cmd = _db.CreateCommand(sql);
         cmd.Parameters.AddWithValue("vehicleType", normalizedType);
+        cmd.Parameters.AddWithValue("start", startsAt.ToUniversalTime());
+        cmd.Parameters.AddWithValue("end", endsAt.ToUniversalTime());
 
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         var result = new List<ParkingLot>();

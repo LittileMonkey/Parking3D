@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="../Parking.Payment.Domain/Parking.Payment.Domain.csproj" />
-    <ProjectReference Include="..\..\Parking\Parking.Parking.Api\Parking.Parking.Api.csproj" />
+    <ProjectReference Include="../../../Contracts/Parking.Contracts/Parking.Contracts.csproj" />
+    <ProjectReference Include="../../../BuildingBlocks/Parking.ServiceDefaults/Parking.ServiceDefaults.csproj" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     
   </ItemGroup>
   <ItemGroup>

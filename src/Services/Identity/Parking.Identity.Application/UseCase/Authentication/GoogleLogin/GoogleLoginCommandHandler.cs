@@ -9,6 +9,7 @@ namespace Parking.Identity.Application.UseCase.Authentication.GoogleLogin
 {
     public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, GoogleLoginResult>
     {
+        private readonly IMfaVerifier mfa;
         private readonly IAccountRepository repository;
         private readonly IGoogleSubjectLogin googleSubjectLogin;
         private readonly IAccessTokenService accessTokenService;
@@ -23,12 +24,13 @@ namespace Parking.Identity.Application.UseCase.Authentication.GoogleLogin
             IGoogleTokenValidator googleTokenValidator,
             IAuthTokenRepository authTokenRepository,
             IUserMembershipRepository userMembershipRepository,
-            IUnitOfWork unitOfWork)
+            IUnitOfWork unitOfWork, IMfaVerifier mfa)
         {
             this.repository = repository;
             this.googleSubjectLogin = googleSubjectLogin;
             this.accessTokenService = accessTokenService;
             this.googleTokenValidator = googleTokenValidator;
+            this.mfa = mfa;
             this.authTokenRepository = authTokenRepository;
             this.userMembershipRepository = userMembershipRepository;
             this.unitOfWork = unitOfWork;
@@ -97,6 +99,8 @@ namespace Parking.Identity.Application.UseCase.Authentication.GoogleLogin
                 throw new AppException(ErrorCode.AccountLocked, "The account is temporarily locked. Please try again later.");
             }
 
+            if(user.LockedUntil.HasValue && user.LockedUntil.Value > DateTime.UtcNow) throw new AppException(ErrorCode.AccountLocked,"Account temporarily locked");
+            await mfa.RequireAsync(user.Id,request.MfaCode,cancellationToken);
             var accessToken = accessTokenService.GenerateAccessToken(user);
 
             var refreshToken = accessTokenService.GenerateRefreshToken();

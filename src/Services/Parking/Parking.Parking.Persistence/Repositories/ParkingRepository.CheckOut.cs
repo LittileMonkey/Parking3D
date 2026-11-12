@@ -35,7 +35,7 @@ public sealed partial class ParkingRepository
             SELECT ps.id,ps.booking_id,s.id,s.code,ps.plate_snapshot,ps.entry_at,ps.expected_exit_at,
                 l.timezone,sn.resolved_rules,
                 (SELECT coalesce(sum(amount),0) FROM payment_receipts WHERE booking_id=ps.booking_id),
-                ps.pricing_snapshot_id,ps.vehicle_id,b.starts_at
+                ps.pricing_snapshot_id,ps.vehicle_id,b.starts_at,ps.grace_minutes
             FROM parking_sessions ps
             JOIN session_slot_assignments a ON a.session_id=ps.id AND a.vacated_at IS NULL
             JOIN parking_slots s ON s.id=a.slot_id AND s.lot_id=ps.lot_id
@@ -57,7 +57,7 @@ public sealed partial class ParkingRepository
         var entryPlate = reader.GetString(4);
         var matches = hasPlate && PlateNumber.TryNormalize(entryPlate, out var original) && original == plate;
         var due = CalculateCheckOutFee(booking.HasValue, entry, expected, now, reader.GetString(8), reader.GetString(7),
-            reader.IsDBNull(12)?null:reader.GetFieldValue<DateTimeOffset>(12));
+            reader.IsDBNull(12)?null:reader.GetFieldValue<DateTimeOffset>(12),graceMinutes:reader.GetInt32(13));
         return new(reader.GetGuid(0), booking, reader.GetGuid(2), reader.GetString(3), entryPlate,
             hasPlate ? plate : "", matches, entry, expected, now,
             (int)Math.Max(0, Math.Ceiling((now-entry).TotalMinutes)),
@@ -68,9 +68,9 @@ public sealed partial class ParkingRepository
     }
 
     private static decimal CalculateCheckOutFee(bool hasBooking, DateTimeOffset entry, DateTimeOffset expected,
-        DateTimeOffset at, string rules, string timezone, DateTimeOffset? bookedStart=null, bool isGoldStarMember=false)
+        DateTimeOffset at, string rules, string timezone, DateTimeOffset? bookedStart=null, bool isGoldStarMember=false,int graceMinutes=0)
     {
-        try { return CheckOutFee.Calculate(hasBooking,entry,expected,at,rules,timezone,bookedStart,isGoldStarMember); }
+        try { return CheckOutFee.Calculate(hasBooking,entry,expected,at,rules,timezone,bookedStart,isGoldStarMember,graceMinutes); }
         catch (Exception error) when (error is ArgumentException or JsonException or TimeZoneNotFoundException or InvalidTimeZoneException)
         { throw new ServiceException(503,"Pricing snapshot unavailable. Checkout is blocked."); }
     }
@@ -191,7 +191,7 @@ public sealed partial class ParkingRepository
         Guid lot; Guid? booking; string code; decimal fee;
         await using (var read=Command("""
             SELECT ps.lot_id,ps.booking_id,s.code,ps.plate_snapshot,ps.entry_at,ps.expected_exit_at,
-                sn.resolved_rules,l.timezone,ps.pricing_snapshot_id,b.starts_at
+                sn.resolved_rules,l.timezone,ps.pricing_snapshot_id,b.starts_at,ps.grace_minutes
             FROM parking_sessions ps
             JOIN session_slot_assignments a ON a.session_id=ps.id AND a.vacated_at IS NULL
             JOIN parking_slots s ON s.id=a.slot_id AND s.lot_id=ps.lot_id
@@ -212,10 +212,10 @@ public sealed partial class ParkingRepository
                 throw new ServiceException(409,"INCIDENT_0482_PLATE_MISMATCH or checkout context changed.");
             fee=CalculateCheckOutFee(booking.HasValue,reader.GetFieldValue<DateTimeOffset>(4),
                 reader.GetFieldValue<DateTimeOffset>(5),proof.QuoteAt,reader.GetString(6),reader.GetString(7),
-                reader.IsDBNull(9)?null:reader.GetFieldValue<DateTimeOffset>(9));
+                reader.IsDBNull(9)?null:reader.GetFieldValue<DateTimeOffset>(9),graceMinutes:reader.GetInt32(10));
             var currentFee=CalculateCheckOutFee(booking.HasValue,reader.GetFieldValue<DateTimeOffset>(4),
                 reader.GetFieldValue<DateTimeOffset>(5),clock.GetUtcNow(),reader.GetString(6),reader.GetString(7),
-                reader.IsDBNull(9)?null:reader.GetFieldValue<DateTimeOffset>(9));
+                reader.IsDBNull(9)?null:reader.GetFieldValue<DateTimeOffset>(9),graceMinutes:reader.GetInt32(10));
             if(currentFee!=fee)
                 throw new ServiceException(409,"Checkout fee changed. Request a new quote; prior payments remain credited.");
         }

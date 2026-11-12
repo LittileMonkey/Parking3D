@@ -171,6 +171,7 @@ export interface PricingPlanHistoryItem {
 export type SlotStatus = "Available" | "Occupied" | "Reserved" | "Maintenance" | "Disabled";
 
 export interface SlotControlItem {
+  operationalStatus?: "ACTIVE" | "MAINTENANCE" | "DISABLED";
   id: string;
   parkingLotId: string;
   slotCode: string; // e.g. "B1-A01"
@@ -182,7 +183,7 @@ export interface SlotControlItem {
   vehicleType: VehicleCategory;
   currentPlate?: string;
   parkedSince?: string;
-  sensorStatus: "Online" | "Offline" | "Degraded";
+  sensorStatus: "Online" | "Offline" | "Degraded" | "Unknown";
   overrideReason?: string;
   lastOverriddenBy?: string;
   lastOverriddenAt?: string;

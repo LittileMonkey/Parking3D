@@ -1,0 +1,122 @@
+// Additive design extension for database-v3 snake_case core. See docs/11-AI-EXTENSION.md.
+// CHECK constraints are implemented in 001_ai_extension.sql; DBML is an ERD, not a migration.
+Table ai_plate_recognitions {
+  id uuid [pk, not null]
+  lot_id uuid [not null]
+  uploaded_by uuid [not null]
+  idempotency_key varchar(128) [not null]
+  image_sha256 varchar(64) [not null]
+  image_object_key text
+  candidate_plate varchar(20)
+  confidence numeric(6,5)
+  status text [not null, note: 'PROCESSING/PENDING_REVIEW/NO_PLATE/FAILED/REVIEWED/CONSUMED']
+  model_version text [not null]
+  reviewed_plate varchar(20)
+  reviewed_by uuid
+  reviewed_at timestamptz
+  consumed_at timestamptz
+  failure_code varchar(64)
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  expires_at timestamptz [not null]
+  version int [not null, default: 1]
+  indexes {
+    (lot_id, uploaded_by, idempotency_key) [unique]
+    (lot_id, created_at)
+    expires_at
+  }
+}
+
+Table occupancy_snapshots {
+  id uuid [pk, not null]
+  lot_id uuid [not null]
+  vehicle_type text [not null]
+  observed_at timestamptz [not null]
+  usable_capacity int [not null]
+  occupied_count int [not null]
+  reserved_count int [not null]
+  data_source text [not null, note: 'ACTUAL/SIMULATED']
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  version int [not null, default: 1]
+  indexes {
+    (lot_id, vehicle_type, observed_at, data_source) [unique]
+    (lot_id, vehicle_type, observed_at)
+  }
+}
+
+Table occupancy_forecasts {
+  id uuid [pk, not null]
+  lot_id uuid [not null]
+  vehicle_type text [not null]
+  generated_at timestamptz [not null]
+  target_at timestamptz [not null]
+  data_cutoff_at timestamptz [not null]
+  usable_capacity int [not null]
+  predicted_occupied numeric(12,3) [not null]
+  lower_occupied numeric(12,3)
+  upper_occupied numeric(12,3)
+  model_version text [not null]
+  data_source text [not null, note: 'ACTUAL/SIMULATED']
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  version int [not null, default: 1]
+  indexes {
+    (lot_id, vehicle_type, generated_at, target_at, model_version, data_source) [unique]
+    (lot_id, vehicle_type, target_at, generated_at)
+  }
+}
+
+Table assistant_documents {
+  id uuid [pk, not null]
+  lot_id uuid [note: 'NULL = platform-wide public guide']
+  document_key varchar(128) [not null]
+  revision int [not null]
+  title text [not null]
+  language varchar(10) [not null, default: 'vi']
+  visibility text [not null, default: 'PUBLIC']
+  status text [not null, note: 'DRAFT/PUBLISHED/ARCHIVED']
+  source_reference text [not null, note: 'Approved source reference; never an instruction to fetch a client URL']
+  approved_by uuid
+  published_at timestamptz
+  effective_from timestamptz [not null]
+  effective_until timestamptz
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  version int [not null, default: 1]
+  indexes {
+    (lot_id, document_key, revision) [unique, note: 'SQL requires NULLS NOT DISTINCT for global guides']
+    (lot_id, status, language)
+  }
+}
+
+Table assistant_document_chunks {
+  id uuid [pk, not null]
+  document_id uuid [not null]
+  chunk_index int [not null]
+  section_title text [not null]
+  content text [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  version int [not null, default: 1]
+  indexes {
+    (document_id, chunk_index) [unique]
+  }
+}
+
+Ref: ai_plate_recognitions.lot_id > parking_lots.id
+Ref: ai_plate_recognitions.uploaded_by > app_users.id
+Ref: ai_plate_recognitions.reviewed_by > app_users.id
+Ref: occupancy_snapshots.(lot_id, vehicle_type) > lot_vehicle_policies.(lot_id, vehicle_type)
+Ref: occupancy_forecasts.(lot_id, vehicle_type) > lot_vehicle_policies.(lot_id, vehicle_type)
+Ref: assistant_documents.lot_id > parking_lots.id
+Ref: assistant_documents.approved_by > app_users.id
+Ref: assistant_document_chunks.document_id > assistant_documents.id
+
+TableGroup AI_Extension {
+  ai_plate_recognitions
+  occupancy_snapshots
+  occupancy_forecasts
+  assistant_documents
+  assistant_document_chunks
+}

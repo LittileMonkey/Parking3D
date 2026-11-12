@@ -8,6 +8,7 @@ export default function Login() {
   const { login, user } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
+  const [mfaCode,setMfaCode] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -30,7 +31,7 @@ export default function Login() {
     setGoogleNotice("");
     setLoading(true);
     try {
-      const authUser = await login(email.trim().toLowerCase(), password);
+      const authUser = await login(email.trim().toLowerCase(), password, mfaCode || undefined);
       // Điều hướng chính xác theo vai trò tài khoản:
       // - PARKING_STAFF -> /staff/dashboard
       // - ADMIN / PARKING_MANAGER -> /manager/dashboard (Admin Dashboard)
@@ -78,6 +79,7 @@ export default function Login() {
             <label htmlFor="login-password">Mật khẩu</label>
             <Link to="/forgot-password">Quên mật khẩu?</Link>
           </div>
+          <label>Mã MFA (nếu đã bật)<input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mfaCode} onChange={e=>setMfaCode(e.target.value)} /></label>
           <div className="simple-auth-password">
             <input
               id="login-password"
@@ -120,6 +122,7 @@ export default function Login() {
         </button>
         {googleNotice && <p className="simple-auth-notice" role="status">{googleNotice}</p>}
 
+        <p><Link to="/guest-login">Khách hàng: đăng nhập bằng mã email</Link></p>
         <p className="simple-auth-switch">
           Chưa có tài khoản? <Link to="/register">Đăng ký ngay</Link>
         </p>

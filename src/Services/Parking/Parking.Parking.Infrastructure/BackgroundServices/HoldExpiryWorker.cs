@@ -34,6 +34,9 @@ public sealed class HoldExpiryWorker(
                     var expiredCount = await repository
                         .ExpireHoldsAsync(stoppingToken);
 
+                    var noShows = await repository.ExpireNoShowsAsync(stoppingToken);
+                    if (noShows > 0) logger.LogInformation("Marked {Count} bookings no-show.", noShows);
+
                     if (expiredCount > 0)
                     {
                         logger.LogInformation(

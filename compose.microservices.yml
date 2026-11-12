@@ -70,14 +70,26 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       Ports__Bind: 0.0.0.0
+      Ports__Http: 8080
+      Ports__Grpc: 8081
       Jwt__Key: ${JWT_KEY:?Run New-DevelopmentEnv.ps1}
       Grpc__ServiceKey: ${GRPC_SERVICE_KEY:?Run New-DevelopmentEnv.ps1}
       ConnectionStrings__Service: "Host=identity-db;Database=parking_identity;Username=identity;Password=${IDENTITY_DB_PASSWORD}"
       Services__IdentityGrpc: http://identity:8081
       Services__ParkingGrpc: http://parking:8081
       Services__AIGrpc: http://ai:8081
-      Bootstrap__Email: ${BOOTSTRAP_EMAIL:?Set administrator email}
-      Bootstrap__Password: ${BOOTSTRAP_PASSWORD:?Run New-DevelopmentEnv.ps1}
+      PasswordReset__OtpSecret: ${OTP_HMAC_KEY:?Run New-DevelopmentEnv.ps1 -Ensure}
+      Email__Sender: ${SMTP_SENDER:-}
+      Email__AppPassword: ${SMTP_PASSWORD:-}
+      Email__SmtpServer: ${SMTP_HOST:-}
+      Email__Port: ${SMTP_PORT:-587}
+      Mfa__EncryptionKey: ${MFA_ENCRYPTION_KEY:?Run New-DevelopmentEnv.ps1 -Ensure}
+      SeedAdmin__Email: ${BOOTSTRAP_EMAIL:?Set administrator email}
+      SeedAdmin__Password: ${BOOTSTRAP_PASSWORD:?Run New-DevelopmentEnv.ps1}
+      SeedAdmin__FullName: Docker demo administrator
+      SeedStaff__Email: ${DEMO_STAFF_EMAIL:?Run New-DevelopmentEnv.ps1 -Ensure}
+      SeedStaff__Password: ${DEMO_STAFF_PASSWORD:?Run New-DevelopmentEnv.ps1 -Ensure}
+      SeedStaff__FullName: Docker demo staff
     depends_on:
       identity-db:
         condition: service_healthy
@@ -92,12 +104,16 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       Ports__Bind: 0.0.0.0
+      Ports__Http: 8080
+      Ports__Grpc: 8081
+      Qr__SigningKey: ${QR_SIGNING_KEY:?Run New-DevelopmentEnv.ps1 -Ensure}
       Jwt__Key: ${JWT_KEY:?Run New-DevelopmentEnv.ps1}
       Grpc__ServiceKey: ${GRPC_SERVICE_KEY:?Run New-DevelopmentEnv.ps1}
       ConnectionStrings__Service: "Host=parking-db;Database=parking_parking;Username=parking;Password=${PARKING_DB_PASSWORD}"
       Services__IdentityGrpc: http://identity:8081
       Services__ParkingGrpc: http://parking:8081
       Services__AIGrpc: http://ai:8081
+      Services__PaymentGrpc: http://payment:8081
     depends_on:
       parking-db:
         condition: service_healthy
@@ -112,12 +128,22 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       Ports__Bind: 0.0.0.0
+      Ports__Http: 8080
+      Ports__Grpc: 8081
+      Qr__SigningKey: ${QR_SIGNING_KEY:?Run New-DevelopmentEnv.ps1 -Ensure}
       Jwt__Key: ${JWT_KEY:?Run New-DevelopmentEnv.ps1}
       Grpc__ServiceKey: ${GRPC_SERVICE_KEY:?Run New-DevelopmentEnv.ps1}
       ConnectionStrings__Service: "Host=payment-db;Database=parking_payment;Username=payment;Password=${PAYMENT_DB_PASSWORD}"
       Services__IdentityGrpc: http://identity:8081
       Services__ParkingGrpc: http://parking:8081
       Services__AIGrpc: http://ai:8081
+      VNPay__RefundsEnabled: ${VNPAY_REFUNDS_ENABLED:-false}
+      VNPay__ApiUrl: ${VNPAY_API_URL:-https://sandbox.vnpayment.vn/merchant_webapi/api/transaction}
+      VNPay__RefundIpAddress: ${VNPAY_REFUND_IP:-}
+      VNPay__TmnCode: ${VNPAY_TMN_CODE:-}
+      VNPay__HashSecret: ${VNPAY_HASH_SECRET:-}
+      Frontend__BaseUrl: http://localhost:3000
+      VNPay__ReturnUrl: ${VNPAY_RETURN_URL:-http://localhost:8080/api/v1/payments/vnpay/return}
     depends_on:
       payment-db:
         condition: service_healthy
@@ -127,7 +153,7 @@ services:
       context: ./src/Services/AI/ai_vision_service
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       PYTHONUNBUFFERED: "1"
     healthcheck:
@@ -135,7 +161,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 120s
     restart: unless-stopped
   ollama:
     image: ollama/ollama:latest
@@ -166,6 +192,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       Ports__Bind: 0.0.0.0
+      Ports__Http: 8080
+      Ports__Grpc: 8081
       Jwt__Key: ${JWT_KEY:?Run New-DevelopmentEnv.ps1}
       Grpc__ServiceKey: ${GRPC_SERVICE_KEY:?Run New-DevelopmentEnv.ps1}
       ConnectionStrings__Service: "Host=ai-db;Database=parking_ai;Username=ai;Password=${AI_DB_PASSWORD}"
@@ -200,6 +228,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_HTTP_PORTS: 8080
+      RateLimit__PermitLimit: 600
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:
@@ -211,6 +240,16 @@ services:
         condition: service_healthy
       ai:
         condition: service_healthy
+    restart: unless-stopped
+  frontend:
+    build:
+      context: ./frontend_parking_system
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:3000:80"
+    depends_on:
+      gateway:
+        condition: service_started
     restart: unless-stopped
 volumes:
   identity-data:

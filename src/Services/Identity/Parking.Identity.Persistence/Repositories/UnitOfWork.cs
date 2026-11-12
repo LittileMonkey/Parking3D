@@ -1,39 +1,21 @@
-﻿using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Parking.Identity.Application.Common.Interface;
 using Parking.Identity.Persistence.DataAccessLayer;
 
-namespace Parking.Identity.Persistence.Repositories
+namespace Parking.Identity.Persistence.Repositories;
+
+public class UnitOfWork(ParkingDatabaseV4Context context) : IUnitOfWork
 {
-    public class UnitOfWork : IUnitOfWork
+    public Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default) =>
+        context.Database.BeginTransactionAsync(cancellationToken);
+
+    public async Task AcquireLockAsync(string resource, CancellationToken cancellationToken = default)
     {
-        private readonly ParkingDatabaseV4Context context;
-        public UnitOfWork(ParkingDatabaseV4Context context)
-        {
-            this.context = context;
-        }
-
-        public async Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default)
-        {
-            return await context.Database.BeginTransactionAsync(cancellationToken);
-        }
-
-        public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
-        {
-            Console.WriteLine("========== EF CHANGE TRACKER ==========");
-
-            foreach (var entry in context.ChangeTracker.Entries())
-            {
-                Console.WriteLine(
-                    $"Entity: {entry.Metadata.ClrType.Name} | " +
-                    $"State: {entry.State} | " +
-                    $"Key: {string.Join(", ", entry.Properties
-                        .Where(p => p.Metadata.IsPrimaryKey())
-                        .Select(p => $"{p.Metadata.Name}={p.CurrentValue}"))}");
-            }
-
-            Console.WriteLine("========== SAVE CHANGES ==========");
-
-            return await context.SaveChangesAsync(cancellationToken);
-        }
+        if(context.Database.CurrentTransaction is null)throw new InvalidOperationException("Resource lock requires a transaction");
+        await context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({resource},0))",cancellationToken);
     }
+
+    public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
+        context.SaveChangesAsync(cancellationToken);
 }

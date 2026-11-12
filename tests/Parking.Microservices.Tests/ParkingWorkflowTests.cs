@@ -77,6 +77,7 @@ public sealed partial class ParkingWorkflowTests : IAsyncLifetime
         await using var seed = new NpgsqlCommand("""
             INSERT INTO app_users(id,full_name,status) VALUES(@customer,'Test Customer','ACTIVE'),(@staff,'Test Staff','ACTIVE');
             INSERT INTO platform_user_roles(user_id,role_code) VALUES(@customer,'CUSTOMER'),(@staff,'PARKING_STAFF');
+            INSERT INTO user_vehicles(id,user_id,license_plate,vehicle_type,is_default) VALUES('99999999-9999-4999-8999-999999999999',@customer,'51A12345','Car',true);
             INSERT INTO lot_staff_assignments(id,lot_id,user_id,role_code,valid_from)
               VALUES(gen_random_uuid(),@lot,@staff,'PARKING_STAFF',now()-interval '1 day');
             """, identity);
@@ -123,9 +124,13 @@ public sealed partial class ParkingWorkflowTests : IAsyncLifetime
         return await command.ExecuteScalarAsync();
     }
 
-    private Task<BookingView> Book(int startMinutes = 2) => repository.CreateBookingAsync(Customer,
-        new BookingRequest(Lot, Slot, Vehicle, DateTimeOffset.UtcNow.AddMinutes(startMinutes),
-            DateTimeOffset.UtcNow.AddMinutes(startMinutes + 60)), Guid.NewGuid().ToString(), Ct);
+    private Task<BookingView> Book(int startMinutes = 2)
+    {
+        var startsAt = DateTimeOffset.UtcNow.AddMinutes(startMinutes);
+        return repository.CreateBookingAsync(Customer,
+            new BookingRequest(Lot, Slot, Vehicle, startsAt, startsAt.AddMinutes(60)),
+            Guid.NewGuid().ToString(), Ct);
+    }
 
     private async Task<GeneratedQrToken> ConfirmAndIssue(BookingView booking)
     {
@@ -357,8 +362,17 @@ public async Task HoldExpiryDoesNotExpireBookingBeforeDeadline()
         Assert.True(await access.CheckAccessAsync(Staff, Lot, "CHECK_IN", Ct));
         Assert.False(await access.CheckAccessAsync(Customer, Lot, "CHECK_IN", Ct));
         Assert.False(await access.CheckAccessAsync(Staff, Guid.NewGuid(), "CHECK_IN", Ct));
+        foreach (var capability in new[] { "INCIDENT_READ", "INCIDENT_WRITE", "HANDOVER" })
+        {
+            Assert.True(await access.CheckAccessAsync(Staff, Lot, capability, Ct));
+            Assert.False(await access.CheckAccessAsync(Customer, Lot, capability, Ct));
+            Assert.False(await access.CheckAccessAsync(Staff, Guid.NewGuid(), capability, Ct));
+        }
+        Assert.False(await access.CheckAccessAsync(Staff, Lot, "MANAGER", Ct));
         await context.Database.ExecuteSqlRawAsync("UPDATE lot_staff_assignments SET revoked_at=now()");
         Assert.False(await access.CheckAccessAsync(Staff, Lot, "CHECK_IN", Ct));
+        Assert.False(await access.CheckAccessAsync(Staff, Lot, "INCIDENT_WRITE", Ct));
+        Assert.False(await access.CheckAccessAsync(Staff, Lot, "HANDOVER", Ct));
     }
 
     [PostgresFact]

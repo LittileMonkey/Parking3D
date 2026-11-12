@@ -1,0 +1,50 @@
+[
+  {
+    "key": 45,
+    "title": "[S2-01][TV8 Nhật][P0] Review microservices, Docker CI và seed 3 bãi"
+  },
+  {
+    "key": 46,
+    "title": "[S2-02][TV5 N.Đức][P0] Quyền theo bãi, xe Customer và cấu trúc bãi"
+  },
+  {
+    "key": 47,
+    "title": "[S2-03][TV7 Sơn][P0] Search NEAREST CHEAPEST và quote toàn thời lượng"
+  },
+  {
+    "key": 48,
+    "title": "[S2-04][TV6 Hàn][P0] Availability booking lookup và hold expiry worker"
+  },
+  {
+    "key": 49,
+    "title": "[S2-05][TV6 Hàn][P0] QR một lần và Staff check-in tạo parking session"
+  },
+  {
+    "key": 50,
+    "title": "[S2-06][TV7 Sơn][P0] CASH payment status và outbox confirmation tích hợp UI"
+  },
+  {
+    "key": 60,
+    "title": "[S2-07][TV3 A.Đức][P0] Customer UI auth search booking CASH status QR FAQ"
+  },
+  {
+    "key": 51,
+    "title": "[S2-08][TV4 Tiến][P0] Staff UI chọn bãi CASH QR check-in và session"
+  },
+  {
+    "key": 53,
+    "title": "[S2-09][TV1 Phát][P0] FAQ người mới có nguồn duyệt và kiểm thử fallback"
+  },
+  {
+    "key": 54,
+    "title": "[S2-10][TV1 Phát][P0] Acceptance và test Customer auth search booking UI"
+  },
+  {
+    "key": 55,
+    "title": "[S2-11][TV2 Quang][P0] RBAC policy tài chính và test vận hành QR check-in"
+  },
+  {
+    "key": 52,
+    "title": "[S2-12][TV2 Quang][P0] Regression báo cáo evidence và kịch bản demo Sprint 2"
+  }
+]

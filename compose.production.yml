@@ -1,0 +1,281 @@
+# Separate production project; only TLS edge publishes public ports.
+name: parking-production
+services:
+  identity-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: parking_identity
+      POSTGRES_USER: identity
+      POSTGRES_PASSWORD: ${IDENTITY_DB_PASSWORD:?Configure .env.production}
+    volumes:
+      - identity-data:/var/lib/postgresql/data
+      - ./database/services/identity/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U identity -d parking_identity"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  parking-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: parking_parking
+      POSTGRES_USER: parking
+      POSTGRES_PASSWORD: ${PARKING_DB_PASSWORD:?Configure .env.production}
+    volumes:
+      - parking-data:/var/lib/postgresql/data
+      - ./database/services/parking/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U parking -d parking_parking"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  payment-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: parking_payment
+      POSTGRES_USER: payment
+      POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD:?Configure .env.production}
+    volumes:
+      - payment-data:/var/lib/postgresql/data
+      - ./database/services/payment/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payment -d parking_payment"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  ai-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: parking_ai
+      POSTGRES_USER: ai
+      POSTGRES_PASSWORD: ${AI_DB_PASSWORD:?Configure .env.production}
+    volumes:
+      - ai-data:/var/lib/postgresql/data
+      - ./database/services/ai/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai -d parking_ai"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  identity:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        PROJECT: src/Services/Identity/Parking.Identity.Api/Parking.Identity.Api.csproj
+        APP_DLL: Parking.Identity.Api.dll
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ForwardedHeaders__KnownNetwork: 172.29.80.0/24
+      Ports__Bind: 0.0.0.0
+      Ports__Http: 8080
+      Ports__Grpc: 8081
+      Jwt__Key: ${JWT_KEY:?Configure .env.production}
+      Grpc__ServiceKey: ${GRPC_SERVICE_KEY:?Configure .env.production}
+      ConnectionStrings__Service: "Host=identity-db;Database=parking_identity;Username=identity;Password=${IDENTITY_DB_PASSWORD}"
+      Services__IdentityGrpc: http://identity:8081
+      Services__ParkingGrpc: http://parking:8081
+      Services__AIGrpc: http://ai:8081
+      PasswordReset__OtpSecret: ${OTP_HMAC_KEY:?Configure .env.production}
+      Email__Sender: ${SMTP_SENDER:?Set SMTP sender}
+      Email__AppPassword: ${SMTP_PASSWORD:?Set SMTP password}
+      Email__SmtpServer: ${SMTP_HOST:?Set SMTP server}
+      Email__Port: ${SMTP_PORT:-587}
+      Mfa__EncryptionKey: ${MFA_ENCRYPTION_KEY:?Configure .env.production}
+      SeedAdmin__Email: ${BOOTSTRAP_EMAIL:?Set administrator email}
+      SeedAdmin__Password: ${BOOTSTRAP_PASSWORD:?Configure .env.production}
+      SeedAdmin__FullName: Administrator
+    depends_on:
+      identity-db:
+        condition: service_healthy
+    restart: unless-stopped
+  parking:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        PROJECT: src/Services/Parking/Parking.Parking.Api/Parking.Parking.Api.csproj
+        APP_DLL: Parking.Parking.Api.dll
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ForwardedHeaders__KnownNetwork: 172.29.80.0/24
+      Ports__Bind: 0.0.0.0
+      Ports__Http: 8080
+      Ports__Grpc: 8081
+      Qr__SigningKey: ${QR_SIGNING_KEY:?Configure .env.production}
+      Jwt__Key: ${JWT_KEY:?Configure .env.production}
+      Grpc__ServiceKey: ${GRPC_SERVICE_KEY:?Configure .env.production}
+      ConnectionStrings__Service: "Host=parking-db;Database=parking_parking;Username=parking;Password=${PARKING_DB_PASSWORD}"
+      Services__IdentityGrpc: http://identity:8081
+      Services__ParkingGrpc: http://parking:8081
+      Services__AIGrpc: http://ai:8081
+      Services__PaymentGrpc: http://payment:8081
+    depends_on:
+      parking-db:
+        condition: service_healthy
+    restart: unless-stopped
+  payment:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        PROJECT: src/Services/Payment/Parking.Payment.Api/Parking.Payment.Api.csproj
+        APP_DLL: Parking.Payment.Api.dll
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ForwardedHeaders__KnownNetwork: 172.29.80.0/24
+      Ports__Bind: 0.0.0.0
+      Ports__Http: 8080
+      Ports__Grpc: 8081
+      Qr__SigningKey: ${QR_SIGNING_KEY:?Configure .env.production}
+      Jwt__Key: ${JWT_KEY:?Configure .env.production}
+      Grpc__ServiceKey: ${GRPC_SERVICE_KEY:?Configure .env.production}
+      ConnectionStrings__Service: "Host=payment-db;Database=parking_payment;Username=payment;Password=${PAYMENT_DB_PASSWORD}"
+      Services__IdentityGrpc: http://identity:8081
+      Services__ParkingGrpc: http://parking:8081
+      Services__AIGrpc: http://ai:8081
+      VNPay__BaseUrl: ${VNPAY_BASE_URL:?Set provider checkout URL}
+      VNPay__RefundsEnabled: ${VNPAY_REFUNDS_ENABLED:-false}
+      VNPay__ApiUrl: ${VNPAY_API_URL:-https://sandbox.vnpayment.vn/merchant_webapi/api/transaction}
+      VNPay__RefundIpAddress: ${VNPAY_REFUND_IP:-}
+      VNPay__TmnCode: ${VNPAY_TMN_CODE:-}
+      VNPay__HashSecret: ${VNPAY_HASH_SECRET:-}
+      Frontend__BaseUrl: https://${SITE_DOMAIN:?Set public DNS hostname}
+      VNPay__ReturnUrl: ${VNPAY_RETURN_URL:?Set public HTTPS return URL}
+    depends_on:
+      payment-db:
+        condition: service_healthy
+    restart: unless-stopped
+  ai-vision:
+    build:
+      context: ./src/Services/AI/ai_vision_service
+      dockerfile: Dockerfile
+    environment:
+      PYTHONUNBUFFERED: "1"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama-data:/root/.ollama
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ollama serve &
+        SERVER_PID=$$!
+        sleep 3
+        ollama pull ${OLLAMA_MODEL:-qwen2.5:3b}
+        wait $$SERVER_PID
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+  ai:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        PROJECT: src/Services/AI/Parking.AI.Api/Parking.AI.Api.csproj
+        APP_DLL: Parking.AI.Api.dll
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ForwardedHeaders__KnownNetwork: 172.29.80.0/24
+      Ports__Bind: 0.0.0.0
+      Ports__Http: 8080
+      Ports__Grpc: 8081
+      Jwt__Key: ${JWT_KEY:?Configure .env.production}
+      Grpc__ServiceKey: ${GRPC_SERVICE_KEY:?Configure .env.production}
+      ConnectionStrings__Service: "Host=ai-db;Database=parking_ai;Username=ai;Password=${AI_DB_PASSWORD}"
+      Services__IdentityGrpc: http://identity:8081
+      Services__ParkingGrpc: http://parking:8081
+      Services__AIGrpc: http://ai:8081
+      AiVision__ServiceUrl: http://ai-vision:8000
+      AI__OcrEndpoint: ${OCR_ENDPOINT:-http://ai-vision:8000/ocr/recognize}
+      AI__OcrApiKey: ${OCR_API_KEY:-}
+      Gemini__ApiKey: ${GEMINI_API_KEY:-}
+      AI__GeminiApiKey: ${GEMINI_API_KEY:-}
+      Gemini__Model: ${GEMINI_MODEL:-gemini-2.5-flash}
+      Ollama__Endpoint: ${DOCKER_OLLAMA_ENDPOINT:-http://ollama:11434}
+      AI__OllamaEndpoint: ${DOCKER_OLLAMA_ENDPOINT:-http://ollama:11434}
+      Ollama__Model: ${OLLAMA_MODEL:-qwen2.5:3b}
+      AI__OllamaModel: ${OLLAMA_MODEL:-qwen2.5:3b}
+    depends_on:
+      ai-db:
+        condition: service_healthy
+      ai-vision:
+        condition: service_started
+      ollama:
+        condition: service_started
+    restart: unless-stopped
+  gateway:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        PROJECT: src/Gateway/Parking.Gateway/Parking.Gateway.csproj
+        APP_DLL: Parking.Gateway.dll
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ForwardedHeaders__KnownNetwork: 172.29.80.0/24
+      ASPNETCORE_HTTP_PORTS: 8080
+      RateLimit__PermitLimit: 600
+    depends_on:
+      identity:
+        condition: service_healthy
+      parking:
+        condition: service_healthy
+      payment:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+    restart: unless-stopped
+  frontend:
+    build:
+      context: ./frontend_parking_system
+      dockerfile: Dockerfile
+    depends_on:
+      gateway:
+        condition: service_started
+    restart: unless-stopped
+  edge:
+    image: caddy:2-alpine
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?Set public DNS hostname}
+      ACME_EMAIL: ${ACME_EMAIL:?Set certificate email}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/production/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  caddy-data:
+  caddy-config:
+  identity-data:
+  parking-data:
+  payment-data:
+  ai-data:
+  ollama-data:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.29.80.0/24

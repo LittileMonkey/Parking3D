@@ -1,0 +1,259 @@
+{
+  "commit": "577064b",
+  "scope": "Isolated native PostgreSQL18.4; actual service APIs and actual CASH/outbox; no VNPay provider, no checkout, no physical barrier",
+  "observations": [
+    {
+      "label": "Register synthetic Customer",
+      "status": 200,
+      "expected": 200,
+      "response": {
+        "result": {
+          "id": "12865a92-1ccd-4f6e-90dc-b586be6dbb01",
+          "emailNormalized": "CUSTOMER@QA.EXAMPLE.TEST",
+          "phoneE164": "[REDACTED]",
+          "fullName": "Synthetic QA Customer",
+          "emailVerifiedAt": null,
+          "phoneVerifiedAt": "[REDACTED]",
+          "status": "ACTIVE",
+          "lockedUntil": null,
+          "createdAt": "2026-10-29T05:35:08.9392621Z",
+          "updatedAt": "0001-01-01T00:00:00",
+          "roles": [
+            "CUSTOMER"
+          ]
+        },
+        "isSuccess": true,
+        "statusCode": 200,
+        "message": "Register Successfully",
+        "errorCode": null
+      }
+    },
+    {
+      "label": "Login Customer",
+      "status": 200,
+      "expected": 200,
+      "response": {
+        "result": {
+          "accessToken": "[REDACTED]",
+          "refreshToken": "[REDACTED]"
+        },
+        "isSuccess": true,
+        "statusCode": 200,
+        "message": "Login Successfully!!!",
+        "errorCode": null
+      }
+    },
+    {
+      "label": "Login Staff",
+      "status": 200,
+      "expected": 200,
+      "response": {
+        "result": {
+          "accessToken": "[REDACTED]",
+          "refreshToken": "[REDACTED]"
+        },
+        "isSuccess": true,
+        "statusCode": 200,
+        "message": "Login Successfully!!!",
+        "errorCode": null
+      }
+    },
+    {
+      "label": "Gateway ready",
+      "status": 200,
+      "expected": 200,
+      "response": {
+        "result": {
+          "service": "gateway",
+          "dependencies": {
+            "identity": true,
+            "parking": true,
+            "payment": true,
+            "ai": true
+          }
+        },
+        "isSuccess": true,
+        "statusCode": 200,
+        "message": "Ready"
+      }
+    },
+    {
+      "label": "List actual lots",
+      "status": 200,
+      "expected": 200,
+      "response": {
+        "result": [
+          {
+            "id": "11111111-1111-4111-8111-111111111111",
+            "code": "DEMO-A",
+            "name": "Bãi demo A",
+            "address": "Địa chỉ demo A",
+            "latitude": 10.776,
+            "longitude": 106.7,
+            "timezone": "Asia/Ho_Chi_Minh"
+          },
+          {
+            "id": "22222222-2222-4222-8222-222222222222",
+            "code": "DEMO-B",
+            "name": "Bãi demo B",
+            "address": "Địa chỉ demo B",
+            "latitude": 10.79,
+            "longitude": 106.71,
+            "timezone": "Asia/Ho_Chi_Minh"
+          }
+        ],
+        "isSuccess": true,
+        "statusCode": 200,
+        "message": "Success"
+      }
+    },
+    {
+      "label": "Search actual price",
+      "status": 200,
+      "expected": 200,
+      "response": {
+        "result": {
+          "totalCount": 1,
+          "items": [
+            {
+              "parkingLotId": "11111111-1111-4111-8111-111111111111",
+              "code": "DEMO-A",
+              "name": "Bãi demo A",
+              "address": "Địa chỉ demo A",
+              "latitude": 10.776,
+              "longitude": 106.7,
+              "distanceKm": 0,
+              "availableSlots": 1,
+              "operatingStatus": "ACTIVE",
+              "estimatedPricing": {
+                "expectedDurationMinutes": 60,
+                "estimatedTotalFee": 30000,
+                "currency": "VND",
+                "billingDetails": "Block 15p, Đơn giá 7,500 đ, Trần ngày 120,000 đ"
+              },
+              "supportedFeatures": []
+            }
+          ]
+        },
+        "isSuccess": true,
+        "statusCode": 200,
+        "message": "Search completed successfully."
+      }
+    },
+    {
+      "label": "Create booking",
+      "status": 200,
+      "expected": 200,
+      "response": {
+        "result": {
+          "id": "d52fb4aa-bff0-4b22-9f23-485b74505656",
+          "code": "BD52FB4AABFF04B229F23",
+          "status": "PENDING_PAYMENT",
+          "estimatedAmount": 37500,
+          "holdExpiresAt": "2026-10-29T05:40:11.7083082+00:00",
+          "version": 1
+        },
+        "isSuccess": true,
+        "statusCode": 200,
+        "message": "Success"
+      }
+    },
+    {
+      "label": "Create actual CASH payment",
+      "status": 200,
+      "expected": 200,
+      "response": {
+        "result": {
+          "id": "7d45a477-084d-4d6c-810b-c3cde3656f9a",
+          "lotId": "11111111-1111-4111-8111-111111111111",
+          "bookingId": "d52fb4aa-bff0-4b22-9f23-485b74505656",
+          "amount": 37500,
+          "currency": "VND",
+          "method": "CASH",
+          "status": "PENDING",
+          "version": 1,
+          "paymentUrl": "[REDACTED]"
+        },
+        "isSuccess": true,
+        "statusCode": 200,
+        "message": "Success"
+      }
+    },
+    {
+      "label": "Scoped Staff confirms CASH",
+      "status": 200,
+      "expected": 200,
+      "response": {
+        "result": {
+          "id": "7d45a477-084d-4d6c-810b-c3cde3656f9a",
+          "lotId": "11111111-1111-4111-8111-111111111111",
+          "bookingId": "d52fb4aa-bff0-4b22-9f23-485b74505656",
+          "amount": 37500,
+          "currency": "VND",
+          "method": "CASH",
+          "status": "SUCCESS",
+          "version": 2,
+          "paymentUrl": "[REDACTED]"
+        },
+        "isSuccess": true,
+        "statusCode": 200,
+        "message": "Success"
+      }
+    },
+    {
+      "label": "Issue actual QR",
+      "status": 200,
+      "expected": 200,
+      "response": {
+        "result": {
+          "bookingId": "d52fb4aa-bff0-4b22-9f23-485b74505656",
+          "bookingCode": "BD52FB4AABFF04B229F23",
+          "qrPayload": "[REDACTED]",
+          "expiresAt": "2026-10-29T06:07:11.358+00:00"
+        },
+        "isSuccess": true,
+        "statusCode": 200,
+        "message": "Cấp mã QR thành công."
+      }
+    },
+    {
+      "label": "Gateway check-in route observation",
+      "status": 404,
+      "expected": 404,
+      "response": {
+        "result": null,
+        "isSuccess": false,
+        "statusCode": 404,
+        "message": "Endpoint not found"
+      }
+    },
+    {
+      "label": "Direct Parking check-in (bypasses Gateway)",
+      "status": 200,
+      "expected": 200,
+      "response": {
+        "result": {
+          "sessionId": "25fea0e1-e003-4a0e-9081-2fcb0db83264",
+          "bookingId": "d52fb4aa-bff0-4b22-9f23-485b74505656",
+          "lotId": "11111111-1111-4111-8111-111111111111",
+          "slotId": "77777777-7777-4777-8777-777777777777",
+          "status": "ACTIVE",
+          "entryAt": "2026-10-29T05:35:14.215328+00:00"
+        },
+        "isSuccess": true,
+        "statusCode": 200,
+        "message": "Check-in successful."
+      }
+    },
+    {
+      "label": "Database state after actual CASH and direct check-in",
+      "result": [
+        {
+          "status": "CHECKED_IN",
+          "active_sessions": "1",
+          "occupied_assignments": "1"
+        }
+      ]
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+import ReservationRelocation from "../../components/parking/ReservationRelocation";
 import React, { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import {
@@ -26,6 +27,7 @@ interface OutletContextType {
 
 export default function FacilityLayoutPage() {
   const { selectedLotId } = useOutletContext<OutletContextType>();
+  const [revision, setRevision] = useState(0);
   const [loading, setLoading] = useState(true);
   const [levels, setLevels] = useState<LevelSummary[]>([]);
   const [activeLevelId, setActiveLevelId] = useState<string>("B1");
@@ -44,19 +46,19 @@ export default function FacilityLayoutPage() {
     async function loadSlots() {
       setLoading(true);
       try {
-        const res = await managerApi.getFacilitySlots(selectedLotId || "PKM-METRO-01", activeLevelId);
+        const res = await managerApi.getFacilitySlots(selectedLotId, activeLevelId);
         if (res.isSuccess && res.result) {
           setLevels(res.result.levels);
           setSlots(res.result.slots);
         }
       } catch (err) {
-        console.error("Failed to load facility slots", err);
+        setSlots([]); setLevels([]); setStatusMessage(err instanceof Error ? err.message : "Không tải được mặt bằng.");
       } finally {
         setLoading(false);
       }
     }
     loadSlots();
-  }, [selectedLotId, activeLevelId]);
+  }, [selectedLotId, activeLevelId, revision]);
 
   const activeLevel = levels.find((l) => l.levelId === activeLevelId) || levels[0];
 
@@ -82,7 +84,7 @@ export default function FacilityLayoutPage() {
 
     setIsSubmitting(true);
     try {
-      const res = await managerApi.updateSlotStatus(selectedSlot.id, overrideStatus, overrideReason.trim());
+      const res = await managerApi.updateSlotStatus(selectedSlot, overrideStatus, overrideReason.trim());
       if (res.isSuccess) {
         // Update local slot list
         setSlots((prev) =>
@@ -93,7 +95,7 @@ export default function FacilityLayoutPage() {
         setTimeout(() => setStatusMessage(null), 4000);
       }
     } catch (err) {
-      console.error("Override slot error", err);
+      alert(err instanceof Error ? err.message : "Không cập nhật được ô đỗ.");
     } finally {
       setIsSubmitting(false);
     }
@@ -101,12 +103,13 @@ export default function FacilityLayoutPage() {
 
   return (
     <div className="pm-module-page">
+      <ReservationRelocation key={selectedLotId} lotId={selectedLotId} onMoved={() => setRevision(value => value + 1)} />
       <FacilityRbacStrip
-        parkingLotId={selectedLotId === "all" ? "PKM-METRO-01" : selectedLotId}
-        facilityName="Metropolis Central Hub"
-        facilityCode={selectedLotId === "all" ? "PKM-METRO-01" : selectedLotId}
+        parkingLotId={selectedLotId}
+        facilityName="Bãi đang chọn"
+        facilityCode={selectedLotId}
         moduleTitle="Facility Layout & Slot Control"
-        moduleDescription="Kiểm soát trạng thái ô đỗ, điều phối cảm biến IoT và can thiệp bảo trì khẩn cấp"
+        moduleDescription="Kiểm soát trạng thái ô đỗ, chuyển đặt chỗ và bảo trì"
       />
 
       {statusMessage && (

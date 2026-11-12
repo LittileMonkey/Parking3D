@@ -1,8 +1,8 @@
+import NotificationBell from "./NotificationBell";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
-  Bell,
   ChevronDown,
   LogOut,
   Menu,
@@ -36,7 +36,7 @@ export default function CustomerLayout({
   const isStaff = userRoles.some((r) => r.includes("STAFF"));
   const isAdminOrManager = userRoles.some((r) => r.includes("ADMIN") || r.includes("MANAGER"));
   const portalPath = isStaff ? "/staff/dashboard" : isAdminOrManager ? "/manager/dashboard" : null;
-  const roleLabel = isStaff ? "Staff" : isAdminOrManager ? (userRoles.some((r) => r.includes("ADMIN")) ? "Admin" : "Manager") : t("nav.vip");
+  const roleLabel = isStaff ? "Staff" : isAdminOrManager ? (userRoles.some((r) => r.includes("ADMIN")) ? "Admin" : "Manager") : "Khách hàng";
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
@@ -152,7 +152,8 @@ export default function CustomerLayout({
             <button type="button" className={`lang-btn-pill ${lang === "en" ? "active" : ""}`}
               onClick={() => setLang("en")} title="English">EN</button>
           </div>
-          <button type="button" className="icon-btn-pill" aria-label="Thông báo"><Bell size={16} /></button>
+          <NotificationBell />
+          {isAuthenticated && <><Link to="/account">Xe & đặt chỗ</Link><Link to="/security">Bảo mật</Link></>}
           {isAuthenticated ? (
             <div className="user-profile-pill">
               <span className="avatar-circle-pill"><User size={15} /></span>

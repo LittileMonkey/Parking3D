@@ -14,6 +14,18 @@ namespace Parking.Identity.Infrastructure.Service.Email
         {
             this.configuration = configuration;
         }
+        public async Task SendSignInOtpAsync(string email, string otp, CancellationToken ct)
+        {
+            var settings=configuration.GetSection("Email");
+            var sender=settings["Sender"]??throw new InvalidOperationException("Email sender not configured");
+            var message=new MimeMessage();message.From.Add(MailboxAddress.Parse(sender));message.To.Add(MailboxAddress.Parse(email));
+            message.Subject="Parking - Mã đăng nhập";message.Body=new TextPart("plain"){Text=$"Mã đăng nhập Parking: {otp}. Hết hạn sau 5 phút. Không chia sẻ mã này. Nếu không yêu cầu đăng nhập, hãy bỏ qua email."};
+            var host=settings["SmtpServer"];
+            var password=settings["AppPassword"];
+            if(string.IsNullOrWhiteSpace(host)||string.IsNullOrWhiteSpace(password))throw new InvalidOperationException("SMTP host and credentials must be configured");
+            using var client=new SmtpClient();await client.ConnectAsync(host,int.TryParse(settings["Port"],out var port)?port:587,SecureSocketOptions.StartTls,ct);
+            await client.AuthenticateAsync(sender,password,ct);await client.SendAsync(message,ct);await client.DisconnectAsync(true,ct);
+        }
         public async Task SendPasswordResetOtpAsync(string email, string otp, CancellationToken cancellationToken)
         {
             var Email = configuration.GetSection("Email");

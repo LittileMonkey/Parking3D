@@ -1,0 +1,312 @@
+{
+  "info": {
+    "name": "TV2 API DESIGN DRAFT NOT EXECUTED",
+    "description": "8 proposed contracts, not existing API. Default baseURL loopback port0 intentionally cannot call a server. Review with BE; use isolated Development fixtures only. No VNPay signed callback generated. Sequential Runner is not a concurrency test.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "API01 Danh sách assignment của bãi",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{lotA}}/staff-assignments?page=1&pageSize=20",
+        "description": "Admin hoặc Manager của bãi có delegation. Quyền đọc danh sách riêng còn cần TV5/TV8 duyệt; Staff không tự có quyền xem danh sách nhân sự.\n400 query sai; 401 token thiếu/sai; 403 permission/scope; 404 sau authorize. Không trả token/password/phone không cần thiết.\nNot implemented or approved until BE review."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Expected HTTP 200 per draft success fixture\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Standard envelope matches HTTP\", function () { const b = pm.response.json(); pm.expect(b).to.have.keys(\"result\", \"isSuccess\", \"statusCode\", \"message\"); pm.expect(b.statusCode).to.eql(pm.response.code); pm.expect(b.isSuccess).to.be.a(\"boolean\"); pm.expect(b.message).to.be.a(\"string\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "API02 Tạo assignment Staff",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "tv2-API02-{{$guid}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{lotA}}/staff-assignments",
+        "description": "Admin hoặc Manager delegated của chính bãi. MVP DTO đề xuất chỉ role Staff; gán Manager/ủy quyền giữ P02 chưa duyệt.\n400 invalid role/period/reason; 403 scope/delegation; 409 overlapping assignment theo P11 khi duyệt. AssignedBy lấy từ principal, không nhận Admin/CanManageStaffAssignments trong body.\nNot implemented or approved until BE review.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": \"88888888-8888-4888-8888-888888888888\",\n  \"role\": \"Staff\",\n  \"activeFrom\": \"2026-10-08T00:00:00Z\",\n  \"activeTo\": \"2026-11-08T00:00:00Z\",\n  \"reason\": \"Phân công ca vận hành thử nghiệm\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Expected HTTP 201 per draft success fixture\", function () { pm.response.to.have.status(201); });",
+              "pm.test(\"Standard envelope matches HTTP\", function () { const b = pm.response.json(); pm.expect(b).to.have.keys(\"result\", \"isSuccess\", \"statusCode\", \"message\"); pm.expect(b.statusCode).to.eql(pm.response.code); pm.expect(b.isSuccess).to.be.a(\"boolean\"); pm.expect(b.message).to.be.a(\"string\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "API03 Check-in booking",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "tv2-API03-{{$guid}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/check-in",
+        "description": "Staff assigned active; Manager/Admin chờ P01. Không cho Guest gọi Staff action.\n400 payload; 401/403 quyền; 404 authorized ID absent; 409 wrong state/vehicle/QR replay/stale/unpaid/policy missing. Không giữ DB lock khi gọi AI. Barrier command chỉ sau commit qua adapter.\nNot implemented or approved until BE review.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"parkingLotId\": \"11111111-1111-4111-8111-111111111111\",\n  \"gateId\": \"77777777-7777-4777-8777-777777777777\",\n  \"bookingId\": \"44444444-4444-4444-8444-444444444444\",\n  \"normalizedPlate\": \"30ATEST01\",\n  \"qrPayload\": \"REPLACE_WITH_SIGNED_TEST_QR\",\n  \"expectedBookingVersion\": 1\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Expected HTTP 200 per draft success fixture\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Standard envelope matches HTTP\", function () { const b = pm.response.json(); pm.expect(b).to.have.keys(\"result\", \"isSuccess\", \"statusCode\", \"message\"); pm.expect(b.statusCode).to.eql(pm.response.code); pm.expect(b.isSuccess).to.be.a(\"boolean\"); pm.expect(b.message).to.be.a(\"string\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "API04 Yêu cầu checkout và tính phí",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "tv2-API04-{{$guid}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/check-out",
+        "description": "Staff assigned; Manager/Admin chờ P01.\n400 invalid; 403 scope; 409 state/version/missing P05/P10; 503 dependencies. FinalFee/paid/clock tính server; không tin client price/time. Dữ liệu mẫu minh họa, phải thay fixture đã seed thật.\nNot implemented or approved until BE review.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"parkingLotId\": \"11111111-1111-4111-8111-111111111111\",\n  \"sessionId\": \"55555555-5555-4555-8555-555555555555\",\n  \"exitGateId\": \"78787878-7878-4878-8878-787878787878\",\n  \"expectedSessionVersion\": 1\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Expected HTTP 200 per draft success fixture\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Standard envelope matches HTTP\", function () { const b = pm.response.json(); pm.expect(b).to.have.keys(\"result\", \"isSuccess\", \"statusCode\", \"message\"); pm.expect(b.statusCode).to.eql(pm.response.code); pm.expect(b.isSuccess).to.be.a(\"boolean\"); pm.expect(b.message).to.be.a(\"string\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "API05 Xác nhận Cash payment",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "tv2-API05-{{$guid}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/payments/{{paymentA}}/cash-confirmation",
+        "description": "Staff active assignment của bãi suy ra từ payment owner. Manager/Admin chờ P01.\n409 replay payload mismatch/stale/not Cash/already settled; 403 cross-lot; 400 reason. Amount từ Payment đã tạo hợp lệ, không gửi amount/actorId. Cần API tạo Pending Cash từ TV7, ngoài 8 contract này.\nNot implemented or approved until BE review.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"expectedVersion\": 1,\n  \"reason\": \"Đã nhận tiền mặt tại quầy\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Expected HTTP 200 per draft success fixture\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Standard envelope matches HTTP\", function () { const b = pm.response.json(); pm.expect(b).to.have.keys(\"result\", \"isSuccess\", \"statusCode\", \"message\"); pm.expect(b.statusCode).to.eql(pm.response.code); pm.expect(b.isSuccess).to.be.a(\"boolean\"); pm.expect(b.message).to.be.a(\"string\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "API06 Xác nhận xe thực tế rời",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "tv2-API06-{{$guid}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/sessions/{{sessionA}}/confirm-exit",
+        "description": "Staff active đúng bãi, evidence đã xác minh. Adapter camera/barrier có machine auth contract riêng chưa thiết kế ở đây.\n409 unpaid/grace stale/state/evidence invalid; 403 scope; không cho body ExitedAt do client quyết định. Replay same idem trả logical result; no silent override debt.\nNot implemented or approved until BE review.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"parkingLotId\": \"11111111-1111-4111-8111-111111111111\",\n  \"exitGateId\": \"78787878-7878-4878-8878-787878787878\",\n  \"expectedVersion\": 2,\n  \"evidenceType\": \"StaffConfirmed\",\n  \"reason\": \"Nhân viên xác nhận xe đã qua cổng ra\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Expected HTTP 200 per draft success fixture\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Standard envelope matches HTTP\", function () { const b = pm.response.json(); pm.expect(b).to.have.keys(\"result\", \"isSuccess\", \"statusCode\", \"message\"); pm.expect(b.statusCode).to.eql(pm.response.code); pm.expect(b.isSuccess).to.be.a(\"boolean\"); pm.expect(b.message).to.be.a(\"string\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "API07 Báo cáo thu tiền theo bãi",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{lotA}}/reports/payments?from=2026-10-08T00:00:00Z&to=2026-10-09T00:00:00Z&currency=VND",
+        "description": "Manager assigned đúng bãi hoặc Admin; Staff đọc báo cáo chờ P12.\n400 invalid range/currency; 403 any unauthorized filter/export; 409 POLICY_NOT_CONFIGURED P13. Sample amounts là fixture, không dữ liệu thật.\nNot implemented or approved until BE review."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Expected HTTP 200 per draft success fixture\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Standard envelope matches HTTP\", function () { const b = pm.response.json(); pm.expect(b).to.have.keys(\"result\", \"isSuccess\", \"statusCode\", \"message\"); pm.expect(b.statusCode).to.eql(pm.response.code); pm.expect(b.isSuccess).to.be.a(\"boolean\"); pm.expect(b.message).to.be.a(\"string\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "API08 Đọc audit có phân trang",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{lotA}}/audit-logs?page=1&pageSize=20",
+        "description": "Admin theo protected contract; Manager/Staff chờ P12, nếu được duyệt phải scope bãi.\n400 paging; 403 denied; không endpoint UPDATE/DELETE. Old/NewValue chỉ whitelist, không raw secrets/PII. Empty sample không chứng minh audit đã có.\nNot implemented or approved until BE review."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Expected HTTP 200 per draft success fixture\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Standard envelope matches HTTP\", function () { const b = pm.response.json(); pm.expect(b).to.have.keys(\"result\", \"isSuccess\", \"statusCode\", \"message\"); pm.expect(b.statusCode).to.eql(pm.response.code); pm.expect(b.isSuccess).to.be.a(\"boolean\"); pm.expect(b.message).to.be.a(\"string\"); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

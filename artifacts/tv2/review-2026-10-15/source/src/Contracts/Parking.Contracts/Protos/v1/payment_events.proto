@@ -1,0 +1,26 @@
+syntax = "proto3";
+package parking.payments.v1;
+option csharp_namespace = "Parking.Contracts.Payments.V1";
+service ParkingPaymentEvents {
+  rpc DeliverPaymentSucceeded(PaymentSucceeded) returns (DeliveryReply);
+}
+message PaymentSucceeded {
+  string event_id = 1;
+  string payment_id = 2;
+  string booking_id = 3;
+  string lot_id = 4;
+  int64 amount_minor = 5;
+  string currency = 6;
+  int64 paid_at_unix_seconds = 7;
+}
+message DeliveryReply {
+  string outcome = 1;
+}
+service BookingPaymentQuery {
+  rpc GetQuote(BookingQuoteRequest) returns (BookingQuoteReply);
+}
+message BookingQuoteRequest { string booking_id = 1; string user_id = 2; }
+message BookingQuoteReply {
+  string booking_id = 1; string lot_id = 2; string vehicle_id = 3;
+  int64 amount_minor = 4; string currency = 5; string status = 6;
+}

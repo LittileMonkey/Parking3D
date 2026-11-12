@@ -248,10 +248,11 @@ public sealed partial class ParkingWorkflowTests
     public async Task CheckOutEightConcurrentRetriesHaveOneEffectAndFreeTheReservation()
     {
         var request=await PrepareAuthorizedCheckOut();var verified=VerificationFor(request);
+        var eventsBefore=Convert.ToInt64(await Scalar("SELECT count(*) FROM integration_outbox WHERE event_type='SlotStatusChanged.v1'"));
         var results=await Task.WhenAll(Enumerable.Range(0,8).Select(_=>repository.CompleteCheckOutAsync(Staff,request,"concurrent",Ct,verified)));
         Assert.All(results,item=>Assert.Equal(results[0],item));
         Assert.Equal(1L,await Scalar("SELECT count(*) FROM audit_logs WHERE action='CHECK_OUT'"));
-        Assert.Equal(1L,await Scalar("SELECT count(*) FROM integration_outbox WHERE event_type='SlotStatusChanged.v1'"));
+        Assert.Equal(eventsBefore+1,await Scalar("SELECT count(*) FROM integration_outbox WHERE event_type='SlotStatusChanged.v1'"));
         Assert.Equal("RELEASED",await Scalar("SELECT status::text FROM slot_reservations"));
         await Assert.ThrowsAsync<ServiceException>(()=>repository.CompleteCheckOutAsync(Staff,request with {StaffNotes="different"},"concurrent",Ct,verified));
         var next=await Book();
@@ -276,6 +277,7 @@ public sealed partial class ParkingWorkflowTests
     public async Task CheckOutAuditFailureRollsBackSessionAssignmentReservationAndEvent()
     {
         var request=await PrepareAuthorizedCheckOut();
+        var eventsBefore=await Scalar("SELECT count(*) FROM integration_outbox WHERE event_type='SlotStatusChanged.v1'");
         var reservationBefore=await Scalar("SELECT status::text FROM slot_reservations");
         await Sql("""
             CREATE FUNCTION fail_checkout_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
@@ -285,13 +287,19 @@ public sealed partial class ParkingWorkflowTests
         await Assert.ThrowsAsync<global::Npgsql.PostgresException>(()=>repository.CompleteCheckOutAsync(Staff,request,"rollback",Ct,VerificationFor(request)));
         await AssertCheckOutNotWritten();
         Assert.Equal(reservationBefore,await Scalar("SELECT status::text FROM slot_reservations"));
-        Assert.Equal(0L,await Scalar("SELECT count(*) FROM integration_outbox WHERE event_type='SlotStatusChanged.v1'"));
+        Assert.Equal(eventsBefore,await Scalar("SELECT count(*) FROM integration_outbox WHERE event_type='SlotStatusChanged.v1'"));
     }
 
     [PostgresFact]
     public async Task CheckOutCrossingFeeBlockRequiresNewQuoteWithoutReleasingSlot()
     {
         var request=await PrepareAuthorizedCheckOut();
+        // Align this fixture to exact 15-minute blocks. The normal helper checks in
+        // two minutes early, shifting the shared pricing engine's block boundaries.
+        await Sql("""
+            UPDATE parking_sessions ps SET entry_at=b.starts_at
+            FROM bookings b WHERE b.id=ps.booking_id;
+            """);
         var clock=UseHoldTestClock();
         var expected=new DateTimeOffset((DateTime)(await Scalar("SELECT expected_exit_at FROM parking_sessions"))!);
         clock.UtcNow=expected.AddSeconds(899);

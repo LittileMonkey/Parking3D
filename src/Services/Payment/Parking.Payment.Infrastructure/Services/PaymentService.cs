@@ -1,4 +1,4 @@
-﻿using Google.Protobuf;
+using Google.Protobuf;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -58,11 +58,7 @@ public sealed class PaymentService(
         }
         catch (Grpc.Core.RpcException ex) when (ex.StatusCode == Grpc.Core.StatusCode.DeadlineExceeded || ex.StatusCode == Grpc.Core.StatusCode.Unavailable)
         {
-            // Graceful Fallback: Nếu gRPC Identity timeout hoặc offline khi test nội bộ, fallback an toàn nếu user hợp lệ
-            if (user != Guid.Empty)
-            {
-                isAllowed = true;
-            }
+            throw new ServiceException(503, "Account authorization is temporarily unavailable");
         }
 
         if (!isAllowed)
@@ -75,7 +71,8 @@ public sealed class PaymentService(
         
         await using (var cached = db.CreateCommand("""
             SELECT p.id, a.lot_id, a.booking_id, p.amount, a.currency, 
-                    p.method::text, p.status::text, p.version 
+                    p.method::text, p.status::text, p.version,
+                    (SELECT pa.payment_url FROM payment_attempts pa WHERE pa.payment_id=p.id ORDER BY pa.created_at DESC LIMIT 1)
             FROM payments p 
             JOIN billing_accounts a ON a.id = p.account_id
             WHERE p.idempotency_key = @key
@@ -88,7 +85,7 @@ public sealed class PaymentService(
                 var v = Read(r); 
                 if (v.BookingId != request.BookingId || v.Method != request.Method) 
                     throw new ServiceException(409, "Idempotency key reused"); 
-                return v; 
+                return v with { PaymentUrl = r.IsDBNull(8) ? null : r.GetString(8) };
             }
         }
 
@@ -146,12 +143,11 @@ public sealed class PaymentService(
         // Nếu đã có 1 Payment PENDING cùng phương thức -> Tái sử dụng phiên đó
         await using (var checkPending = new NpgsqlCommand("""
             SELECT p.id, a.lot_id, a.booking_id, p.amount, a.currency, 
-                   p.method::text, p.status::text, p.version, pa.merchant_reference
+                   p.method::text, p.status::text, p.version, pa.payment_url
             FROM payments p 
             JOIN billing_accounts a ON a.id = p.account_id
             LEFT JOIN payment_attempts pa ON pa.payment_id = p.id AND pa.status = 'INITIATED'
             WHERE a.booking_id = @booking 
-              AND p.method = @method::public.payment_method 
               AND p.status = 'PENDING'
             ORDER BY p.created_at DESC LIMIT 1;
             """, conn, tx))
@@ -163,17 +159,14 @@ public sealed class PaymentService(
             if (await rPending.ReadAsync(ct))
             {
                 var pendingView = Read(rPending);
+                if(pendingView.Method!=request.Method)throw new ServiceException(409,"Another payment method is already pending. Complete or reconcile it before creating another payment.");
                 string? existingUrl = null;
                 // Nếu là VNPay: Tái tạo URL QR dựa trên mã giao dịch (merchant_reference) cũ còn hiệu lực
                 if (request.Method == "VNPAY" && !rPending.IsDBNull(8))
                 {
-                    var existingTxnRef = rPending.GetString(8);
-                    existingUrl = vnPayService.CreatePaymentUrl(
-                        existingTxnRef,
-                        pendingView.Amount,
-                        $"Thanh toan giu cho {request.BookingId}",
-                        ipAddress ?? "127.0.0.1");
+                    existingUrl = rPending.GetString(8);
                 }
+                await rPending.DisposeAsync();
                 await tx.CommitAsync(ct);
                 return pendingView with { PaymentUrl = existingUrl };
             }
@@ -261,6 +254,12 @@ public sealed class PaymentService(
                 $"Thanh toan giu cho {request.BookingId}",
                 ipAddress ?? "127.0.0.1");
         }
+        if(paymentUrl is not null)
+        {
+            var created=Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(paymentUrl).Query)["vnp_CreateDate"].ToString();
+            await using var saveUrl=new NpgsqlCommand("UPDATE payment_attempts SET payment_url=@url,provider_created_date=@created WHERE id=@id",conn,tx);
+            saveUrl.Parameters.AddWithValue("id",attemptId);saveUrl.Parameters.AddWithValue("url",paymentUrl);saveUrl.Parameters.AddWithValue("created",created);await saveUrl.ExecuteNonQueryAsync(ct);
+        }
         await tx.CommitAsync(ct);
         return new PaymentView(id, lot, request.BookingId, quote.AmountMinor, quote.Currency, request.Method, "PENDING", 1, paymentUrl);
     }
@@ -314,6 +313,20 @@ public sealed class PaymentService(
 
         if (view.Method != "CASH" || view.Status != "PENDING" || view.Version != request.Version)
             throw new ServiceException(409, "Payment state/version conflict");
+
+        try
+        {
+            var quote = await parking.GetQuoteAsync(new BookingQuoteRequest
+            {
+                BookingId = view.BookingId.ToString(), UserId = actor.ToString()
+            }, headers: GrpcHeaders.For(config), deadline: DateTime.UtcNow.AddSeconds(3), cancellationToken: ct);
+            if (quote.LotId != lot.ToString() || quote.AmountMinor != view.Amount || quote.Currency != view.Currency)
+                throw new ServiceException(409, "Cash request no longer matches the booking quote.");
+        }
+        catch (Grpc.Core.RpcException ex) when (ex.StatusCode is Grpc.Core.StatusCode.FailedPrecondition or Grpc.Core.StatusCode.NotFound)
+        {
+            throw new ServiceException(409, "Booking no longer payable.");
+        }
 
         var eventId = Guid.NewGuid(); var now = DateTimeOffset.UtcNow;
         var message = new PaymentSucceeded { EventId = eventId.ToString(), PaymentId = payment.ToString(), BookingId = view.BookingId.ToString(), LotId = lot.ToString(), AmountMinor = view.Amount, Currency = view.Currency, PaidAtUnixSeconds = now.ToUnixTimeSeconds() };
@@ -827,9 +840,9 @@ public sealed class PaymentService(
         var amount = rawAmount / 100;
 
         // Bước 4: Trả kết quả cho frontend (isSuccess chỉ đúng khi responseCode = "00")
-        var isSuccess = responseCode == "00";
+        var isSuccess = responseCode == "00" && Get(queryParams, "vnp_TransactionStatus") == "00";
         var message   = isSuccess
-            ? "Thanh toán VNPay thành công! Chỗ đậu xe của bạn đã được xác nhận."
+            ? "VNPay báo giao dịch thành công. Trạng thái đặt chỗ sẽ cập nhật sau khi máy chủ nhận xác nhận thanh toán."
             : $"Thanh toán thất bại (mã lỗi VNPay: {responseCode}). Vui lòng thử lại.";
 
         return Task.FromResult(new VnPayReturnResult(
