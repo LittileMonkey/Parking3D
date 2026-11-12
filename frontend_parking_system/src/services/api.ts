@@ -224,10 +224,15 @@ interface ApiEnvelope<T> {
   result?: T | null;
   isSuccess?: boolean;
   message?: string;
+  errorCode?: string | null;
 }
 
 export class ApiError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly errorCode?: string | null,
+  ) {
     super(message);
     this.name = "ApiError";
   }
@@ -319,7 +324,8 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
       ?? (response.status >= 500
         ? "Máy chủ API đang gặp lỗi hoặc chưa sẵn sàng. Kiểm tra backend tại localhost:8080 rồi thử lại."
         : fallbackMessages[response.status] ?? `Yêu cầu thất bại (${response.status}).`);
-    throw new ApiError(message, response.status);
+    const errorCode = typeof body.errorCode === "string" ? body.errorCode : null;
+    throw new ApiError(message, response.status, errorCode);
   }
 
   return (body.result ?? body) as T;
@@ -659,6 +665,30 @@ export const api = {
   },
 
   /**
+   * [REAL API PARKING] Upload ảnh chứng cứ PNG/JPEG (tối đa 4 MiB) theo bãi để lấy reference bền vững
+   */
+  async uploadLotEvidence(
+    lotId: string,
+    payload: UploadEvidencePayload,
+    idempotencyKey: string,
+  ): Promise<UploadedEvidenceMetadata> {
+    return request<UploadedEvidenceMetadata>(`/api/v1/parking-lots/${encodeURIComponent(lotId)}/evidence`, {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * [REAL API PARKING] Đọc ảnh chứng cứ theo bãi và evidenceId
+   */
+  async getLotEvidence(lotId: string, evidenceId: string): Promise<RetrievedEvidenceDto> {
+    return request<RetrievedEvidenceDto>(
+      `/api/v1/parking-lots/${encodeURIComponent(lotId)}/evidence/${encodeURIComponent(evidenceId)}`,
+    );
+  },
+
+  /**
    * [REAL API PARKING] Phát hành mã QR Check-in bảo mật HMAC sau thanh toán (SCRUM-49)
    */
   async issueBookingQr(bookingId: string): Promise<BookingQrResponse> {
@@ -758,93 +788,93 @@ export const api = {
   },
 
   // ─── [SCRUM-99] REAL INCIDENTS & EXCEPTIONS ENDPOINTS ───────────────────────
-  async getIncidents(lotId: string, status?: string, severity?: string, query?: string, page = 1, pageSize = 25): Promise<{ items: any[]; totalCount: number }> {
+  async getIncidents(lotId: string, status?: string, severity?: string, query?: string, page = 1, pageSize = 25): Promise<{ items: IncidentSummaryDto[]; totalCount: number }> {
     const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
     if (status && status !== "All") params.set("status", status);
     if (severity && severity !== "All") params.set("severity", severity);
     if (query) params.set("query", query);
-    return request<{ items: any[]; totalCount: number }>(`/api/v1/parking-lots/${lotId}/incidents?${params.toString()}`);
+    return request<{ items: IncidentSummaryDto[]; totalCount: number }>(`/api/v1/parking-lots/${lotId}/incidents?${params.toString()}`);
   },
 
-  async getIncidentById(lotId: string, incidentId: string): Promise<any> {
-    return request<any>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}`);
+  async getIncidentById(lotId: string, incidentId: string): Promise<IncidentDto> {
+    return request<IncidentDto>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}`);
   },
 
-  async createIncident(lotId: string, payload: any, idempotencyKey?: string): Promise<any> {
+  async createIncident(lotId: string, payload: CreateIncidentApiPayload, idempotencyKey?: string): Promise<IncidentDto> {
     const headers: Record<string, string> = {};
     if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
-    return request<any>(`/api/v1/parking-lots/${lotId}/incidents`, {
+    return request<IncidentDto>(`/api/v1/parking-lots/${lotId}/incidents`, {
       method: "POST",
       headers,
       body: JSON.stringify(payload),
     });
   },
 
-  async updateIncidentStatus(lotId: string, incidentId: string, payload: { status: string; notes?: string; expectedVersion: number }): Promise<any> {
-    return request<any>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/status`, {
+  async updateIncidentStatus(lotId: string, incidentId: string, payload: { status: string; notes?: string; expectedVersion: number }): Promise<IncidentDto> {
+    return request<IncidentDto>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/status`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     });
   },
 
-  async reopenIncident(lotId: string, incidentId: string, payload: { reason: string; expectedVersion: number }): Promise<any> {
-    return request<any>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/reopen`, {
+  async reopenIncident(lotId: string, incidentId: string, payload: { reason: string; expectedVersion: number }): Promise<IncidentDto> {
+    return request<IncidentDto>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/reopen`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
   },
 
-  async cancelIncident(lotId: string, incidentId: string, payload: { reason: string; expectedVersion: number }): Promise<any> {
-    return request<any>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/cancel`, {
+  async cancelIncident(lotId: string, incidentId: string, payload: { reason: string; expectedVersion: number }): Promise<IncidentDto> {
+    return request<IncidentDto>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/cancel`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
   },
 
-  async createIncidentDecision(lotId: string, incidentId: string, payload: { decision: string; reason: string; evidence: any[]; expectedVersion: number }): Promise<any> {
-    return request<any>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/decisions`, {
+  async createIncidentDecision(lotId: string, incidentId: string, payload: { decision: string; reason: string; evidence: IncidentEvidenceDto[]; expectedVersion: number }): Promise<IncidentDto> {
+    return request<IncidentDto>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/decisions`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
   },
 
-  async getIncidentHistory(lotId: string, incidentId: string, page = 1, pageSize = 25): Promise<{ items: any[]; totalCount: number }> {
-    return request<{ items: any[]; totalCount: number }>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/history?page=${page}&pageSize=${pageSize}`);
+  async getIncidentHistory(lotId: string, incidentId: string, page = 1, pageSize = 25): Promise<{ items: IncidentHistoryItemDto[]; totalCount: number }> {
+    return request<{ items: IncidentHistoryItemDto[]; totalCount: number }>(`/api/v1/parking-lots/${lotId}/incidents/${incidentId}/history?page=${page}&pageSize=${pageSize}`);
   },
 
   // ─── [SCRUM-99] REAL SHIFT HANDOVER ENDPOINTS ──────────────────────────────
-  async getShiftHandovers(lotId: string, status?: string, page = 1, pageSize = 25): Promise<{ items: any[]; totalCount: number }> {
+  async getShiftHandovers(lotId: string, status?: string, page = 1, pageSize = 25): Promise<{ items: ShiftHandoverSummaryDto[]; totalCount: number }> {
     const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
     if (status && status !== "All") params.set("status", status);
-    return request<{ items: any[]; totalCount: number }>(`/api/v1/parking-lots/${lotId}/shift-handovers?${params.toString()}`);
+    return request<{ items: ShiftHandoverSummaryDto[]; totalCount: number }>(`/api/v1/parking-lots/${lotId}/shift-handovers?${params.toString()}`);
   },
 
-  async getShiftHandoverById(lotId: string, handoverId: string): Promise<any> {
-    return request<any>(`/api/v1/parking-lots/${lotId}/shift-handovers/${handoverId}`);
+  async getShiftHandoverById(lotId: string, handoverId: string): Promise<ShiftHandoverDto> {
+    return request<ShiftHandoverDto>(`/api/v1/parking-lots/${lotId}/shift-handovers/${handoverId}`);
   },
 
-  async createShiftHandover(lotId: string, payload: any, idempotencyKey?: string): Promise<any> {
+  async createShiftHandover(lotId: string, payload: CreateShiftHandoverApiPayload, idempotencyKey?: string): Promise<ShiftHandoverDto> {
     const headers: Record<string, string> = {};
     if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
-    return request<any>(`/api/v1/parking-lots/${lotId}/shift-handovers`, {
+    return request<ShiftHandoverDto>(`/api/v1/parking-lots/${lotId}/shift-handovers`, {
       method: "POST",
       headers,
       body: JSON.stringify(payload),
     });
   },
 
-  async confirmShiftHandover(lotId: string, handoverId: string, payload: { expectedVersion: number }, idempotencyKey?: string): Promise<any> {
+  async confirmShiftHandover(lotId: string, handoverId: string, payload: { expectedVersion: number }, idempotencyKey?: string): Promise<ShiftHandoverDto> {
     const headers: Record<string, string> = {};
     if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
-    return request<any>(`/api/v1/parking-lots/${lotId}/shift-handovers/${handoverId}/confirm`, {
+    return request<ShiftHandoverDto>(`/api/v1/parking-lots/${lotId}/shift-handovers/${handoverId}/confirm`, {
       method: "POST",
       headers,
       body: JSON.stringify(payload),
     });
   },
 
-  async reassignShiftHandoverReceiver(lotId: string, handoverId: string, payload: { receiverUserId: string; reason: string; expectedVersion: number }): Promise<any> {
-    return request<any>(`/api/v1/parking-lots/${lotId}/shift-handovers/${handoverId}/receiver`, {
+  async reassignShiftHandoverReceiver(lotId: string, handoverId: string, payload: { receiverUserId: string; reason: string; expectedVersion: number }): Promise<ShiftHandoverDto> {
+    return request<ShiftHandoverDto>(`/api/v1/parking-lots/${lotId}/shift-handovers/${handoverId}/receiver`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     });
@@ -1069,6 +1099,121 @@ export interface CalculateFeeResponse {
   }>;
 }
 
+export interface IncidentEvidenceDto {
+  kind: string;
+  reference: string;
+  capturedAt?: string | null;
+}
+
+export interface UploadEvidencePayload {
+  contentType: "image/png" | "image/jpeg";
+  imageBase64: string;
+}
+
+export interface UploadedEvidenceMetadata {
+  evidenceId: string;
+  lotId: string;
+  contentType: string;
+  reference: string;
+  sha256: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
+export interface RetrievedEvidenceDto {
+  metadata: UploadedEvidenceMetadata;
+  imageBase64: string;
+}
+
+export interface IncidentExitDecisionDto {
+  decision: string;
+  reason: string;
+  decidedByUserId?: string;
+  decidedAt?: string;
+  evidence?: IncidentEvidenceDto[];
+}
+
+export interface IncidentSummaryDto {
+  incidentId: string;
+  lotId?: string;
+  title: string;
+  type: string;
+  severity: "Low" | "Medium" | "High" | "Critical";
+  status: "Open" | "InProgress" | "Resolved" | "Escalated";
+  description?: string;
+  relatedPlate?: string | null;
+  relatedSessionId?: string | null;
+  relatedSlotCode?: string | null;
+  relatedGate?: string | null;
+  reportedByUserId?: string;
+  detectedAt?: string;
+  reportedAt?: string;
+  updatedAt: string;
+  resolvedAt?: string | null;
+  version: number;
+}
+
+export interface IncidentDto extends IncidentSummaryDto {
+  notes?: string | null;
+  evidence?: IncidentEvidenceDto[];
+  exitDecision?: IncidentExitDecisionDto | null;
+}
+
+export interface IncidentHistoryItemDto {
+  id?: string;
+  action: string;
+  fromStatus?: string | null;
+  toStatus?: string | null;
+  performedByUserId?: string;
+  reason?: string | null;
+  performedAt: string;
+}
+
+export interface CreateIncidentApiPayload {
+  title: string;
+  type: string;
+  severity: string;
+  description: string;
+  detectedAt: string;
+  relatedPlate?: string;
+  relatedSlotCode?: string;
+  relatedGate?: string;
+  relatedSessionId?: string;
+  evidence?: IncidentEvidenceDto[];
+}
+
+export interface ShiftHandoverSummaryDto {
+  handoverId: string;
+  lotId?: string;
+  senderUserId: string;
+  receiverUserId: string;
+  status: string;
+  createdAt: string;
+  confirmedAt?: string | null;
+  version: number;
+}
+
+export interface ShiftHandoverDto extends ShiftHandoverSummaryDto {
+  senderShiftId: string;
+  receiverShiftId: string;
+  completedTasks: string;
+  unresolvedIssues: string;
+  pendingTransactions: string;
+  equipmentStatus: string;
+  notesForNext: string;
+}
+
+export interface CreateShiftHandoverApiPayload {
+  senderShiftId: string;
+  receiverShiftId: string;
+  receiverUserId: string;
+  completedTasks: string;
+  unresolvedIssues: string;
+  pendingTransactions: string;
+  equipmentStatus: string;
+  notesForNext: string;
+}
+
 export interface BackendCheckInPayload {
   lotId: string;
   gateId: string;
@@ -1077,18 +1222,19 @@ export interface BackendCheckInPayload {
   vehicleType?: string;
   allowMismatchOverride?: boolean;
   overrideReason?: string;
-  evidence?: Array<{ kind: string; reference: string; capturedAt?: string | null }>;
+  evidence?: IncidentEvidenceDto[];
 }
 
 export interface BackendCheckInResponse {
   sessionId: string;
-  bookingId: string;
+  bookingId: string | null;
   lotId: string;
   slotId: string;
   status: string;
   entryAt: string;
-  slotCode?: string;
-  vehicleType?: string;
+  slotCode?: string | null;
+  vehicleType?: string | null;
+  entryMethod?: string | null;
 }
 
 export interface BookingQrResponse {
@@ -1141,16 +1287,45 @@ export interface ParkingLotDetail extends ParkingLot {
   description?: string | null;
 }
 
+export interface Vector3Dto {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface SlotSpatialDto {
+  id: string;
+  code: string;
+  operationalStatus: string;
+  widthM?: number | null;
+  lengthM?: number | null;
+  position?: Vector3Dto | null;
+  rotationY?: number | null;
+  size?: Vector3Dto | null;
+}
+
+export interface ZoneSpatialDto {
+  id: string;
+  code: string;
+  name: string;
+  slots: SlotSpatialDto[];
+}
+
+export interface LevelSpatialDto {
+  id: string;
+  code: string;
+  name: string;
+  levelKind?: string;
+  elevationM?: number;
+  displayOrder?: number;
+  zones: ZoneSpatialDto[];
+}
+
 export interface LotLayout3DDto {
   lotId: string;
   code: string;
   name: string;
-  levels: Array<{
-    id: string;
-    code?: string;
-    name: string;
-    zones?: unknown[];
-  }>;
+  levels: LevelSpatialDto[];
 }
 
 export interface MembershipDto {

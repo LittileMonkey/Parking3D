@@ -61,8 +61,20 @@ function getMapObjectType(object) {
   return mapObjectStyles[normalized] ? normalized : "OTHER";
 }
 
-function getTransform(mapObject, fallbackPosition) {
+function getTransform(mapObject, fallbackPosition, slot) {
   if (!mapObject) {
+    if (slot?.position && typeof slot.position.x === "number" && typeof slot.position.z === "number") {
+      const y = typeof slot.position.y === "number" ? slot.position.y : fallbackPosition.y;
+      const rotY = typeof slot.rotationY === "number" ? slot.rotationY : 0;
+      const sx = typeof slot.size?.x === "number" ? slot.size.x / slotWidth : typeof slot.widthM === "number" ? slot.widthM / slotWidth : 1;
+      const sz = typeof slot.size?.z === "number" ? slot.size.z / slotDepth : typeof slot.lengthM === "number" ? slot.lengthM / slotDepth : 1;
+      const sy = typeof slot.size?.y === "number" ? slot.size.y / 0.12 : 1;
+      return {
+        position: new THREE.Vector3(slot.position.x, y, slot.position.z),
+        rotation: new THREE.Euler(0, rotY, 0),
+        scale: new THREE.Vector3(sx, sy, sz)
+      };
+    }
     return {
       position: fallbackPosition,
       rotation: new THREE.Euler(0, 0, 0),
@@ -172,7 +184,7 @@ export function createParkingArea(levels, mapObjects = []) {
           (row - (Math.ceil(zone.slots.length / zone.columns) - 1) / 2) * (slotDepth + slotGap)
         );
         const mapObject = mapObjectsByLevelAndSlot.get(`${level.levelId}:${slot.slotId}`);
-        const transform = getTransform(mapObject, fallbackPosition);
+        const transform = getTransform(mapObject, fallbackPosition, slot);
         slots.push({ slot, ...transform });
       });
       zoneOffset += zone.width + zoneGap;
@@ -180,7 +192,7 @@ export function createParkingArea(levels, mapObjects = []) {
 
     const group = new THREE.Group();
     group.name = `Level ${level.levelCode}`;
-    group.position.y = levelIndex * levelSpacing;
+    group.position.y = typeof level.elevationM === "number" ? level.elevationM : levelIndex * levelSpacing;
     scene.add(group);
 
     const floor = new THREE.Mesh(

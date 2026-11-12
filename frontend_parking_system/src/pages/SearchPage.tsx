@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ApiError, api, type LotAvailability, type ParkingSearchItem, type ParkingLevelAvailability, type UserVehicle } from "../services/api";
+import { ApiError, api, type LotAvailability, type LotLayout3DDto, type ParkingSearchItem, type ParkingLevelAvailability, type UserVehicle } from "../services/api";
 import ParkingViewer, { type ModelLevel } from "../components/parking/ParkingViewer";
 import { applySlotStatusChanges, type SlotStatusChange } from "../components/parking/parkingRealtime";
 import { useParkingHub } from "../components/parking/useParkingHub";
@@ -97,6 +97,8 @@ export default function SearchPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [selectedLot, setSelectedLot] = useState<ParkingSearchItem | null>(null);
   const [availability, setAvailability] = useState<LotAvailability | null>(null);
+  const [lotLayout, setLotLayout] = useState<LotLayout3DDto | null>(null);
+  const layoutCacheRef = useRef<Record<string, LotLayout3DDto>>({});
   const [availabilityError, setAvailabilityError] = useState("");
   const [isLoadingAvailability, setIsLoadingAvailability] = useState(false);
   const [isRefreshingAvailability, setIsRefreshingAvailability] = useState(false);
@@ -188,6 +190,7 @@ export default function SearchPage() {
     setSelectedLot(lot);
     if (!silent) {
       setAvailability(null);
+      setLotLayout(layoutCacheRef.current[lot.parkingLotId] ?? null);
       setAvailabilitySnapshot("");
       setSelectedSlotId("");
       setIsLoadingAvailability(true);
@@ -199,9 +202,17 @@ export default function SearchPage() {
       const start = new Date(startsAt);
       if (Number.isNaN(start.getTime())) throw new Error("Vui lòng chọn thời gian bắt đầu hợp lệ.");
       const end = new Date(start.getTime() + duration * 60_000);
-      const result = await api.getAvailability(lot.parkingLotId, start.toISOString(), end.toISOString(), vehicleType);
+      const cachedLayout = layoutCacheRef.current[lot.parkingLotId];
+      const [result, layoutResult] = await Promise.all([
+        api.getAvailability(lot.parkingLotId, start.toISOString(), end.toISOString(), vehicleType),
+        cachedLayout ? Promise.resolve(cachedLayout) : api.getLotLayout3D(lot.parkingLotId).catch(() => null),
+      ]);
+      if (layoutResult) {
+        layoutCacheRef.current[lot.parkingLotId] = layoutResult;
+      }
       if (requestId === availabilityRequestId.current) {
         setAvailability(result);
+        setLotLayout(layoutResult ?? cachedLayout ?? null);
         setAvailabilitySnapshot(criteriaSignature);
         setAvailabilityVehicleType(vehicleType);
         setSelectedLevelCode(current => result.levels.some(level => level.levelCode === current)
@@ -397,24 +408,75 @@ export default function SearchPage() {
       floorCode: selectedLevel.levelCode,
       floorName: selectedLevel.levelName,
     })) ?? [], [selectedLevel, vehicleType]);
-  const viewerLevels = useMemo<ModelLevel[]>(() => availability?.levels
-    .map(level => ({
-      levelId: level.levelId,
-      levelCode: level.levelCode,
-      levelName: level.levelName,
-      slots: level.slots
-        .filter(slot => slot.supportedVehicleTypes.some(type => normalizeVehicleType(type) === vehicleType))
-        .map(slot => ({
-          slotId: slot.slotId,
-          slotCode: slot.slotCode,
-          floorCode: level.levelCode,
-          zoneCode: slot.zoneCode,
-          supportedVehicleTypes: slot.supportedVehicleTypes,
-          features: slot.features,
-          status: slot.status,
-        })),
-    }))
-    .filter(level => level.slots.length > 0) ?? [], [availability, vehicleType]);
+  const viewerLevels = useMemo<ModelLevel[]>(() => {
+    if (!availability) return [];
+    const availabilityBySlotId = new Map(
+      availability.levels.flatMap(level =>
+        level.slots.map(slot => [slot.slotId, { ...slot, floorCode: level.levelCode }] as const)
+      )
+    );
+
+    if (lotLayout && lotLayout.lotId === availability.lotId && lotLayout.levels.length > 0) {
+      const mapped = lotLayout.levels
+        .slice()
+        .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+        .map(level => {
+          const slots = (level.zones ?? []).flatMap(zone =>
+            (zone.slots ?? [])
+              .map(spatialSlot => {
+                const live = availabilityBySlotId.get(spatialSlot.id);
+                if (!live) return null;
+                if (!live.supportedVehicleTypes.some(type => normalizeVehicleType(type) === vehicleType)) {
+                  return null;
+                }
+                return {
+                  slotId: spatialSlot.id,
+                  slotCode: spatialSlot.code || live.slotCode,
+                  floorCode: level.code || live.floorCode,
+                  zoneCode: zone.code || live.zoneCode,
+                  supportedVehicleTypes: live.supportedVehicleTypes,
+                  features: live.features,
+                  status: live.status,
+                  position: spatialSlot.position ?? null,
+                  rotationY: spatialSlot.rotationY ?? null,
+                  widthM: spatialSlot.widthM ?? null,
+                  lengthM: spatialSlot.lengthM ?? null,
+                  size: spatialSlot.size ?? null,
+                };
+              })
+              .filter((item): item is NonNullable<typeof item> => item !== null)
+          );
+          return {
+            levelId: level.id,
+            levelCode: level.code,
+            levelName: level.name,
+            elevationM: level.elevationM ?? null,
+            slots,
+          };
+        })
+        .filter(level => level.slots.length > 0);
+      if (mapped.length > 0) return mapped;
+    }
+
+    return availability.levels
+      .map(level => ({
+        levelId: level.levelId,
+        levelCode: level.levelCode,
+        levelName: level.levelName,
+        slots: level.slots
+          .filter(slot => slot.supportedVehicleTypes.some(type => normalizeVehicleType(type) === vehicleType))
+          .map(slot => ({
+            slotId: slot.slotId,
+            slotCode: slot.slotCode,
+            floorCode: level.levelCode,
+            zoneCode: slot.zoneCode,
+            supportedVehicleTypes: slot.supportedVehicleTypes,
+            features: slot.features,
+            status: slot.status,
+          })),
+      }))
+      .filter(level => level.slots.length > 0);
+  }, [availability, lotLayout, vehicleType]);
   const selectedSlot = levelSlots.find(slot => slot.slotId === selectedSlotId) ?? null;
   const currentRange = useMemo(() => {
     const start = new Date(startsAt);

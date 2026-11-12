@@ -11,8 +11,9 @@ import {
   Check,
   AlertOctagon,
 } from "lucide-react";
-import { api, type ParkingLot } from "../../services/api";
+import { api, ApiError, type ParkingLot } from "../../services/api";
 import { staffApi } from "../../services/staff/staffApi";
+import { useIdempotencyKey } from "../../hooks/useIdempotencyKey";
 import type {
   Incident,
   IncidentSeverity,
@@ -60,6 +61,8 @@ export default function IncidentsExceptions() {
   // Resolution modal / note prompt
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [resolveNote, setResolveNote] = useState("");
+  const [occNotice, setOccNotice] = useState("");
+  const { key: createIncidentKey, renewKey: renewCreateIncidentKey } = useIdempotencyKey("incident");
 
   const loadIncidents = async () => {
     try {
@@ -91,6 +94,7 @@ export default function IncidentsExceptions() {
         relatedSlotCode: relatedSlot.trim() || undefined,
         relatedGate: relatedGate || undefined,
         detectedAt: new Date().toISOString(),
+        idempotencyKey: createIncidentKey,
       };
       await staffApi.createIncident(payload, lotId);
       setShowCreateModal(false);
@@ -98,9 +102,10 @@ export default function IncidentsExceptions() {
       setDescription("");
       setRelatedPlate("");
       setRelatedSlot("");
+      renewCreateIncidentKey();
       loadIncidents();
-    } catch (err: any) {
-      alert("Lỗi tạo sự cố: " + err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Không tạo được sự cố.");
     } finally {
       setSubmitting(false);
     }
@@ -111,13 +116,21 @@ export default function IncidentsExceptions() {
     newStatus: "InProgress" | "Resolved" | "Escalated",
     notes?: string,
   ) => {
+    setOccNotice("");
+    const currentItem = incidents.find(item => item.incidentId === incidentId);
+    if (!currentItem) return;
     try {
-      await staffApi.updateIncidentStatus(incidentId, newStatus, notes, lotId, incidents.find(item => item.incidentId === incidentId)!.version!);
+      await staffApi.updateIncidentStatus(incidentId, newStatus, notes, lotId, currentItem.version);
       setResolvingId(null);
       setResolveNote("");
       loadIncidents();
-    } catch (err: any) {
-      alert("Lỗi cập nhật: " + err.message);
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 409) {
+        await loadIncidents();
+        setOccNotice("Xung đột phiên bản (409): Sự cố vừa được cập nhật bởi người khác. Đã tải lại version mới — ghi chú bạn nhập vẫn được giữ lại để xác nhận lại.");
+      } else {
+        setError(err instanceof Error ? err.message : "Không cập nhật được trạng thái sự cố.");
+      }
     }
   };
 
@@ -218,13 +231,14 @@ export default function IncidentsExceptions() {
         {/* Top-Right CTA Button */}
         <button
           type="button"
-          onClick={() => setShowCreateModal(true)}
+          onClick={() => { renewCreateIncidentKey(); setShowCreateModal(true); }}
           className="pm-cta-btn pm-btn-teal pm-cta-header-btn"
         >
           <PlusCircle size={16} />
           <span>+ Báo cáo Sự cố Mới</span>
         </button>
       </div>
+      {occNotice && !resolvingId && <p role="alert" style={{ color: "#fbbf24", marginBottom: 12 }}>{occNotice}</p>}
 
       {/* ─── 2. Filter & Search Toolbar Panel ─────────────────────────────── */}
       <div className="pm-incidents-toolbar">
@@ -591,6 +605,7 @@ export default function IncidentsExceptions() {
             </div>
 
             <div className="staff-modal-body pm-dark-modal-body">
+              {occNotice && <p role="alert" style={{ color: "#fbbf24", marginBottom: 10 }}>{occNotice}</p>}
               <div className="pm-form-field">
                 <label className="pm-form-label">Biện pháp xử lý đã thực hiện (*):</label>
                 <textarea

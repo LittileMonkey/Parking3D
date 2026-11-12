@@ -105,3 +105,37 @@ test("releases scene resources when a multi-level map is disposed", () => {
   assert.ok(disposed.length > 0);
   assert.equal(new Set(disposed).size, disposed.length);
 });
+
+test("uses spatial position and elevation from 3D layout API when mapObjects are absent", () => {
+  const spatialLevels = [
+    {
+      levelId: "lvl-1",
+      levelCode: "G",
+      levelName: "Ground",
+      elevationM: 4.5,
+      slots: [
+        {
+          slotId: "s-1",
+          slotCode: "A01",
+          zoneCode: "A",
+          status: "AVAILABLE",
+          position: { x: 10, y: 0.2, z: -6 },
+          rotationY: Math.PI / 4,
+          widthM: 4.1,
+          lengthM: 6.1,
+        },
+      ],
+    },
+  ];
+  const { levelGroups, slotMeshes } = createParkingArea(spatialLevels);
+  assert.equal(levelGroups[0].group.position.y, 4.5);
+
+  const matrix = new THREE.Matrix4();
+  const pos = new THREE.Vector3();
+  const rot = new THREE.Quaternion();
+  const scale = new THREE.Vector3();
+  slotMeshes[0].getMatrixAt(0, matrix);
+  matrix.decompose(pos, rot, scale);
+  assert.ok(pos.distanceTo(new THREE.Vector3(10, 0.2, -6)) < 0.000001);
+  assert.ok(rot.angleTo(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI / 4, 0))) < 0.000001);
+});

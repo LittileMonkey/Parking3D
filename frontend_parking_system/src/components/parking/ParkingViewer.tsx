@@ -15,6 +15,7 @@ export interface ModelLevel {
   levelId: string;
   levelCode: string;
   levelName: string;
+  elevationM?: number | null;
   slots: ModelSlot[];
 }
 

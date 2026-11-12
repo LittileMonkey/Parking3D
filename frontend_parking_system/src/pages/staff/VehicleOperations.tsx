@@ -17,8 +17,9 @@ import {
   X,
   Hash,
 } from "lucide-react";
-import { api, type CheckoutRequest, type StaffSessionRow, type Payment } from "../../services/api";
+import { api, ApiError, type CheckoutRequest, type StaffSessionRow, type Payment } from "../../services/api";
 import { staffApi } from "../../services/staff/staffApi";
+import { useIdempotencyKey } from "../../hooks/useIdempotencyKey";
 import type {
   CheckInResult,
   VehicleType,
@@ -87,6 +88,14 @@ export default function VehicleOperations() {
   const [checkInVehicleType, setCheckInVehicleType] = useState<VehicleType>("Car");
   const [checkInLoading, setCheckInLoading] = useState(false);
   const [checkInSuccess, setCheckInSuccess] = useState<CheckInResult | null>(null);
+  const [checkInError, setCheckInError] = useState("");
+  const { key: checkInKey, renewKey: renewCheckInKey } = useIdempotencyKey("checkin");
+  const [allowMismatchOverride, setAllowMismatchOverride] = useState(false);
+  const [overrideReason, setOverrideReason] = useState("");
+  const [evidenceKind, setEvidenceKind] = useState("CAMERA_SNAPSHOT");
+  const [evidenceReference, setEvidenceReference] = useState("");
+  const [evidenceFileName, setEvidenceFileName] = useState("");
+  const [evidenceUploading, setEvidenceUploading] = useState(false);
 
   // Check-Out Form State
   const [checkOutQuery, setCheckOutQuery] = useState(initialPlate);
@@ -298,8 +307,22 @@ export default function VehicleOperations() {
   // Check-In Submit
   const handleCheckIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    setCheckInLoading(true);
+    setCheckInError("");
     setCheckInSuccess(null);
+
+    if (allowMismatchOverride) {
+      const reasonTrimmed = overrideReason.trim();
+      if (reasonTrimmed.length < 10 || reasonTrimmed.length > 500) {
+        setCheckInError("Lý do override lệch biển số phải từ 10 đến 500 ký tự.");
+        return;
+      }
+      if (!evidenceReference.trim()) {
+        setCheckInError("Vui lòng chọn ảnh chứng cứ hoặc nhập tham chiếu bằng chứng camera.");
+        return;
+      }
+    }
+
+    setCheckInLoading(true);
     try {
       const res = await staffApi.checkInVehicle({
         licensePlate: checkInPlate.trim(),
@@ -307,13 +330,36 @@ export default function VehicleOperations() {
         lotId: entryGates.find(gate => gate.id === checkInGate)?.lotId,
         vehicleType: checkInVehicleType,
         gateId: checkInGate,
+        allowMismatchOverride,
+        overrideReason: allowMismatchOverride ? overrideReason.trim() : undefined,
+        evidence: allowMismatchOverride
+          ? [{ kind: evidenceKind, reference: evidenceReference.trim(), capturedAt: new Date().toISOString() }]
+          : undefined,
+        idempotencyKey: checkInKey,
       });
       setCheckInSuccess(res);
       setCheckInPlate("");
       setCheckInBooking("");
+      setAllowMismatchOverride(false);
+      setOverrideReason("");
+      setEvidenceReference("");
+      setEvidenceFileName("");
+      renewCheckInKey();
       loadSessions();
-    } catch (err: any) {
-      alert("Lỗi check-in: " + err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Không thể check-in phương tiện.";
+      const lower = msg.toLowerCase();
+      if (err instanceof ApiError && err.status === 409 && (err.errorCode === "PLATE_MISMATCH" || lower.includes("mismatch") || lower.includes("booked") || lower.includes("override") || lower.includes("biển"))) {
+        setAllowMismatchOverride(true);
+        renewCheckInKey();
+        setCheckInError(`${msg} — Đã mở form xác nhận ngoại lệ bên dưới để nhập lý do (10–500 ký tự) và ảnh chứng cứ.`);
+      } else if (lower.includes("full") || lower.includes("no available") || lower.includes("hết") || lower.includes("đầy")) {
+        setCheckInError(`Bãi hiện đã đầy cho loại xe ${checkInVehicleType}: ${msg}`);
+      } else if (lower.includes("active session") || lower.includes("already") || lower.includes("phiên")) {
+        setCheckInError(`Xe đang có phiên gửi hoạt động: ${msg}`);
+      } else {
+        setCheckInError(msg);
+      }
     } finally {
       setCheckInLoading(false);
     }
@@ -467,7 +513,7 @@ export default function VehicleOperations() {
                       className="pm-form-input pm-plate-input"
                       placeholder="VD: 51K-892.45"
                       value={checkInPlate}
-                      onChange={(e) => setCheckInPlate(e.target.value)}
+                      onChange={(e) => { setCheckInPlate(e.target.value); renewCheckInKey(); }}
                     />
                   </div>
 
@@ -479,7 +525,7 @@ export default function VehicleOperations() {
                         className="pm-form-input"
                         placeholder="Dán token QR"
                         value={checkInBooking}
-                        onChange={(e) => setCheckInBooking(e.target.value)}
+                        onChange={(e) => { setCheckInBooking(e.target.value); renewCheckInKey(); }}
                       />
                     </div>
 
@@ -488,7 +534,7 @@ export default function VehicleOperations() {
                       <select
                         className="pm-form-select"
                         value={checkInVehicleType}
-                        onChange={(e) => handleVehicleTypeChange(e.target.value as VehicleType)}
+                        onChange={(e) => { handleVehicleTypeChange(e.target.value as VehicleType); renewCheckInKey(); }}
                       >
                         <option value="Car">Ô tô (4-7 chỗ)</option>
                         <option value="Motorcycle">Xe máy</option>
@@ -504,20 +550,134 @@ export default function VehicleOperations() {
                     <select
                       className="pm-form-select"
                       value={checkInGate}
-                      onChange={(e) => setCheckInGate(e.target.value)}
+                      onChange={(e) => { setCheckInGate(e.target.value); renewCheckInKey(); }}
                     >
                       <option value="" disabled>Chọn cổng vào</option>
                       {entryGates.map(gate => <option key={gate.id} value={gate.id}>{gate.label}</option>)}
                     </select>
                   </div>
 
+                  <div className="pm-form-field">
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={allowMismatchOverride}
+                        onChange={(e) => { setAllowMismatchOverride(e.target.checked); renewCheckInKey(); }}
+                      />
+                      <span>Xác nhận ngoại lệ lệch biển số (Override)</span>
+                    </label>
+                  </div>
+
+                  {allowMismatchOverride && (
+                    <div style={{ border: "1px solid rgba(251, 191, 36, 0.45)", borderRadius: 12, padding: 12, display: "grid", gap: 10 }}>
+                      <label className="pm-form-label">
+                        Lý do override (10–500 ký tự) <span className="pm-required">*</span>:
+                        <textarea
+                          required
+                          minLength={10}
+                          maxLength={500}
+                          className="pm-form-input"
+                          style={{ minHeight: 72, paddingTop: 8 }}
+                          placeholder="Ví dụ: Đã đối chiếu giấy đăng ký xe và xác nhận đúng chủ đặt chỗ..."
+                          value={overrideReason}
+                          onChange={(e) => { setOverrideReason(e.target.value); renewCheckInKey(); }}
+                        />
+                        <small>{overrideReason.trim().length} / 500 ký tự</small>
+                      </label>
+
+                      <div className="pm-form-row">
+                        <label className="pm-form-label">
+                          Loại chứng cứ:
+                          <select
+                            className="pm-form-select"
+                            value={evidenceKind}
+                            onChange={(e) => { setEvidenceKind(e.target.value); renewCheckInKey(); }}
+                          >
+                            <option value="CAMERA_SNAPSHOT">Ảnh chụp camera cổng</option>
+                            <option value="GATE_CAMERA">Camera làn vào</option>
+                            <option value="VEHICLE_DOCUMENT">Giấy tờ xe đối chiếu</option>
+                          </select>
+                        </label>
+                        <label className="pm-form-label">
+                          Ảnh chứng cứ PNG/JPEG (tối đa 4 MiB, tự upload lên bãi):
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/jpg"
+                            disabled={evidenceUploading}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const selectedLotId = entryGates.find(gate => gate.id === checkInGate)?.lotId;
+                              if (!selectedLotId) {
+                                setCheckInError("Vui lòng chọn cổng vào trước khi tải ảnh chứng cứ.");
+                                return;
+                              }
+                              const normalizedType = file.type === "image/jpg" ? "image/jpeg" : file.type;
+                              if (normalizedType !== "image/png" && normalizedType !== "image/jpeg") {
+                                setCheckInError("Chỉ hỗ trợ ảnh định dạng PNG hoặc JPEG.");
+                                return;
+                              }
+                              if (file.size > 4 * 1024 * 1024) {
+                                setCheckInError("Ảnh chứng cứ vượt quá giới hạn 4 MiB.");
+                                return;
+                              }
+
+                              setCheckInError("");
+                              setEvidenceFileName(file.name);
+                              setEvidenceUploading(true);
+                              try {
+                                const dataUrl = await new Promise<string>((resolve, reject) => {
+                                  const reader = new FileReader();
+                                  reader.onload = () => typeof reader.result === "string"
+                                    ? resolve(reader.result)
+                                    : reject(new Error("Không đọc được nội dung file ảnh."));
+                                  reader.onerror = () => reject(new Error("Không đọc được file ảnh."));
+                                  reader.readAsDataURL(file);
+                                });
+                                const base64 = dataUrl.includes(",") ? dataUrl.split(",", 2)[1] : dataUrl;
+                                const uploaded = await api.uploadLotEvidence(
+                                  selectedLotId,
+                                  { contentType: normalizedType, imageBase64: base64 },
+                                  crypto.randomUUID(),
+                                );
+                                setEvidenceReference(uploaded.reference);
+                                renewCheckInKey();
+                              } catch (uploadErr) {
+                                setCheckInError(uploadErr instanceof Error ? uploadErr.message : "Upload ảnh chứng cứ thất bại.");
+                              } finally {
+                                setEvidenceUploading(false);
+                              }
+                            }}
+                          />
+                          {evidenceUploading && <small>Đang tải ảnh chứng cứ lên máy chủ...</small>}
+                          {!evidenceUploading && evidenceFileName && <small>Đã upload ảnh: {evidenceFileName}</small>}
+                        </label>
+                      </div>
+
+                      <label className="pm-form-label">
+                        Tham chiếu chứng cứ (`evidence.reference`) <span className="pm-required">*</span>:
+                        <input
+                          type="text"
+                          required
+                          maxLength={2048}
+                          className="pm-form-input"
+                          placeholder="VD: gate-evidence://entry/cam-g1-20261112.jpg"
+                          value={evidenceReference}
+                          onChange={(e) => { setEvidenceReference(e.target.value); renewCheckInKey(); }}
+                        />
+                      </label>
+                    </div>
+                  )}
+
+                  {checkInError && <p role="alert" style={{ color: "#f87171", margin: 0 }}>{checkInError}</p>}
+
                   <button
                     type="submit"
-                    disabled={checkInLoading || !checkInGate}
+                    disabled={checkInLoading || evidenceUploading || !checkInGate}
                     className="pm-cta-btn pm-btn-teal"
                   >
                     <CheckCircle2 size={18} />
-                    <span>{checkInLoading ? "Đang xử lý..." : "Xác nhận xe vào"}</span>
+                    <span>{checkInLoading ? "Đang xử lý..." : allowMismatchOverride ? "Xác nhận Override & Cho xe vào" : "Xác nhận xe vào"}</span>
                   </button>
                 </form>
 
@@ -557,8 +717,9 @@ export default function VehicleOperations() {
                     </div>
                     <div className="pm-success-details">
                       <div>Biển số: <strong>{checkInSuccess.licensePlate}</strong></div>
-                      <div>Vị trí gán: <strong className="pm-slot-highlight">{checkInSuccess.slotCode}</strong></div>
-                      <div>Tầng: <strong>{checkInSuccess.levelName}</strong></div>
+                      <div>Vị trí gán (BE cấp): <strong className="pm-slot-highlight">{checkInSuccess.slotCode}</strong></div>
+                      <div>Hình thức vào: <strong>{checkInSuccess.entryMethod || (checkInSuccess.bookingId ? "PRE_BOOKING" : "AUTO_SLOT")}</strong></div>
+                      <div>Booking: <strong>{checkInSuccess.bookingId ?? "Walk-in (Không đặt trước)"}</strong></div>
                       <div>Giờ vào: <strong>{new Date(checkInSuccess.checkinAt).toLocaleTimeString("vi-VN")}</strong></div>
                     </div>
                     <button
