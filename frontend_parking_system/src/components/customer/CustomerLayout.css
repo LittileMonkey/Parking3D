@@ -8,7 +8,7 @@
 }
 
 .customer-public-shell {
-  font-family: "Be Vietnam Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-interface);
 }
 
 .customer-public-shell h1,
@@ -47,6 +47,23 @@
 
 .customer-public-shell .site-header-pill {
   position: relative;
+}
+
+.customer-public-shell .customer-portal-link {
+  padding: 5px 10px;
+  border: 1px solid #b6dadd;
+  border-radius: 9999px;
+  background: #eff9f8;
+  color: var(--brand-primary-strong);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.customer-public-shell .customer-portal-link:hover {
+  background: #e3f4f4;
+  color: var(--ink-deep);
 }
 
 .customer-public-shell .mobile-nav-account {
@@ -199,6 +216,12 @@
     gap: 4px;
     padding-top: 8px;
     border-top: 1px solid #e3ebef;
+  }
+
+  .customer-public-shell .mobile-nav-portal-link {
+    color: var(--brand-primary-strong);
+    background: #eff9f8;
+    font-weight: 700;
   }
 
   .customer-public-shell .customer-nav-user,

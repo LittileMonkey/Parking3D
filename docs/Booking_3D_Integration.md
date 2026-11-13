@@ -1,32 +1,22 @@
-# Booking 3D slot selection
+# Luồng tìm bãi và chọn chỗ 3D
 
-The frontend now exposes `/booking` through the home navigation. It reuses the
-procedural scene from `D:\OJT_FA26\Model_3D\Parking3D\Parking3D\wwwroot\js\parking.js`.
-React owns the selected slot; the viewer and accessible button list update the
-same information panel and highlight exactly one selected mesh. Clearing the
-selection restores the mesh color. Orbit dragging does not select a slot.
+## Luồng khách hàng
 
-The scene is bundled with Three.js 0.180.0 and loaded only on the booking route.
-It resizes to its container and releases animation, controls, geometry and
-materials when unmounted. If WebGL is unavailable, the model slot list remains
-usable. Customer controls cannot edit slot status or operate barriers.
+1. `/booking` hiển thị tiêu chí tìm bãi và kết quả từ API.
+2. Chọn **Chọn bãi và xem sơ đồ 3D** để mở `/booking/lot/:lotId`; các tiêu chí thời gian, loại xe, thứ tự tìm và tọa độ (nếu có) được giữ trong URL.
+3. Màn hình riêng tải availability và layout của bãi đã chọn. Khách chọn tầng, rồi chọn slot trên mô hình 3D hoặc danh sách hỗ trợ.
+4. Availability được làm mới định kỳ và qua SignalR khi có kết nối. API vẫn kiểm tra lại slot và khoảng thời gian trước khi tạo booking.
 
-## Data scope
+Trang dùng `ParkingViewer` và dữ liệu layout/availability của bãi đang chọn; không gán slot theo thứ tự trả về và không dùng màu mesh làm nguồn chân lý. Các slot không khả dụng không thể chọn. Nếu WebGL không hoạt động, danh sách slot vẫn có thể truy cập; thao tác đặt chỗ vẫn tuân theo availability từ API.
 
-A01–A08 and B01–B08 are model identifiers, with sample floor, vehicle type,
-dimensions and status. The page explicitly labels this as a demonstration.
-It does not submit a reservation, hold a slot or claim live availability.
-No API or database contract changes are included.
+Khách cần đăng nhập và có phương tiện phù hợp để tạo booking. Chế độ chọn chính xác gửi slot ID từ API; chế độ tự động để backend phân bổ. Sau khi tạo booking, khách được chuyển đến trang trạng thái booking. Giao diện không tự giả lập thanh toán, không tự mở barrier và không tuyên bố slot còn trống nếu API chưa xác nhận.
 
-Before enabling actual reservations, supply a facility-specific map linking each
-mesh to the database slot identifier and load availability for the requested
-time window. Do not associate slots by response order or assume a model code is
-a database identifier. The backend remains authoritative for status, holds,
-authorization and overlap checks (BR-19).
+## Responsive và giao diện
 
-## Validation
+Font chữ toàn ứng dụng dùng Be Vietnam Pro, lấy từ trang chủ; màu thương hiệu dùng teal `#087f8c`, navy `#0e2634`, nền `#f5f8fa` và viền `#dce6e8`. Màn hình tìm kiếm và chọn chỗ được bố trí thích ứng từ màn hình hẹp đến desktop; layout 3D chuyển sang một cột khi không đủ chiều rộng.
 
-- Production frontend build (`npm run build`).
-- Browser: direct mesh selection updates the information panel and selected list
-  item; list selection and clearing synchronize with the scene.
-- The original model project is preserved.
+## Kiểm chứng
+
+- `npm run build`
+- `npm run test:parking`
+- Kiểm tra trình duyệt ở các chiều rộng 320, 375, 768, 1024 và 1440 px; kiểm tra đổi từ kết quả sang `/booking/lot/:lotId` và khả năng quay lại.

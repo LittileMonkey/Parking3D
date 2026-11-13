@@ -180,9 +180,10 @@ export default function ShiftManagement() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <div className="staff-shift-page" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* Top Shift Status & Action Bar */}
       <div
+        className="staff-shift-status"
         style={{
           display: "flex",
           alignItems: "center",
@@ -197,6 +198,7 @@ export default function ShiftManagement() {
       >
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div
+            className="staff-shift-status-icon"
             style={{
               width: 40,
               height: 40,
@@ -211,10 +213,10 @@ export default function ShiftManagement() {
             <Clock size={20} />
           </div>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#ffffff" }}>
+            <div className="staff-shift-status-title" style={{ fontSize: 15, fontWeight: 700, color: "#ffffff" }}>
               {mine ? "Bạn đang trong ca trực hoạt động" : "Bạn chưa bắt đầu ca trực tại bãi này"}
             </div>
-            <div style={{ fontSize: 12, color: "rgba(255, 255, 255, 0.6)" }}>
+            <div className="staff-shift-status-description" style={{ fontSize: 12, color: "rgba(255, 255, 255, 0.6)" }}>
               {mine
                 ? `Bắt đầu lúc: ${new Date(mine.startedAt).toLocaleString("vi-VN")}`
                 : "Bấm 'Bắt đầu ca' để tiếp nhận quyền check-in và bàn giao ca."}
@@ -225,7 +227,7 @@ export default function ShiftManagement() {
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button
             type="button"
-            className="pm-btn-secondary"
+            className="pm-btn-secondary staff-shift-secondary-button"
             disabled={busy || !selectedLotId}
             onClick={() => setRevision((value) => value + 1)}
             style={{
@@ -248,6 +250,7 @@ export default function ShiftManagement() {
           {!mine && (
             <button
               type="button"
+              className="staff-shift-primary-button"
               disabled={busy || !selectedLotId}
               onClick={() => void startMyShift()}
               style={{
@@ -273,6 +276,7 @@ export default function ShiftManagement() {
 
       {error && (
         <div
+          className="staff-shift-error"
           style={{
             background: "rgba(239, 68, 68, 0.18)",
             border: "1px solid rgba(239, 68, 68, 0.4)",
@@ -291,6 +295,7 @@ export default function ShiftManagement() {
 
       {notice && (
         <div
+          className="staff-shift-notice"
           style={{
             background: "rgba(16, 185, 129, 0.18)",
             border: "1px solid rgba(16, 185, 129, 0.4)",
@@ -309,6 +314,7 @@ export default function ShiftManagement() {
 
       {/* Main Shift Handover Form Card */}
       <div
+        className="staff-shift-form-card"
         style={{
           background: "rgba(15, 23, 42, 0.75)",
           backdropFilter: "blur(20px)",
@@ -320,11 +326,11 @@ export default function ShiftManagement() {
           gap: 16,
         }}
       >
-        <div style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.1)", paddingBottom: 12 }}>
-          <h2 style={{ fontSize: 17, fontWeight: 700, color: "#ffffff", margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
+        <div className="staff-shift-form-heading" style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.1)", paddingBottom: 12 }}>
+          <h2 className="staff-shift-form-title" style={{ fontSize: 17, fontWeight: 700, color: "#ffffff", margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
             <UserCheck size={19} color="#38bdf8" /> Tạo biên bản bàn giao ca trực mới
           </h2>
-          <p style={{ fontSize: 12.5, color: "rgba(255, 255, 255, 0.6)", margin: "4px 0 0 0" }}>
+          <p className="staff-shift-form-description" style={{ fontSize: 12.5, color: "rgba(255, 255, 255, 0.6)", margin: "4px 0 0 0" }}>
             Người nhận ca phải đang trong ca trực tại cùng bãi đỗ. Ca của bạn chỉ kết thúc khi nhân viên nhận xác nhận biên bản.
           </p>
         </div>
@@ -369,7 +375,7 @@ export default function ShiftManagement() {
               </select>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14 }}>
+            <div className="staff-shift-form-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 300px), 1fr))", gap: 14 }}>
               {(
                 [
                   ["completedTasks", "Công việc đã hoàn thành trong ca"],
@@ -379,11 +385,12 @@ export default function ShiftManagement() {
                   ["notesForNext", "Lưu ý quan trọng cho ca tiếp theo"],
                 ] as const
               ).map(([field, label]) => (
-                <div key={field} style={{ gridColumn: field === "notesForNext" ? "1 / -1" : "auto" }}>
+                <div key={field} className="staff-shift-form-field" style={{ gridColumn: field === "notesForNext" ? "1 / -1" : "auto" }}>
                   <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "rgba(255, 255, 255, 0.9)", marginBottom: 6 }}>
                     {label} *
                   </label>
                   <textarea
+                    className="staff-shift-input"
                     required
                     maxLength={2000}
                     rows={field === "notesForNext" ? 3 : 2}
@@ -412,6 +419,7 @@ export default function ShiftManagement() {
 
             <button
               type="submit"
+              className="staff-shift-primary-button"
               disabled={busy || !mine || !receiver}
               style={{
                 alignSelf: "flex-end",
@@ -439,7 +447,7 @@ export default function ShiftManagement() {
 
       {/* Handover History List */}
       <div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
+        <div className="staff-shift-history-heading" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
           <h2 style={{ fontSize: 16, fontWeight: 700, color: "#ffffff", margin: 0 }}>
             Lịch sử &amp; Biên bản bàn giao liên quan ({handovers.length})
           </h2>
@@ -468,6 +476,7 @@ export default function ShiftManagement() {
 
         {handovers.length === 0 ? (
           <div
+            className="staff-shift-empty"
             style={{
               padding: "32px 20px",
               textAlign: "center",
@@ -489,6 +498,7 @@ export default function ShiftManagement() {
               return (
                 <div
                   key={item.handoverId}
+                  className="staff-shift-handover-card"
                   style={{
                     background: "rgba(15, 23, 42, 0.7)",
                     backdropFilter: "blur(16px)",
@@ -503,6 +513,7 @@ export default function ShiftManagement() {
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <span
+                        className={`staff-shift-status-badge ${item.status === "Confirmed" ? "is-confirmed" : item.status === "Cancelled" ? "is-cancelled" : "is-pending"}`}
                         style={{
                           padding: "3px 10px",
                           borderRadius: "9999px",
@@ -528,7 +539,7 @@ export default function ShiftManagement() {
                           ? "Đã xác nhận"
                           : "Đã hủy"}
                       </span>
-                      <span style={{ fontSize: 12, color: "rgba(255, 255, 255, 0.5)" }}>
+                      <span className="staff-shift-timestamp" style={{ fontSize: 12, color: "rgba(255, 255, 255, 0.5)" }}>
                         Tạo lúc: {new Date(item.createdAt).toLocaleString("vi-VN")} · Phiên bản v{item.version}
                       </span>
                     </div>
@@ -536,6 +547,7 @@ export default function ShiftManagement() {
                     {isReceiverMe && isPending && (
                       <button
                         type="button"
+                        className="staff-shift-primary-button"
                         disabled={busy}
                         onClick={() => void confirmHandover(item)}
                         style={{
@@ -558,7 +570,7 @@ export default function ShiftManagement() {
                     )}
                   </div>
 
-                  <div style={{ fontSize: 13, color: "rgba(255, 255, 255, 0.8)", display: "flex", gap: 20, flexWrap: "wrap" }}>
+                  <div className="staff-shift-participants" style={{ fontSize: 13, color: "rgba(255, 255, 255, 0.8)", display: "flex", gap: 20, flexWrap: "wrap" }}>
                     <div>
                       Người giao: <strong style={{ color: "#ffffff" }}>{formatStaffLabel(item.senderUserId)}</strong>
                     </div>
@@ -575,7 +587,7 @@ export default function ShiftManagement() {
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))",
                       gap: 10,
                       background: "rgba(0, 0, 0, 0.25)",
                       borderRadius: 10,
@@ -583,6 +595,7 @@ export default function ShiftManagement() {
                       fontSize: 12.5,
                       color: "rgba(255, 255, 255, 0.75)",
                     }}
+                    className="staff-shift-handover-details"
                   >
                     <div><strong style={{ color: "#ffffff" }}>Đã làm:</strong> {item.completedTasks}</div>
                     <div><strong style={{ color: "#ffffff" }}>Chưa xử lý:</strong> {item.unresolvedIssues}</div>

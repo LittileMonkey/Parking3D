@@ -50,33 +50,12 @@ export default function StaffLayout() {
     >
       {lots.length > 0 && (
         <div
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 10,
-            marginBottom: 16,
-            padding: "8px 16px",
-            borderRadius: 12,
-            background: "rgba(16, 185, 129, 0.12)",
-            border: "1px solid rgba(16, 185, 129, 0.3)",
-            fontSize: 13,
-            color: "#ffffff",
-          }}
+          className="vision-facility-controls"
         >
-          <span style={{ fontWeight: 700, color: "#6ee7b7" }}>Cơ sở bãi trực:</span>
+          <label className="vision-facility-control">
+            <span>Cơ sở bãi trực:</span>
           <select
-            className="pm-form-select"
-            style={{
-              width: "auto",
-              height: 34,
-              padding: "0 12px",
-              background: "rgba(10, 15, 26, 0.8)",
-              border: "1px solid rgba(255, 255, 255, 0.2)",
-              borderRadius: 8,
-              color: "#ffffff",
-              fontSize: 13,
-              fontWeight: 600,
-            }}
+            className="pm-form-select vision-facility-select"
             value={selectedLotId}
             onChange={(e) => setSelectedLotId(e.target.value)}
             aria-label="Chọn cơ sở bãi đỗ"
@@ -87,6 +66,7 @@ export default function StaffLayout() {
               </option>
             ))}
           </select>
+          </label>
         </div>
       )}
       <Outlet

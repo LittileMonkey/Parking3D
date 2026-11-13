@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 import { ApiError, api, type LotAvailability, type LotLayout3DDto, type ParkingSearchItem, type ParkingLevelAvailability, type UserVehicle } from "../services/api";
 import ParkingViewer, { type ModelLevel } from "../components/parking/ParkingViewer";
 import { applySlotStatusChanges, type SlotStatusChange } from "../components/parking/parkingRealtime";
@@ -59,9 +60,14 @@ function formatMoney(amount: number, currency = "VND") {
 
 export default function SearchPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const { isAuthenticated } = useAuth();
   const { key: bookingKey, renewKey: renewBookingKey } = useIdempotencyKey("book");
+  const isSlotSelectionPage = location.pathname.startsWith("/booking/lot/");
+  const routeLotId = isSlotSelectionPage
+    ? location.pathname.slice("/booking/lot/".length)
+    : null;
 
   const paramVehicle = searchParams.get("vehicle") || searchParams.get("vehicleType");
   const initialVehicle: VehicleType = (paramVehicle && (paramVehicle.toLowerCase().includes("bike") || paramVehicle.toLowerCase().includes("motor")))
@@ -83,15 +89,27 @@ export default function SearchPage() {
   const initialRadius = paramRadius === "all"
     ? 20
     : (Number(paramRadius) >= 1 && Number(paramRadius) <= 50 ? Number(paramRadius) : 5);
+  const paramStartAt = searchParams.get("startsAt");
+  const parsedStartAt = paramStartAt ? new Date(paramStartAt) : null;
+  const initialStartsAt = parsedStartAt && Number.isFinite(parsedStartAt.getTime()) && parsedStartAt.getTime() > Date.now()
+    ? toLocalDateTime(parsedStartAt)
+    : toLocalDateTime(new Date(Date.now() + 30 * 60_000));
+  const paramLatitude = Number(searchParams.get("latitude"));
+  const paramLongitude = Number(searchParams.get("longitude"));
+  const initialPosition = useMemo(() => searchParams.has("latitude") && searchParams.has("longitude")
+    && Number.isFinite(paramLatitude) && paramLatitude >= -90 && paramLatitude <= 90
+    && Number.isFinite(paramLongitude) && paramLongitude >= -180 && paramLongitude <= 180
+    ? { latitude: paramLatitude, longitude: paramLongitude }
+    : null, [searchParams, paramLatitude, paramLongitude]);
 
   const [vehicleType, setVehicleType] = useState<VehicleType>(initialVehicle);
-  const [startsAt, setStartsAt] = useState(() => toLocalDateTime(new Date(Date.now() + 30 * 60_000)));
+  const [startsAt, setStartsAt] = useState(initialStartsAt);
   const [duration, setDuration] = useState(initialDuration);
   const [sortBy, setSortBy] = useState<"NEAREST" | "CHEAPEST">(initialSortBy);
   const [radiusKm, setRadiusKm] = useState(initialRadius);
-  const [position, setPosition] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [manualLatitude, setManualLatitude] = useState("");
-  const [manualLongitude, setManualLongitude] = useState("");
+  const [position, setPosition] = useState<{ latitude: number; longitude: number } | null>(initialPosition);
+  const [manualLatitude, setManualLatitude] = useState(initialPosition ? String(initialPosition.latitude) : "");
+  const [manualLongitude, setManualLongitude] = useState(initialPosition ? String(initialPosition.longitude) : "");
   const [locationMessage, setLocationMessage] = useState("");
   const [results, setResults] = useState<ParkingSearchItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -117,6 +135,7 @@ export default function SearchPage() {
   const [bookingError, setBookingError] = useState("");
   const [isCreatingBooking, setIsCreatingBooking] = useState(false);
   const availabilityRequestId = useRef(0);
+  const initialSearchTriggered = useRef(false);
 
   const manualLocationEntered = manualLatitude.trim() !== "" || manualLongitude.trim() !== "";
   const parsedLatitude = Number(manualLatitude);
@@ -317,24 +336,62 @@ export default function SearchPage() {
     await executeSearch(vehicleType, startsAt, duration, sortBy, radiusKm, searchPosition);
   };
 
-  const initialSearchTriggered = useRef(false);
+  const openLotSelection = (lot: ParkingSearchItem) => {
+    initialSearchTriggered.current = true;
+    setSelectedLot(lot);
+    const params = new URLSearchParams(searchParams);
+    params.set("lot", lot.parkingLotId);
+    params.set("vehicle", vehicleType === "Car" ? "car" : "bike");
+    params.set("duration", String(duration));
+    params.set("radius", String(radiusKm));
+    params.set("sortBy", sortBy);
+    params.set("startsAt", new Date(startsAt).toISOString());
+    if (searchPosition) {
+      params.set("latitude", String(searchPosition.latitude));
+      params.set("longitude", String(searchPosition.longitude));
+    } else {
+      params.delete("latitude");
+      params.delete("longitude");
+    }
+    navigate(`/booking/lot/${encodeURIComponent(lot.parkingLotId)}?${params.toString()}`);
+    void loadAvailability(lot);
+  };
+
+  const returnToResults = () => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("lot");
+    params.delete("startsAt");
+    setSelectedLot(null);
+    setAvailability(null);
+    setSelectedSlotId("");
+    const query = params.toString();
+    navigate(`/booking${query ? `?${query}` : ""}`);
+  };
+
+  useEffect(() => {
+    if (!isSlotSelectionPage) {
+      setSelectedLot(null);
+      setAvailability(null);
+      setSelectedSlotId("");
+    }
+  }, [isSlotSelectionPage]);
+
   useEffect(() => {
     if (initialSearchTriggered.current) return;
-    const hasParams = searchParams.has("vehicle") || searchParams.has("duration") || searchParams.has("lot") || searchParams.has("radius") || searchParams.has("sortBy") || searchParams.has("criteria");
+    const hasParams = isSlotSelectionPage || searchParams.has("vehicle") || searchParams.has("duration") || searchParams.has("lot") || searchParams.has("radius") || searchParams.has("sortBy") || searchParams.has("criteria");
     if (hasParams) {
       initialSearchTriggered.current = true;
-      const initialStart = toLocalDateTime(new Date(Date.now() + 30 * 60_000));
       void executeSearch(
         initialVehicle,
-        initialStart,
+        startsAt,
         initialDuration,
         initialSortBy,
         initialRadius,
-        null,
-        searchParams.get("lot")
+        initialSortBy === "NEAREST" ? initialPosition : null,
+        routeLotId || searchParams.get("lot")
       );
     }
-  }, [searchParams, executeSearch, initialVehicle, initialDuration, initialSortBy, initialRadius]);
+  }, [searchParams, executeSearch, initialVehicle, initialDuration, initialSortBy, initialRadius, startsAt, initialPosition, isSlotSelectionPage, routeLotId]);
 
   const useCurrentLocation = () => {
     setLocationMessage("");
@@ -535,13 +592,31 @@ export default function SearchPage() {
   return (
     <CustomerLayout>
       <main className="customer-page">
-      <header className="customer-page-heading">
-        <p className="customer-eyebrow">HÀNH TRÌNH ĐẶT CHỖ</p>
-        <h1>Tìm và đặt chỗ</h1>
-        <p>Tìm bãi, xem tầng và tình trạng slot trực tiếp, chọn xe tài khoản rồi giữ chỗ và theo dõi booking.</p>
+      <header className={`customer-page-heading${isSlotSelectionPage ? " booking-step-heading" : ""}`}>
+        {isSlotSelectionPage ? (
+          <>
+            <button className="booking-back-button" type="button" onClick={returnToResults}>
+              <ArrowLeft size={17} aria-hidden="true" /> Quay lại kết quả
+            </button>
+            <p className="customer-eyebrow">BƯỚC 2 · CHỌN VỊ TRÍ ĐỖ</p>
+            <h1>Chọn chỗ trên sơ đồ 3D</h1>
+            <p>Chọn tầng và ô còn trống như chọn ghế; tình trạng được đồng bộ từ hệ thống.</p>
+            <ol className="booking-progress" aria-label="Tiến trình đặt chỗ">
+              <li className="complete"><span>1</span> Tìm bãi</li>
+              <li className="active" aria-current="step"><span>2</span> Chọn chỗ</li>
+              <li><span>3</span> Xác nhận</li>
+            </ol>
+          </>
+        ) : (
+          <>
+            <p className="customer-eyebrow">HÀNH TRÌNH ĐẶT CHỖ</p>
+            <h1>Tìm bãi đỗ xe</h1>
+            <p>Tìm bãi theo khoảng cách hoặc giá dự kiến, sau đó chọn vị trí đỗ trên sơ đồ 3D.</p>
+          </>
+        )}
       </header>
 
-      <form className="customer-panel search-panel" id="search-form" onSubmit={submitSearch}>
+      {!isSlotSelectionPage && <form className="customer-panel search-panel" id="search-form" onSubmit={submitSearch}>
         <div className="customer-form-grid">
           <label className="customer-field">
             <span>Loại phương tiện</span>
@@ -604,9 +679,9 @@ export default function SearchPage() {
             {searchError} {searchError.includes("đăng nhập") && <Link to="/login">Đăng nhập lại</Link>}
           </div>
         )}
-      </form>
+      </form>}
 
-      <section className="customer-results">
+      {!isSlotSelectionPage && <section className="customer-results">
         <div className="customer-section-heading">
           <div><h2>Kết quả tìm kiếm</h2><p>{isSearching ? "Đang tải dữ liệu từ hệ thống..." : hasSearched ? `${totalCount} bãi phù hợp` : "Chưa tìm kiếm"}</p></div>
           <span className="customer-source-label">Dữ liệu tìm kiếm từ API</span>
@@ -644,17 +719,24 @@ export default function SearchPage() {
                   ? formatMoney(lot.estimatedPricing.estimatedTotalFee, lot.estimatedPricing.currency ?? "VND")
                   : "Chưa có giá"}</strong>
                 <small>{lot.estimatedPricing?.billingDetails || "Giá ước tính; bãi xe xác nhận mức phí cuối cùng."}</small>
-                <button className="customer-button secondary" type="button" onClick={() => void loadAvailability(lot)}
-                  disabled={!searchIsCurrent || isSearching}>
-                  {selectedLot?.parkingLotId === lot.parkingLotId ? "Tải lại chỗ trống" : "Chọn bãi"}
+                <button className="customer-button secondary" type="button"
+                  disabled={!searchIsCurrent || isSearching}
+                  onClick={() => openLotSelection(lot)}>
+                  Chọn bãi và xem sơ đồ 3D
                 </button>
               </div>
             </article>
           ))}
         </div>
-      </section>
+      </section>}
 
-      {selectedLot && (
+      {isSlotSelectionPage && !selectedLot && (
+        <div className={searchError ? "customer-alert error" : "customer-empty"} role={searchError ? "alert" : "status"}>
+          {searchError || "Đang tải bãi xe và sơ đồ chỗ đỗ..."}
+        </div>
+      )}
+
+      {isSlotSelectionPage && selectedLot && (
         <section className="customer-panel availability-panel" aria-live="polite">
           <div className="customer-section-heading">
             <div><p className="customer-eyebrow">{selectedLot.code || "PARKING LOT"}</p><h2>{selectedLot.name}</h2></div>

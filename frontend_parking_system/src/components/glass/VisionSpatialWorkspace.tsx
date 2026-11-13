@@ -384,19 +384,7 @@ export default function VisionSpatialWorkspace({
             </header>
 
             {exportNotice && (
-              <div
-                style={{
-                  background: "rgba(16, 185, 129, 0.22)",
-                  border: "1px solid rgba(16, 185, 129, 0.45)",
-                  borderRadius: 14,
-                  padding: "10px 16px",
-                  color: "#86efac",
-                  fontSize: 13,
-                  fontWeight: 600,
-                }}
-              >
-                {exportNotice}
-              </div>
+              <div className="vision-export-notice">{exportNotice}</div>
             )}
 
             <div className="vision-subpage-wrap">{children}</div>
@@ -453,7 +441,7 @@ export default function VisionSpatialWorkspace({
                   <span className="vision-widget-pill">Live</span>
                 </div>
                 <div className="vision-widget-val">{incidentBadge}</div>
-                <div className="vision-widget-sub" style={{ color: "#34d399", display: "flex", alignItems: "center", gap: 4 }}>
+                <div className="vision-widget-sub vision-widget-status">
                   <ArrowUpRight size={13} /> Vào: {stats.entries} · Ra: {stats.exits} · Thông báo: {stats.unreadNotifications}
                 </div>
               </div>
@@ -487,15 +475,15 @@ export default function VisionSpatialWorkspace({
               <div className="vision-export-grid">
                 <div className="vision-export-option-card" onClick={handleExportCsv}>
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <FileSpreadsheet size={22} style={{ color: "#34d399" }} />
+                    <FileSpreadsheet size={22} className="vision-export-option-icon" />
                     <div>
                       <strong style={{ fontSize: 14 }}>Tải tổng hợp vận hành & doanh thu (CSV)</strong>
-                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
+                      <div className="vision-export-option-desc">
                         Dữ liệu trực tiếp từ API Parking & Payment
                       </div>
                     </div>
                   </div>
-                  <span className="vision-widget-pill" style={{ color: "#34d399" }}>CSV</span>
+                  <span className="vision-widget-pill">CSV</span>
                 </div>
               </div>
             </motion.div>

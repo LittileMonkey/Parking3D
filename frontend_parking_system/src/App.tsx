@@ -56,7 +56,7 @@ export default function App() {
       <Route path="/security" element={<SecurityPage />} />
       {/* Customer / Public Routes */}
       <Route path="/" element={<Home />} />
-      <Route path="/booking" element={<Suspense fallback={<p role="status">Đang tải tìm kiếm và đặt chỗ…</p>}><Booking /></Suspense>} />
+      <Route path="/booking/*" element={<Suspense fallback={<p role="status">Đang tải tìm kiếm và đặt chỗ…</p>}><Booking /></Suspense>} />
       <Route path="/login" element={<Login />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/register" element={<Register />} />

@@ -38,6 +38,7 @@ export default function ReservationRelocation({ lotId, onMoved }: { lotId: strin
 
   return (
     <section
+      className="reservation-relocation-card"
       style={{
         background: 'rgba(15, 23, 42, 0.75)',
         backdropFilter: 'blur(24px)',
@@ -51,6 +52,7 @@ export default function ReservationRelocation({ lotId, onMoved }: { lotId: strin
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
         <div
+          className="reservation-relocation-grid"
           style={{
             width: 32,
             height: 32,
@@ -90,7 +92,7 @@ export default function ReservationRelocation({ lotId, onMoved }: { lotId: strin
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
           gap: 14,
           alignItems: 'flex-end',
         }}
@@ -215,6 +217,7 @@ export default function ReservationRelocation({ lotId, onMoved }: { lotId: strin
         <div style={{ display: 'flex', gap: 10 }}>
           <button
             type="button"
+            className="reservation-relocation-primary-button"
             disabled={busy || !selected || !target || !reason.trim()}
             onClick={() => void move()}
             style={{
@@ -245,6 +248,7 @@ export default function ReservationRelocation({ lotId, onMoved }: { lotId: strin
 
           <button
             type="button"
+            className="reservation-relocation-secondary-button"
             disabled={busy}
             onClick={() => setRevision(value => value + 1)}
             style={{
@@ -271,6 +275,7 @@ export default function ReservationRelocation({ lotId, onMoved }: { lotId: strin
 
       {error && (
         <div
+          className="reservation-relocation-error"
           role="alert"
           style={{
             marginTop: 14,
@@ -291,6 +296,7 @@ export default function ReservationRelocation({ lotId, onMoved }: { lotId: strin
 
       {message && (
         <div
+          className="reservation-relocation-notice"
           role="status"
           style={{
             marginTop: 14,

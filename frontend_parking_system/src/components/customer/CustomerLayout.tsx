@@ -129,7 +129,7 @@ export default function CustomerLayout({
               <>
                 <span className="customer-nav-user">{user?.fullName || user?.userName} ({roleLabel})</span>
                 {portalPath && (
-                  <Link to={portalPath} onClick={closeMenus} className="nav-item-pill mobile-nav-portal-link" style={{ color: "#38bdf8", fontWeight: 700 }}>
+                  <Link to={portalPath} onClick={closeMenus} className="nav-item-pill mobile-nav-portal-link">
                     {portalPath.includes("staff") ? "→ Vào Staff Portal" : "→ Vào Admin Dashboard"}
                   </Link>
                 )}
@@ -164,17 +164,7 @@ export default function CustomerLayout({
               {portalPath && (
                 <Link
                   to={portalPath}
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    padding: "4px 9px",
-                    borderRadius: "9999px",
-                    background: "rgba(56, 189, 248, 0.15)",
-                    color: "#38bdf8",
-                    border: "1px solid rgba(56, 189, 248, 0.3)",
-                    textDecoration: "none",
-                    whiteSpace: "nowrap",
-                  }}
+                  className="customer-portal-link"
                   title={portalPath.includes("staff") ? "Vào trang Staff Operations" : "Vào trang Admin Dashboard"}
                 >
                   {portalPath.includes("staff") ? "Staff" : "Admin"}
