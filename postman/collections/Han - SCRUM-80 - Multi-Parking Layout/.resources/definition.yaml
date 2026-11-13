@@ -1,0 +1,79 @@
+$kind: collection
+description: |-
+  SCRUM-80 API checks with eight requests.
+
+  Import this collection and Han-Scrum80-Local.postman_environment.json. Select environment Han - SCRUM-80 Local. Keep baseUrl=http://localhost:8080 for Docker Gateway. Run requests 01 through 08 in order, one iteration, delay 100 ms.
+
+  Shared checks live in Collection > Scripts > Post-response. They validate the API envelope and every successful /layout response. Each request script contains only its specific assertions or variable handling.
+
+  Request 01 selects two lots and saves their IDs. Pre-fill lotId/otherLotId to select specific lots. Seed levels/zones/slots in both lots. requirePublishedCoordinates=true requires at least one slot with position, rotationY and size in each selected layout.
+
+  Request 03 saves the primary layout. Requests 04 and 06 compare later responses with that snapshot. Request 05 checks entity ID isolation. Requests 07 and 08 expect 404.
+
+  Set checkPerformance=true to assert the response time of request 04 is below maxWarmResponseMs, default 20 ms. This is a single HTTP measurement including Gateway and local networking.
+
+  Verify Redis TTL separately after a layout request. Replace LOT_ID with the selected lotId.
+
+  docker compose -f compose.microservices.yml exec -T redis redis-cli TTL "parking:lot_layout_LOT_ID"
+
+  A newly created entry should have close to 43200 seconds remaining. -2 means the key is missing. Check the Redis instance/prefix and ConnectionStrings__Redis. The application uses memory cache when Redis is not configured. Stable HTTP responses alone do not prove a Redis hit.
+
+  For cache-hit evidence, remove only the selected demo key, call request 03, inspect Redis TTL, then call request 04 and inspect Parking cache logs or a breakpoint at the repository call.
+
+  All requests use No Auth and read public data.
+scripts:
+  - type: http:afterResponse
+    code: |-
+      const body = pm.response.json();
+
+      pm.test("Standard API envelope", function () {
+          pm.expect(pm.response.headers.get("Content-Type")).to.include("application/json");
+          pm.expect(body).to.have.property("result");
+          pm.expect(body.isSuccess).to.be.a("boolean");
+          pm.expect(body.statusCode).to.equal(pm.response.code);
+          pm.expect(body.message).to.be.a("string");
+          pm.expect(body.isSuccess).to.equal(pm.response.code === 200);
+          if (pm.response.code === 404) pm.expect(body.result).to.equal(null);
+      });
+
+      if (pm.response.code === 200 && pm.request.url.toString().endsWith("/layout")) {
+          const layout = body.result;
+          const requestedLot = pm.variables.replaceIn(pm.request.url.toString()).split("/").slice(-2)[0];
+
+          pm.test("Correct lot and valid layout tree", function () {
+              pm.expect(layout.lotId.toLowerCase()).to.equal(requestedLot.toLowerCase());
+              ["code", "name"].forEach(field => pm.expect(layout[field]).to.be.a("string"));
+              pm.expect(layout.levels).to.be.an("array").that.is.not.empty;
+              layout.levels.forEach(level => pm.expect(level.zones).to.be.an("array"));
+          });
+
+          const zones = layout.levels.flatMap(level => level.zones);
+          zones.forEach(zone => pm.expect(zone.slots).to.be.an("array"));
+          const slots = zones.flatMap(zone => zone.slots);
+          const ids = [...layout.levels, ...zones, ...slots].map(item => item.id);
+
+          pm.test("Unique level, zone and slot IDs", function () {
+              pm.expect(new Set(ids).size).to.equal(ids.length);
+          });
+
+          pm.test("Valid slot fields and numeric 3D transforms", function () {
+              layout.levels.forEach(level => pm.expect(level.elevationM).to.be.a("number"));
+              slots.forEach(slot => {
+                  ["code", "operationalStatus"].forEach(field => pm.expect(slot[field]).to.be.a("string"));
+                  [slot.position, slot.size].filter(vector => vector !== null).forEach(vector => {
+                      ["x", "y", "z"].forEach(axis => pm.expect(vector[axis]).to.be.a("number"));
+                  });
+                  if (slot.rotationY !== null) pm.expect(slot.rotationY).to.be.a("number");
+              });
+          });
+
+          pm.test("Slots and required published coordinates are available", function () {
+              pm.expect(slots.length, "Seed slots before running").to.be.greaterThan(0);
+              if (pm.variables.get("requirePublishedCoordinates") === "true") {
+                  const hasCoordinates = slots.some(slot => slot.position !== null && slot.rotationY !== null && slot.size !== null);
+                  pm.expect(hasCoordinates, "Seed a PUBLISHED map or select another lot").to.equal(true);
+              }
+          });
+          pm.collectionVariables.set("scrum80_currentIds", JSON.stringify(ids));
+      }
+    language: text/javascript

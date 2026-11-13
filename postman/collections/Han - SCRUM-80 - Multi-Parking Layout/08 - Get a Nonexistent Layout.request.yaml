@@ -1,0 +1,11 @@
+$kind: http-request
+description: Use a random UUID for a missing layout. Expect HTTP 404. Shared collection tests also validate the error envelope.
+url: "{{baseUrl}}/api/v1/parking-lots/{{$guid}}/layout"
+method: GET
+headers:
+  Accept: application/json
+scripts:
+  - type: afterResponse
+    code: pm.test("HTTP 404 for a missing layout", () => pm.response.to.have.status(404));
+    language: text/javascript
+order: 8000

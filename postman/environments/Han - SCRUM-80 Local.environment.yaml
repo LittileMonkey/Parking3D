@@ -1,0 +1,14 @@
+name: Han - SCRUM-80 Local
+values:
+  - key: baseUrl
+    value: 'http://localhost:8080'
+  - key: lotId
+    value: ''
+  - key: otherLotId
+    value: ''
+  - key: requirePublishedCoordinates
+    value: 'true'
+  - key: checkPerformance
+    value: 'false'
+  - key: maxWarmResponseMs
+    value: '20'

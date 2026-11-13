@@ -1,0 +1,335 @@
+{
+  "info": {
+    "name": "Han - SCRUM-80 - Multi-Parking Layout",
+    "description": "SCRUM-80 API checks with eight requests.\n\nImport this collection and Han-Scrum80-Local.postman_environment.json. Select environment Han - SCRUM-80 Local. Keep baseUrl=http://localhost:8080 for Docker Gateway. Run requests 01 through 08 in order, one iteration, delay 100 ms.\n\nShared checks live in Collection > Scripts > Post-response. They validate the API envelope and every successful /layout response. Each request script contains only its specific assertions or variable handling.\n\nRequest 01 selects two lots and saves their IDs. Pre-fill lotId/otherLotId to select specific lots. Seed levels/zones/slots in both lots. requirePublishedCoordinates=true requires at least one slot with position, rotationY and size in each selected layout.\n\nRequest 03 saves the primary layout. Requests 04 and 06 compare later responses with that snapshot. Request 05 checks entity ID isolation. Requests 07 and 08 expect 404.\n\nSet checkPerformance=true to assert the response time of request 04 is below maxWarmResponseMs, default 20 ms. This is a single HTTP measurement including Gateway and local networking.\n\nVerify Redis TTL separately after a layout request. Replace LOT_ID with the selected lotId.\n\ndocker compose -f compose.microservices.yml exec -T redis redis-cli TTL \"parking:lot_layout_LOT_ID\"\n\nA newly created entry should have close to 43200 seconds remaining. -2 means the key is missing. Check the Redis instance/prefix and ConnectionStrings__Redis. The application uses memory cache when Redis is not configured. Stable HTTP responses alone do not prove a Redis hit.\n\nFor cache-hit evidence, remove only the selected demo key, call request 03, inspect Redis TTL, then call request 04 and inspect Parking cache logs or a breakpoint at the repository call.\n\nAll requests use No Auth and read public data.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const body = pm.response.json();",
+          "",
+          "pm.test(\"Standard API envelope\", function () {",
+          "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+          "    pm.expect(body).to.have.property(\"result\");",
+          "    pm.expect(body.isSuccess).to.be.a(\"boolean\");",
+          "    pm.expect(body.statusCode).to.equal(pm.response.code);",
+          "    pm.expect(body.message).to.be.a(\"string\");",
+          "    pm.expect(body.isSuccess).to.equal(pm.response.code === 200);",
+          "    if (pm.response.code === 404) pm.expect(body.result).to.equal(null);",
+          "});",
+          "",
+          "if (pm.response.code === 200 && pm.request.url.toString().endsWith(\"/layout\")) {",
+          "    const layout = body.result;",
+          "    const requestedLot = pm.variables.replaceIn(pm.request.url.toString()).split(\"/\").slice(-2)[0];",
+          "",
+          "    pm.test(\"Correct lot and valid layout tree\", function () {",
+          "        pm.expect(layout.lotId.toLowerCase()).to.equal(requestedLot.toLowerCase());",
+          "        [\"code\", \"name\"].forEach(field => pm.expect(layout[field]).to.be.a(\"string\"));",
+          "        pm.expect(layout.levels).to.be.an(\"array\").that.is.not.empty;",
+          "        layout.levels.forEach(level => pm.expect(level.zones).to.be.an(\"array\"));",
+          "    });",
+          "",
+          "    const zones = layout.levels.flatMap(level => level.zones);",
+          "    zones.forEach(zone => pm.expect(zone.slots).to.be.an(\"array\"));",
+          "    const slots = zones.flatMap(zone => zone.slots);",
+          "    const ids = [...layout.levels, ...zones, ...slots].map(item => item.id);",
+          "",
+          "    pm.test(\"Unique level, zone and slot IDs\", function () {",
+          "        pm.expect(new Set(ids).size).to.equal(ids.length);",
+          "    });",
+          "",
+          "    pm.test(\"Valid slot fields and numeric 3D transforms\", function () {",
+          "        layout.levels.forEach(level => pm.expect(level.elevationM).to.be.a(\"number\"));",
+          "        slots.forEach(slot => {",
+          "            [\"code\", \"operationalStatus\"].forEach(field => pm.expect(slot[field]).to.be.a(\"string\"));",
+          "            [slot.position, slot.size].filter(vector => vector !== null).forEach(vector => {",
+          "                [\"x\", \"y\", \"z\"].forEach(axis => pm.expect(vector[axis]).to.be.a(\"number\"));",
+          "            });",
+          "            if (slot.rotationY !== null) pm.expect(slot.rotationY).to.be.a(\"number\");",
+          "        });",
+          "    });",
+          "",
+          "    pm.test(\"Slots and required published coordinates are available\", function () {",
+          "        pm.expect(slots.length, \"Seed slots before running\").to.be.greaterThan(0);",
+          "        if (pm.variables.get(\"requirePublishedCoordinates\") === \"true\") {",
+          "            const hasCoordinates = slots.some(slot => slot.position !== null && slot.rotationY !== null && slot.size !== null);",
+          "            pm.expect(hasCoordinates, \"Seed a PUBLISHED map or select another lot\").to.equal(true);",
+          "        }",
+          "    });",
+          "    pm.collectionVariables.set(\"scrum80_currentIds\", JSON.stringify(ids));",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Select Two Parking Lots",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots",
+        "description": "Run first. Select two existing lots and save lotId/otherLotId. DEMO-Q1 is preferred when lotId is empty. Clear snapshots from previous runs."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const lots = pm.response.json().result;",
+              "const selectedId = pm.environment.get(\"lotId\");",
+              "const otherId = pm.environment.get(\"otherLotId\");",
+              "const primary = selectedId ? lots.find(lot => lot.id === selectedId) : lots.find(lot => lot.code === \"DEMO-Q1\") || lots[0];",
+              "const secondary = otherId ? lots.find(lot => lot.id === otherId) : lots.find(lot => lot.id !== primary?.id);",
+              "",
+              "pm.test(\"Two distinct existing parking lots\", function () {",
+              "    pm.expect(lots).to.be.an(\"array\");",
+              "    pm.expect(new Set(lots.map(lot => lot.id)).size).to.be.at.least(2);",
+              "    pm.expect(primary, \"Check lotId in the environment\").to.exist;",
+              "    pm.expect(secondary, \"Check otherLotId in the environment\").to.exist;",
+              "    pm.expect(secondary.id).to.not.equal(primary.id);",
+              "});",
+              "if (primary && secondary && primary.id !== secondary.id) {",
+              "    pm.environment.set(\"lotId\", primary.id);",
+              "    pm.environment.set(\"otherLotId\", secondary.id);",
+              "}",
+              "[\"scrum80_primaryLayout\", \"scrum80_primaryIds\", \"scrum80_currentIds\"].forEach(key => pm.collectionVariables.unset(key));"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "02 - Get Parking Lot Details",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{lotId}}",
+        "description": "Check the selected lot ID, text fields and geographic coordinates."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const lot = pm.response.json().result;",
+              "pm.test(\"Correct parking lot details\", function () {",
+              "    pm.expect(lot.id).to.equal(pm.variables.get(\"lotId\"));",
+              "    [\"code\", \"name\", \"address\", \"timezone\", \"status\"].forEach(field => pm.expect(lot[field]).to.be.a(\"string\"));",
+              "    [\"latitude\", \"longitude\"].forEach(field => pm.expect(lot[field]).to.be.a(\"number\"));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "03 - Get 3D Layout and Save Baseline",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{lotId}}/layout",
+        "description": "Shared collection tests validate the layout tree and 3D data. Save the result and its entity IDs for requests 04, 05 and 06."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "// Shared collection tests validate the layout before saving this baseline.",
+              "pm.collectionVariables.set(\"scrum80_primaryLayout\", JSON.stringify(pm.response.json().result));",
+              "pm.collectionVariables.set(\"scrum80_primaryIds\", pm.collectionVariables.get(\"scrum80_currentIds\"));"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "04 - Repeat Layout and Check Response Time",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{lotId}}/layout",
+        "description": "Compare the complete result with request 03. Optionally assert HTTP responseTime < maxWarmResponseMs when checkPerformance=true. This measures one HTTP request. Verify actual Redis usage separately with TTL or cache logs."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Repeated layout matches the saved baseline\", function () {",
+              "    const saved = pm.collectionVariables.get(\"scrum80_primaryLayout\");",
+              "    pm.expect(saved, \"Run request 03 first\").to.be.a(\"string\");",
+              "    pm.expect(pm.response.json().result).to.deep.equal(JSON.parse(saved));",
+              "});",
+              "console.info(\"Warm HTTP response\", pm.response.responseTime, \"ms\");",
+              "if (pm.variables.get(\"checkPerformance\") === \"true\") {",
+              "    pm.test(\"Warm response is below the configured threshold\", function () {",
+              "        const limit = Number(pm.variables.get(\"maxWarmResponseMs\"));",
+              "        pm.expect(limit).to.be.greaterThan(0);",
+              "        pm.expect(pm.response.responseTime).to.be.below(limit);",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "05 - Check Cross-Lot Data Isolation",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{otherLotId}}/layout",
+        "description": "Validate the second lot with the shared layout tests, then assert that its level/zone/slot IDs do not occur in the primary lot."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Parking lots have separate level, zone and slot IDs\", function () {",
+              "    pm.expect(pm.response.json().result.lotId).to.not.equal(pm.variables.get(\"lotId\"));",
+              "    const saved = pm.collectionVariables.get(\"scrum80_primaryIds\");",
+              "    pm.expect(saved, \"Run request 03 first\").to.be.a(\"string\");",
+              "    const primaryIds = new Set(JSON.parse(saved));",
+              "    const otherIds = JSON.parse(pm.collectionVariables.get(\"scrum80_currentIds\"));",
+              "    otherIds.forEach(id => pm.expect(primaryIds.has(id), \"ID shared by two lots: \" + id).to.equal(false));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "06 - Return to the Primary Parking Lot",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{lotId}}/layout",
+        "description": "Validate the primary lot again and compare it with the original snapshot after switching lots."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Primary layout is unchanged after switching lots\", function () {",
+              "    const saved = pm.collectionVariables.get(\"scrum80_primaryLayout\");",
+              "    pm.expect(saved, \"Run request 03 first\").to.be.a(\"string\");",
+              "    pm.expect(pm.response.json().result).to.deep.equal(JSON.parse(saved));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "07 - Get a Nonexistent Parking Lot",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{$guid}}",
+        "description": "Use a random UUID that does not exist. Expect HTTP 404. Shared collection tests also validate the error envelope."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 404 for a missing parking lot\", () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "08 - Get a Nonexistent Layout",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{$guid}}/layout",
+        "description": "Use a random UUID for a missing layout. Expect HTTP 404. Shared collection tests also validate the error envelope."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 404 for a missing layout\", () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ],
+      "response": []
+    }
+  ]
+}

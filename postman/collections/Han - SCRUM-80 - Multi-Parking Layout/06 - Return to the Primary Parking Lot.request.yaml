@@ -1,0 +1,17 @@
+$kind: http-request
+description: Validate the primary lot again and compare it with the original snapshot after switching lots.
+url: "{{baseUrl}}/api/v1/parking-lots/{{lotId}}/layout"
+method: GET
+headers:
+  Accept: application/json
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("HTTP 200", () => pm.response.to.have.status(200));
+      pm.test("Primary layout is unchanged after switching lots", function () {
+          const saved = pm.collectionVariables.get("scrum80_primaryLayout");
+          pm.expect(saved, "Run request 03 first").to.be.a("string");
+          pm.expect(pm.response.json().result).to.deep.equal(JSON.parse(saved));
+      });
+    language: text/javascript
+order: 6000

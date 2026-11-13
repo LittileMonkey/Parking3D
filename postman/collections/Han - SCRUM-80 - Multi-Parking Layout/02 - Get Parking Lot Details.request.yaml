@@ -1,0 +1,18 @@
+$kind: http-request
+description: Check the selected lot ID, text fields and geographic coordinates.
+url: "{{baseUrl}}/api/v1/parking-lots/{{lotId}}"
+method: GET
+headers:
+  Accept: application/json
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("HTTP 200", () => pm.response.to.have.status(200));
+      const lot = pm.response.json().result;
+      pm.test("Correct parking lot details", function () {
+          pm.expect(lot.id).to.equal(pm.variables.get("lotId"));
+          ["code", "name", "address", "timezone", "status"].forEach(field => pm.expect(lot[field]).to.be.a("string"));
+          ["latitude", "longitude"].forEach(field => pm.expect(lot[field]).to.be.a("number"));
+      });
+    language: text/javascript
+order: 2000
