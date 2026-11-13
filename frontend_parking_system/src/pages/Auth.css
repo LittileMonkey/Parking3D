@@ -1,0 +1,392 @@
+/* ─── ParkMatrix Modern Auth Styles (Login, Register, GuestLogin) ─────────── */
+.pm-auth-page {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px 32px;
+  position: relative;
+  background:
+    radial-gradient(ellipse at 50% 15%, rgba(6, 182, 212, 0.15) 0%, rgba(15, 23, 42, 0.95) 65%, #030712 100%),
+    radial-gradient(circle at 15% 85%, rgba(37, 99, 235, 0.14) 0%, transparent 45%),
+    radial-gradient(circle at 85% 85%, rgba(16, 185, 129, 0.12) 0%, transparent 45%),
+    #030712;
+  font-family: "Plus Jakarta Sans", "Be Vietnam Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #f8fafc;
+  overflow-x: hidden;
+}
+
+.pm-auth-ambient-glow {
+  position: absolute;
+  width: 650px;
+  height: 650px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.14) 0%, rgba(37, 99, 235, 0.05) 50%, transparent 70%);
+  top: 10%;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  filter: blur(80px);
+  z-index: 0;
+}
+
+.pm-auth-back-btn {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(248, 250, 252, 0.85);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition: all 0.2s ease;
+  z-index: 10;
+}
+
+.pm-auth-back-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  border-color: rgba(6, 182, 212, 0.45);
+  transform: translateX(-2px);
+}
+
+.pm-auth-card {
+  position: relative;
+  z-index: 5;
+  width: min(440px, 94vw);
+  padding: 36px 32px 30px;
+  border-radius: 24px;
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  box-shadow:
+    0 30px 70px -15px rgba(0, 0, 0, 0.8),
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    inset 0 1.5px 1.5px rgba(255, 255, 255, 0.2);
+}
+
+.pm-auth-card.register-mode {
+  width: min(490px, 94vw);
+  padding: 34px 32px 28px;
+}
+
+.pm-auth-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 22px;
+}
+
+.pm-auth-logo-badge {
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #06b6d4 0%, #2563eb 100%);
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 8px 24px rgba(6, 182, 212, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  margin-bottom: 14px;
+}
+
+.pm-auth-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.pm-auth-subtitle {
+  margin-top: 6px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.65);
+  line-height: 1.5;
+}
+
+.pm-auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pm-auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pm-auth-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.pm-auth-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pm-auth-label-link {
+  font-size: 12px;
+  color: #38bdf8;
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.pm-auth-label-link:hover {
+  color: #7dd3fc;
+  text-decoration: underline;
+}
+
+.pm-auth-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: rgba(10, 15, 26, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 10px;
+  transition: all 0.2s ease;
+}
+
+.pm-auth-input-wrapper:focus-within {
+  border-color: #06b6d4;
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.22), 0 2px 8px rgba(6, 182, 212, 0.15);
+  background: rgba(15, 23, 42, 0.95);
+}
+
+.pm-auth-input-icon {
+  position: absolute;
+  left: 12px;
+  color: rgba(255, 255, 255, 0.45);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+}
+
+.pm-auth-input {
+  width: 100%;
+  height: 44px;
+  padding: 0 12px 0 38px;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #ffffff;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.pm-auth-input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.pm-auth-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.pm-auth-eye-btn {
+  background: transparent;
+  border: none;
+  padding: 0 12px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.pm-auth-eye-btn:hover {
+  color: #ffffff;
+}
+
+
+.pm-auth-submit-btn {
+  width: 100%;
+  height: 46px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #06b6d4 0%, #2563eb 100%);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 8px 24px rgba(6, 182, 212, 0.35);
+  transition: all 0.2s ease;
+  margin-top: 4px;
+}
+
+.pm-auth-submit-btn:hover:not(:disabled) {
+  box-shadow: 0 10px 28px rgba(6, 182, 212, 0.5);
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+
+.pm-auth-submit-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.pm-auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 14px;
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 11.5px;
+}
+
+.pm-auth-divider::before,
+.pm-auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.pm-auth-google-btn {
+  width: 100%;
+  height: 44px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  font-size: 13.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pm-auth-google-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.pm-auth-guest-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(6, 182, 212, 0.08);
+  border: 1px solid rgba(6, 182, 212, 0.25);
+  color: #38bdf8;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  margin-top: 10px;
+  transition: all 0.2s ease;
+}
+
+.pm-auth-guest-link:hover {
+  background: rgba(6, 182, 212, 0.16);
+  border-color: rgba(6, 182, 212, 0.45);
+  color: #7dd3fc;
+}
+
+.pm-auth-footer {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.pm-auth-footer a {
+  color: #06b6d4;
+  font-weight: 700;
+  text-decoration: none;
+  margin-left: 4px;
+}
+
+.pm-auth-footer a:hover {
+  text-decoration: underline;
+}
+
+.pm-auth-alert {
+  padding: 11px 14px;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  font-size: 12.5px;
+  line-height: 1.5;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.pm-auth-notice {
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(6, 182, 212, 0.12);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  color: #67e8f9;
+  font-size: 12px;
+  margin-top: 10px;
+  text-align: center;
+}
+
+.pm-auth-success-box {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.pm-auth-success-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, 0.2);
+  border: 1.5px solid rgba(16, 185, 129, 0.5);
+  color: #34d399;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3);
+}
+
+@media (max-width: 480px) {
+  .pm-auth-card {
+    padding: 28px 20px 24px;
+    border-radius: 20px;
+  }
+  .pm-auth-back-btn {
+    top: 16px;
+    left: 16px;
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+}
+

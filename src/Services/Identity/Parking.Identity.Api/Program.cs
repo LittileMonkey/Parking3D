@@ -43,7 +43,7 @@ namespace Parking.Identity.Api
                         errorCode: ErrorCode.RateLimitExceeded);
                     await context.HttpContext.Response.WriteAsJsonAsync(response, cancellationToken: cancellationToken);
                 };
-                // Auth endpoints policy: 10 requests / 1 minute per IP
+                // Auth endpoints policy: 500 requests / 1 minute per IP
                 options.AddPolicy("auth-rate-limit", httpContext =>
                 {
                     var clientId = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -51,12 +51,12 @@ namespace Parking.Identity.Api
                         partitionKey: clientId,
                         factory: _ => new FixedWindowRateLimiterOptions
                         {
-                            PermitLimit = 10,
+                            PermitLimit = 500,
                             Window = TimeSpan.FromMinutes(1),
-                            QueueLimit = 0
+                            QueueLimit = 50
                         });
                 });
-                // General endpoints policy: 100 requests / 1 minute per IP
+                // General endpoints policy: 10000 requests / 1 minute per IP
                 options.AddPolicy("general-rate-limit", httpContext =>
                 {
                     var clientId = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -64,9 +64,9 @@ namespace Parking.Identity.Api
                         partitionKey: clientId,
                         factory: _ => new FixedWindowRateLimiterOptions
                         {
-                            PermitLimit = 120,
+                            PermitLimit = 10000,
                             Window = TimeSpan.FromMinutes(1),
-                            QueueLimit = 0
+                            QueueLimit = 500
                         });
                 });
             });

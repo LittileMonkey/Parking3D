@@ -40,6 +40,7 @@ interface VisionSpatialWorkspaceProps {
   onTabSelect?: (tabId: string) => void;
   onRefresh?: () => void;
   openIncidentCount?: number;
+  showRightStack?: boolean;
   children?: React.ReactNode;
 }
 
@@ -77,10 +78,12 @@ export default function VisionSpatialWorkspace({
   onTabSelect,
   onRefresh,
   openIncidentCount,
+  showRightStack,
   children,
 }: VisionSpatialWorkspaceProps) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const shouldShowRightStack = showRightStack ?? (role !== "staff");
 
   const [activeTab, setActiveTab] = useState(currentTabId);
   const [isLoading, setIsLoading] = useState(false);
@@ -247,7 +250,7 @@ export default function VisionSpatialWorkspace({
 
   return (
     <div className={`vision-spatial-shell role-${role}`}>
-      <div className="vision-spatial-container">
+      <div className={`vision-spatial-container ${!shouldShowRightStack ? "no-right-stack" : ""}`}>
         <main className="vision-main-window">
           <div className="vision-window-handle" />
 
@@ -400,61 +403,63 @@ export default function VisionSpatialWorkspace({
           </section>
         </main>
 
-        <aside className="vision-right-stack">
-          <motion.div
-            className="vision-float-card blue-widget"
-            whileHover={{ y: -4 }}
-            transition={{ type: "spring", stiffness: 400, damping: 25 }}
-          >
-            <div>
-              <div className="vision-widget-header">
-                <span className="vision-widget-title">Công suất bãi</span>
-                <span className="vision-widget-pill">{occupancyPct}%</span>
+        {shouldShowRightStack && (
+          <aside className="vision-right-stack">
+            <motion.div
+              className="vision-float-card blue-widget"
+              whileHover={{ y: -4 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            >
+              <div>
+                <div className="vision-widget-header">
+                  <span className="vision-widget-title">Công suất bãi</span>
+                  <span className="vision-widget-pill">{occupancyPct}%</span>
+                </div>
+                <div className="vision-widget-val">
+                  {stats.occupied} / {stats.capacity}
+                </div>
+                <div className="vision-widget-sub">Ô đang đỗ / Sức chứa hoạt động</div>
               </div>
-              <div className="vision-widget-val">
-                {stats.occupied} / {stats.capacity}
-              </div>
-              <div className="vision-widget-sub">Ô đang đỗ / Sức chứa hoạt động</div>
-            </div>
-          </motion.div>
+            </motion.div>
 
-          <motion.div
-            className="vision-float-card amber-widget"
-            whileHover={{ y: -4 }}
-            transition={{ type: "spring", stiffness: 400, damping: 25 }}
-          >
-            <div className="vision-widget-header">
-              <span className="vision-widget-title">{role === "admin" ? "Thu ròng hôm nay" : "Lưu lượng hôm nay"}</span>
-            </div>
-            <div>
-              <div className="vision-widget-val">
-                {role === "admin" ? `${stats.netRevenue.toLocaleString("vi-VN")} đ` : `${stats.entries} / ${stats.exits}`}
-              </div>
-              <div className="vision-widget-sub">
-                {role === "admin"
-                  ? `Tiền mặt: ${stats.cashRevenue.toLocaleString("vi-VN")} đ · Điện tử: ${stats.digitalRevenue.toLocaleString("vi-VN")} đ`
-                  : "Lượt vào / Lượt ra trong ngày"}
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            className="vision-float-card dark-widget"
-            whileHover={{ y: -4 }}
-            transition={{ type: "spring", stiffness: 400, damping: 25 }}
-          >
-            <div>
+            <motion.div
+              className="vision-float-card amber-widget"
+              whileHover={{ y: -4 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            >
               <div className="vision-widget-header">
-                <span className="vision-widget-title">Sự cố & Cảnh báo</span>
-                <span className="vision-widget-pill">Live</span>
+                <span className="vision-widget-title">{role === "admin" ? "Thu ròng hôm nay" : "Lưu lượng hôm nay"}</span>
               </div>
-              <div className="vision-widget-val">{incidentBadge}</div>
-              <div className="vision-widget-sub" style={{ color: "#34d399", display: "flex", alignItems: "center", gap: 4 }}>
-                <ArrowUpRight size={13} /> Vào: {stats.entries} · Ra: {stats.exits} · Thông báo: {stats.unreadNotifications}
+              <div>
+                <div className="vision-widget-val">
+                  {role === "admin" ? `${stats.netRevenue.toLocaleString("vi-VN")} đ` : `${stats.entries} / ${stats.exits}`}
+                </div>
+                <div className="vision-widget-sub">
+                  {role === "admin"
+                    ? `Tiền mặt: ${stats.cashRevenue.toLocaleString("vi-VN")} đ · Điện tử: ${stats.digitalRevenue.toLocaleString("vi-VN")} đ`
+                    : "Lượt vào / Lượt ra trong ngày"}
+                </div>
               </div>
-            </div>
-          </motion.div>
-        </aside>
+            </motion.div>
+
+            <motion.div
+              className="vision-float-card dark-widget"
+              whileHover={{ y: -4 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            >
+              <div>
+                <div className="vision-widget-header">
+                  <span className="vision-widget-title">Sự cố & Cảnh báo</span>
+                  <span className="vision-widget-pill">Live</span>
+                </div>
+                <div className="vision-widget-val">{incidentBadge}</div>
+                <div className="vision-widget-sub" style={{ color: "#34d399", display: "flex", alignItems: "center", gap: 4 }}>
+                  <ArrowUpRight size={13} /> Vào: {stats.entries} · Ra: {stats.exits} · Thông báo: {stats.unreadNotifications}
+                </div>
+              </div>
+            </motion.div>
+          </aside>
+        )}
       </div>
 
       <AnimatePresence>

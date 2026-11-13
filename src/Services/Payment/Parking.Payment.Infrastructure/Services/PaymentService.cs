@@ -72,7 +72,7 @@ public sealed class PaymentService(
         await using (var cached = db.CreateCommand("""
             SELECT p.id, a.lot_id, a.booking_id, p.amount, a.currency, 
                     p.method::text, p.status::text, p.version,
-                    (SELECT pa.payment_url FROM payment_attempts pa WHERE pa.payment_id=p.id ORDER BY pa.created_at DESC LIMIT 1)
+                    (SELECT pa.payment_url FROM payment_attempts pa WHERE pa.payment_id=p.id ORDER BY pa.requested_at DESC LIMIT 1)
             FROM payments p 
             JOIN billing_accounts a ON a.id = p.account_id
             WHERE p.idempotency_key = @key

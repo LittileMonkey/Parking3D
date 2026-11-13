@@ -45,12 +45,35 @@ export default function ManagerLayout() {
 
   return (
     <VisionSpatialWorkspace role="admin" currentTabId={getActiveTab()} onRefresh={handleRefresh}>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", marginBottom: 14 }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
-          <span>Bãi xe:</span>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 12,
+          alignItems: "center",
+          marginBottom: 16,
+          padding: "8px 16px",
+          borderRadius: 12,
+          background: "rgba(14, 165, 233, 0.12)",
+          border: "1px solid rgba(14, 165, 233, 0.28)",
+          width: "fit-content",
+        }}
+      >
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#ffffff" }}>
+          <span style={{ fontWeight: 700, color: "#7dd3fc" }}>Bãi xe:</span>
           <select
             className="pm-form-select"
-            style={{ width: "auto" }}
+            style={{
+              width: "auto",
+              height: 34,
+              padding: "0 12px",
+              background: "rgba(10, 15, 26, 0.8)",
+              border: "1px solid rgba(255, 255, 255, 0.2)",
+              borderRadius: 8,
+              color: "#ffffff",
+              fontSize: 13,
+              fontWeight: 600,
+            }}
             value={selectedLotId}
             onChange={(e) => setSelectedLotId(e.target.value)}
             aria-label="Chọn cơ sở bãi xe"
@@ -63,18 +86,28 @@ export default function ManagerLayout() {
             ))}
           </select>
         </label>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
-          <span>Kỳ:</span>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#ffffff" }}>
+          <span style={{ fontWeight: 700, color: "#7dd3fc" }}>Kỳ báo cáo:</span>
           <select
             className="pm-form-select"
-            style={{ width: "auto" }}
+            style={{
+              width: "auto",
+              height: 34,
+              padding: "0 12px",
+              background: "rgba(10, 15, 26, 0.8)",
+              border: "1px solid rgba(255, 255, 255, 0.2)",
+              borderRadius: 8,
+              color: "#ffffff",
+              fontSize: 13,
+              fontWeight: 600,
+            }}
             value={period}
             onChange={(e) => setPeriod(e.target.value as ReportingPeriod)}
             aria-label="Chọn kỳ báo cáo"
           >
             <option value="today">Hôm nay</option>
-            <option value="week">7 ngày</option>
-            <option value="month">30 ngày</option>
+            <option value="week">7 ngày gần nhất</option>
+            <option value="month">30 ngày gần nhất</option>
           </select>
         </label>
       </div>
