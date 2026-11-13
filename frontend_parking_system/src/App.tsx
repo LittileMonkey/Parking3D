@@ -1,6 +1,5 @@
 import MyAccount from "./pages/MyAccount";
 import PaymentReturn from "./pages/PaymentReturn";
-import GuestLogin from "./pages/GuestLogin";
 import SecurityPage from "./pages/SecurityPage";
 import { Route, Routes, Navigate, useLocation } from "react-router-dom";
 import Home from "./pages/Home";
@@ -52,7 +51,7 @@ export default function App() {
     <Routes>
       <Route path="/account" element={<MyAccount />} />
       <Route path="/payment-return" element={<PaymentReturn />} />
-      <Route path="/guest-login" element={<GuestLogin />} />
+      <Route path="/guest-login" element={<Navigate to="/login" replace />} />
       <Route path="/security" element={<SecurityPage />} />
       {/* Customer / Public Routes */}
       <Route path="/" element={<Home />} />
