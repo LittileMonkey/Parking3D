@@ -1,4 +1,4 @@
-$ErrorActionPreference='Stop'
+﻿$ErrorActionPreference='Stop'
 $OutputEncoding=[System.Text.UTF8Encoding]::new($false)
 Set-Location (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 foreach($migration in @('009_handover_integrity.sql','010_incident_evidence.sql')){
