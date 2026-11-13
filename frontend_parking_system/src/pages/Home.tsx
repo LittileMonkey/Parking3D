@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
@@ -20,7 +20,6 @@ import {
   ParkingCircle,
   Radio,
   Scan,
-  Search,
   ShieldCheck,
   SlidersHorizontal,
   Sun,
@@ -136,6 +135,57 @@ export default function Home() {
         : [...prev, filterKey];
     });
   };
+
+  const locationCoords: Record<string, { lat: number; lon: number }> = {
+    landmark81: { lat: 10.7950, lon: 106.7218 },
+    bitexco: { lat: 10.7718, lon: 106.7044 },
+    ftown3: { lat: 10.8522, lon: 106.7865 },
+    tan_son_nhat: { lat: 10.8184, lon: 106.6588 },
+  };
+
+  // AI Prompt Synthesizer for Flow 2 (Luồng 2)
+  const generatedAiPrompt = useMemo(() => {
+    const vehicleName = searchVehicle === "car"
+      ? (lang === "en" ? "car 4-7 seats" : "ô tô 4-7 chỗ")
+      : searchVehicle === "bike"
+        ? (lang === "en" ? "motorbike" : "xe máy")
+        : (lang === "en" ? "electric vehicle with EV charging" : "xe điện cần trụ sạc EV");
+
+    let locName = lang === "en" ? "Ho Chi Minh City" : "khu vực TP. Hồ Chí Minh";
+    if (searchLocation === "landmark81") locName = lang === "en" ? "near Landmark 81 Tower (Binh Thanh)" : "gần Landmark 81 Bình Thạnh";
+    else if (searchLocation === "bitexco") locName = lang === "en" ? "near Bitexco Financial Tower (District 1)" : "gần Bitexco Tower Quận 1";
+    else if (searchLocation === "ftown3") locName = lang === "en" ? "near F-Town 3 (Hi-Tech Park Thu Duc)" : "gần F-Town 3 Khu Công Nghệ Cao";
+    else if (searchLocation === "tan_son_nhat") locName = lang === "en" ? "near Tan Son Nhat Airport" : "gần sân bay Tân Sơn Nhất";
+
+    const durationNum = Number(searchDuration);
+    let durName = lang === "en" ? "around 2 hours" : "khoảng 2 tiếng";
+    if (durationNum <= 60) durName = lang === "en" ? "around 1 hour" : "khoảng 1 tiếng";
+    else if (durationNum <= 120) durName = lang === "en" ? "around 2 to 4 hours" : "khoảng 2 đến 4 tiếng";
+    else if (durationNum <= 480) durName = lang === "en" ? "around 4 to 8 hours" : "khoảng 4 đến 8 tiếng trong ngày";
+    else if (durationNum >= 1440) durName = lang === "en" ? "overnight (24h)" : "gửi qua đêm 24 giờ";
+
+    const radName = searchRadius === "all"
+      ? (lang === "en" ? "entire city" : "toàn thành phố")
+      : (lang === "en" ? `radius under ${searchRadius}km` : `bán kính dưới ${searchRadius}km`);
+
+    const criteriaLabels: string[] = [];
+    if (selectedFilters.includes("nearest")) criteriaLabels.push(lang === "en" ? "nearest to current location" : "gần tôi nhất");
+    if (selectedFilters.includes("cheapest")) criteriaLabels.push(lang === "en" ? "cheapest rate" : "giá thấp nhất");
+    if (selectedFilters.includes("available")) criteriaLabels.push(lang === "en" ? "most available slots" : "nhiều chỗ trống nhất");
+    if (selectedFilters.includes("ev_station")) criteriaLabels.push(lang === "en" ? "with EV fast charger" : "có trụ sạc EV");
+    if (selectedFilters.includes("sheltered")) criteriaLabels.push(lang === "en" ? "sheltered with AI security camera" : "có mái che và camera AI");
+
+    const prefText = criteriaLabels.length > 0
+      ? (lang === "en" ? `prioritize ${criteriaLabels.join(", ")}` : `ưu tiên ${criteriaLabels.join(", ")}`)
+      : "";
+
+    if (lang === "en") {
+      return `Find parking lot for ${vehicleName}, ${locName}, duration ${durName}, ${radName}${prefText ? `, ${prefText}` : ""}.`;
+    }
+    return `Tìm bãi đỗ xe ${vehicleName} ${locName}, thời lượng ${durName}, ${radName}${prefText ? `, ${prefText}` : ""}.`;
+  }, [searchVehicle, searchLocation, searchDuration, searchRadius, selectedFilters, lang]);
+
+  const activeAiPrompt = generatedAiPrompt;
 
   const [envData, setEnvData] = useState<BuildingEnvironment | null>(null);
   useEffect(() => {
@@ -366,11 +416,10 @@ export default function Home() {
                 {/* Submit Search Button */}
                 <div className="search-btn-col">
                   <Link
-                    to={`/booking?lot=${searchLocation}&vehicle=${searchVehicle}&duration=${searchDuration}&radius=${searchRadius}&criteria=${selectedFilters.join(",")}&sortBy=${selectedFilters.includes("nearest") ? "NEAREST" : "CHEAPEST"}`}
-                    className="search-action-btn"
+                    to={`/booking?lot=${searchLocation}&vehicle=${searchVehicle}&duration=${searchDuration}&radius=${searchRadius}&criteria=${selectedFilters.join(",")}&sortBy=${selectedFilters.includes("nearest") ? "NEAREST" : "CHEAPEST"}&aiPrompt=${encodeURIComponent(activeAiPrompt)}${locationCoords[searchLocation] ? `&lat=${locationCoords[searchLocation].lat}&lon=${locationCoords[searchLocation].lon}` : ""}`}
+                    className="search-action-btn search-ai-btn"
                   >
-                    <Search size={18} />
-                    <span>{lang === "en" ? "Find Parking" : "Tìm Bãi Đỗ"}</span>
+                    <span>{lang === "en" ? "Find Parking (AI)" : "Tìm Bãi Đỗ AI"}</span>
                     <ArrowRight size={15} />
                   </Link>
                 </div>

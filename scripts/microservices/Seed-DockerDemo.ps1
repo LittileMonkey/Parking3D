@@ -70,6 +70,36 @@ foreach($lot in $lots | Where-Object code -in @('DEMO-Q1','DEMO-BT','DEMO-Q7','D
     docker compose -f compose.microservices.yml exec -T redis redis-cli DEL "parking:lot_layout_$($lot.id)" "parking:pricing_rule:$($lot.id):CAR" "parking:pricing_rule:$($lot.id):MOTORBIKE" | Out-Null
     if($LASTEXITCODE -ne 0){throw 'Could not refresh Redis layout cache after demo seed.'}
 }
+
+# Tự động đồng bộ các bãi xe thực tế vào danh mục AI (ai_lot_catalog & occupancy_snapshots)
+$aiSyncSql = @"
+INSERT INTO ai_lot_catalog (lot_id, name, address, latitude, longitude, car_price_per_hour, motorbike_price_per_hour, has_ev_charging, has_roofed_shelter, total_slots, updated_at)
+VALUES 
+  ('11111111-1111-4111-8111-111111111111'::uuid, 'Demo Quận 1', 'Dữ liệu demo — Quận 1', 10.776000, 106.700000, 30000, 4000, true, true, 40, now()),
+  ('22222222-2222-4222-8222-222222222222'::uuid, 'Demo Bình Thạnh', 'Dữ liệu demo — Bình Thạnh', 10.790000, 106.710000, 30000, 4000, true, true, 40, now()),
+  ('33333333-3333-4333-8333-111111111111'::uuid, 'Demo Quận 7', 'Dữ liệu demo — Quận 7', 10.735000, 106.722000, 30000, 4000, true, true, 40, now())
+ON CONFLICT (lot_id) DO UPDATE SET 
+  name = EXCLUDED.name,
+  address = EXCLUDED.address,
+  latitude = EXCLUDED.latitude,
+  longitude = EXCLUDED.longitude,
+  car_price_per_hour = EXCLUDED.car_price_per_hour,
+  motorbike_price_per_hour = EXCLUDED.motorbike_price_per_hour,
+  has_ev_charging = EXCLUDED.has_ev_charging,
+  has_roofed_shelter = EXCLUDED.has_roofed_shelter,
+  total_slots = EXCLUDED.total_slots,
+  updated_at = now();
+
+INSERT INTO occupancy_snapshots (id, lot_id, vehicle_type, observed_at, usable_capacity, occupied_count, reserved_count, data_source, created_at, updated_at, version)
+VALUES
+  (gen_random_uuid(), '11111111-1111-4111-8111-111111111111'::uuid, 'Car', now(), 40, 15, 2, 'ACTUAL', now(), now(), 1),
+  (gen_random_uuid(), '22222222-2222-4222-8222-222222222222'::uuid, 'Car', now(), 40, 20, 0, 'ACTUAL', now(), now(), 1),
+  (gen_random_uuid(), '33333333-3333-4333-8333-111111111111'::uuid, 'Car', now(), 40, 8, 1, 'ACTUAL', now(), now(), 1)
+ON CONFLICT DO NOTHING;
+"@
+$aiSyncSql | docker compose -f compose.microservices.yml exec -T ai-db psql -X -v ON_ERROR_STOP=1 -U ai -d parking_ai
+if ($LASTEXITCODE -ne 0) { throw 'Không đồng bộ được danh mục bãi xe sang AI service.' }
+
 Write-Host 'DEMO READY: đã bổ sung bãi, slot, cổng, biểu giá, bản đồ PUBLISHED, xe customer và hai ca Staff/Manager để bàn giao.'
 Write-Host 'Tài khoản: BOOTSTRAP_EMAIL/PASSWORD; DEMO_STAFF_EMAIL/PASSWORD; DEMO_CUSTOMER_EMAIL/PASSWORD trong .env. Không chia sẻ secrets.'
 Write-Host 'Đây là fixture Development; không phải xác minh quyền sở hữu xe thực tế.'

@@ -1443,6 +1443,8 @@ export interface AiParkingRecommendation {
     availableSlots: number;
     totalCapacity: number;
     occupancyRatePercent: number;
+    hasEvCharging?: boolean;
+    hasRoofedShelter?: boolean;
     matchScore: number;
     recommendationReason: string;
   }>;

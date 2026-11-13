@@ -1,6 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ApiError, api, type LotAvailability, type LotLayout3DDto, type ParkingSearchItem, type ParkingLevelAvailability, type UserVehicle } from "../services/api";
+import {
+  ApiError,
+  api,
+  type AiParkingRecommendation,
+  type LotAvailability,
+  type LotLayout3DDto,
+  type ParkingSearchItem,
+  type ParkingLevelAvailability,
+  type UserVehicle,
+} from "../services/api";
+import {
+  Zap,
+  ShieldCheck,
+  ArrowRight,
+  CheckCircle2,
+} from "lucide-react";
 import ParkingViewer, { type ModelLevel } from "../components/parking/ParkingViewer";
 import { applySlotStatusChanges, type SlotStatusChange } from "../components/parking/parkingRealtime";
 import { useParkingHub } from "../components/parking/useParkingHub";
@@ -117,6 +132,13 @@ export default function SearchPage() {
   const [bookingError, setBookingError] = useState("");
   const [isCreatingBooking, setIsCreatingBooking] = useState(false);
   const availabilityRequestId = useRef(0);
+
+  // AI Smart Search States (Luồng 2)
+  const initialAiPrompt = searchParams.get("aiPrompt") || "";
+  const [aiPromptInput, setAiPromptInput] = useState<string>(initialAiPrompt);
+  const [aiRecommendation, setAiRecommendation] = useState<AiParkingRecommendation | null>(null);
+  const [isSearchingAi, setIsSearchingAi] = useState<boolean>(false);
+  const [aiSearchError, setAiSearchError] = useState<string>("");
 
   const manualLocationEntered = manualLatitude.trim() !== "" || manualLongitude.trim() !== "";
   const parsedLatitude = Number(manualLatitude);
@@ -317,10 +339,65 @@ export default function SearchPage() {
     await executeSearch(vehicleType, startsAt, duration, sortBy, radiusKm, searchPosition);
   };
 
+  const executeAiSearch = useCallback(async (promptText: string, customLat?: number, customLon?: number) => {
+    if (!promptText.trim()) return;
+    setIsSearchingAi(true);
+    setAiSearchError("");
+    try {
+      const urlLat = Number(searchParams.get("lat"));
+      const urlLon = Number(searchParams.get("lon"));
+      const lat = customLat ?? (Number.isFinite(urlLat) && urlLat !== 0 ? urlLat : searchPosition?.latitude);
+      const lon = customLon ?? (Number.isFinite(urlLon) && urlLon !== 0 ? urlLon : searchPosition?.longitude);
+
+      const res = await api.smartSearchParking({
+        naturalLanguagePrompt: promptText.trim(),
+        ...(lat && lon ? { userCurrentLatitude: lat, userCurrentLongitude: lon } : {}),
+      });
+      setAiRecommendation(res);
+    } catch (cause) {
+      setAiSearchError(getErrorMessage(cause));
+    } finally {
+      setIsSearchingAi(false);
+    }
+  }, [searchPosition, searchParams]);
+
+  const selectAiRecommendedLot = useCallback((aiLot: NonNullable<AiParkingRecommendation["recommendedLots"]>[number]) => {
+    const existing = results.find(r => r.parkingLotId === aiLot.parkingLotId);
+    const targetLot: ParkingSearchItem = existing || {
+      parkingLotId: aiLot.parkingLotId,
+      code: aiLot.lotName,
+      name: aiLot.lotName,
+      address: aiLot.address,
+      latitude: 0,
+      longitude: 0,
+      distanceKm: aiLot.distanceMeters / 1000,
+      availableSlots: aiLot.availableSlots,
+      operatingStatus: "OPERATIONAL",
+      estimatedPricing: {
+        estimatedTotalFee: aiLot.estimatedTotalPrice,
+        expectedDurationMinutes: duration,
+        currency: "VND",
+        billingDetails: `${formatMoney(aiLot.pricePerHour)}/giờ · AI dự toán ${formatMoney(aiLot.estimatedTotalPrice)}`,
+      },
+      supportedFeatures: [
+        ...(aiLot.hasEvCharging ? ["Trụ sạc EV"] : []),
+        ...(aiLot.hasRoofedShelter ? ["Có mái che"] : []),
+      ],
+    };
+
+    void loadAvailability(targetLot);
+    setTimeout(() => {
+      const el = document.getElementById("availability-panel-section");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 150);
+  }, [results, duration, loadAvailability]);
+
   const initialSearchTriggered = useRef(false);
   useEffect(() => {
     if (initialSearchTriggered.current) return;
-    const hasParams = searchParams.has("vehicle") || searchParams.has("duration") || searchParams.has("lot") || searchParams.has("radius") || searchParams.has("sortBy") || searchParams.has("criteria");
+    const hasParams = searchParams.has("vehicle") || searchParams.has("duration") || searchParams.has("lot") || searchParams.has("radius") || searchParams.has("sortBy") || searchParams.has("criteria") || searchParams.has("aiPrompt");
     if (hasParams) {
       initialSearchTriggered.current = true;
       const initialStart = toLocalDateTime(new Date(Date.now() + 30 * 60_000));
@@ -333,8 +410,12 @@ export default function SearchPage() {
         null,
         searchParams.get("lot")
       );
+      const promptParam = searchParams.get("aiPrompt");
+      if (promptParam) {
+        void executeAiSearch(promptParam);
+      }
     }
-  }, [searchParams, executeSearch, initialVehicle, initialDuration, initialSortBy, initialRadius]);
+  }, [searchParams, executeSearch, executeAiSearch, initialVehicle, initialDuration, initialSortBy, initialRadius]);
 
   const useCurrentLocation = () => {
     setLocationMessage("");
@@ -606,10 +687,165 @@ export default function SearchPage() {
         )}
       </form>
 
+      {/* ── AI Smart Search Box (Luồng 2) ── */}
+      <section className="ai-search-card" aria-label="Tìm kiếm bãi đỗ xe thông minh bằng AI">
+        <div className="ai-search-card-header">
+          <div className="ai-search-card-title">
+            <span>AI Smart Search · Gợi ý thông minh theo câu lệnh tự nhiên</span>
+          </div>
+        </div>
+
+        <form
+          className="ai-search-input-group"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void executeAiSearch(aiPromptInput);
+          }}
+        >
+          <textarea
+            value={aiPromptInput}
+            onChange={(e) => setAiPromptInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (!isSearchingAi && aiPromptInput.trim()) {
+                  void executeAiSearch(aiPromptInput);
+                }
+              }
+            }}
+            placeholder="Nhập yêu cầu tự nhiên... Ví dụ: Tìm bãi đỗ xe ô tô gần Landmark 81 khoảng 2 tiếng ưu tiên giá rẻ có trạm sạc EV (Enter để tìm kiếm, Shift+Enter xuống dòng)"
+            disabled={isSearchingAi}
+            rows={2}
+            className="ai-search-textarea"
+          />
+          <button
+            type="submit"
+            className="ai-search-submit-btn"
+            disabled={isSearchingAi || !aiPromptInput.trim()}
+          >
+            <span>{isSearchingAi ? "Đang phân tích..." : "AI Tìm kiếm"}</span>
+          </button>
+        </form>
+
+        {aiSearchError && (
+          <div className="customer-alert error" style={{ marginTop: "12px" }}>
+            {aiSearchError}
+          </div>
+        )}
+      </section>
+
+      {/* ── AI Smart Recommendations Showcase ── */}
+      {aiRecommendation && (
+        <section className="ai-recommendation-section" aria-label="Kết quả đề xuất từ AI">
+          <div className="customer-section-heading">
+            <div>
+              <h2>
+                Đề xuất tối ưu từ Trợ lý AI
+              </h2>
+              <p>Phân tích đa tiêu chí: khoảng cách Haversine, đơn giá block 15 phút, tỷ lệ lấp đầy & tiện ích EV</p>
+            </div>
+            {aiRecommendation.isFallback && (
+              <span className="customer-alert warning" style={{ margin: 0, padding: "4px 8px", fontSize: "12px" }}>
+                Chế độ dự phòng (Heuristic)
+              </span>
+            )}
+          </div>
+
+          {aiRecommendation.summaryExplanation && (
+            <div className="ai-recommendation-summary">
+              <p>{aiRecommendation.summaryExplanation}</p>
+            </div>
+          )}
+
+          {(!aiRecommendation.recommendedLots || aiRecommendation.recommendedLots.length === 0) ? (
+            <div className="customer-empty">
+              Trợ lý AI chưa tìm thấy bãi đỗ nào khớp hoàn toàn với tiêu chí này. Hãy thử nới lỏng bán kính hoặc yêu cầu.
+            </div>
+          ) : (
+            <div className="ai-lots-grid">
+              {aiRecommendation.recommendedLots.map((aiLot) => {
+                const isSelected = selectedLot?.parkingLotId === aiLot.parkingLotId;
+                const distanceLabel = aiLot.distanceMeters < 1000
+                  ? `${Math.round(aiLot.distanceMeters)}m`
+                  : `${(aiLot.distanceMeters / 1000).toFixed(1)} km`;
+
+                return (
+                  <article
+                    key={aiLot.parkingLotId}
+                    className={`ai-lot-card ${isSelected ? "selected" : ""}`}
+                  >
+                    <div>
+                      <div className="ai-lot-header">
+                        <span className="ai-match-badge">
+                          {Math.round(aiLot.matchScore)}% Phù hợp
+                        </span>
+                        <span style={{ fontSize: "12px", fontWeight: 700, color: "#0d9488" }}>
+                          Cách {distanceLabel}
+                        </span>
+                      </div>
+
+                      <h3 className="ai-lot-title">{aiLot.lotName}</h3>
+                      <p className="ai-lot-address">{aiLot.address}</p>
+
+                      <div className="ai-reason-bubble">
+                        <CheckCircle2 size={15} style={{ flexShrink: 0, marginTop: "2px", color: "#16a34a" }} />
+                        <span><strong>Lý do AI chọn:</strong> {aiLot.recommendationReason}</span>
+                      </div>
+
+                      <div className="ai-lot-metrics">
+                        <div className="ai-metric-item">
+                          <span className="ai-metric-label">Đơn giá / giờ</span>
+                          <span className="ai-metric-value">{formatMoney(aiLot.pricePerHour)}</span>
+                        </div>
+                        <div className="ai-metric-item">
+                          <span className="ai-metric-label">Tổng dự toán ({duration}p)</span>
+                          <span className="ai-metric-value">{formatMoney(aiLot.estimatedTotalPrice)}</span>
+                        </div>
+                        <div className="ai-metric-item">
+                          <span className="ai-metric-label">Chỗ khả dụng</span>
+                          <span className="ai-metric-value" style={{ color: aiLot.availableSlots > 0 ? "#16a34a" : "#dc2626" }}>
+                            {aiLot.availableSlots} / {aiLot.totalCapacity} ô
+                          </span>
+                        </div>
+                        <div className="ai-metric-item">
+                          <span className="ai-metric-label">Công suất lấp đầy</span>
+                          <span className="ai-metric-value">{Math.round(aiLot.occupancyRatePercent)}%</span>
+                        </div>
+                      </div>
+
+                      <div className="ai-lot-tags">
+                        {aiLot.hasEvCharging && (
+                          <span className="ai-tag ev">
+                            <Zap size={11} /> Có trụ sạc EV
+                          </span>
+                        )}
+                        {aiLot.hasRoofedShelter && (
+                          <span className="ai-tag shelter">
+                            <ShieldCheck size={11} /> Có mái che & Camera
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className={`ai-lot-action-btn ${isSelected ? "selected" : ""}`}
+                      onClick={() => selectAiRecommendedLot(aiLot)}
+                    >
+                      <span>{isSelected ? "Đang chọn bãi này (Xem bên dưới)" : "Xem sơ đồ 3D & Giữ chỗ"}</span>
+                      <ArrowRight size={14} />
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
       <section className="customer-results">
         <div className="customer-section-heading">
           <div><h2>Kết quả tìm kiếm</h2><p>{isSearching ? "Đang tải dữ liệu từ hệ thống..." : hasSearched ? `${totalCount} bãi phù hợp` : "Chưa tìm kiếm"}</p></div>
-          <span className="customer-source-label">Dữ liệu tìm kiếm từ API</span>
         </div>
         {!searchIsCurrent && results.length > 0 && (
           <div className="customer-alert warning" role="status">
@@ -655,7 +891,7 @@ export default function SearchPage() {
       </section>
 
       {selectedLot && (
-        <section className="customer-panel availability-panel" aria-live="polite">
+        <section className="customer-panel availability-panel" id="availability-panel-section" aria-live="polite">
           <div className="customer-section-heading">
             <div><p className="customer-eyebrow">{selectedLot.code || "PARKING LOT"}</p><h2>{selectedLot.name}</h2></div>
             {availability && <span className="availability-count">{availability.availableCount} / {availability.totalSlots} chỗ trống</span>}

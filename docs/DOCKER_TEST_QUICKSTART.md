@@ -25,7 +25,22 @@ npm run dev
 
 Frontend: http://localhost:5173. Gateway readiness: http://localhost:8080/health/ready. FE proxy /api,/health,/hubs về Gateway 8080.
 
-Lần đầu tải model/dependencies vision có thể lâu. Nếu thất bại:
+### Chế độ chạy Docker (Docker Profiles):
+1. **Chế độ Mặc định (Lightweight / Dev Mode - Tiết kiệm tài nguyên):**
+   ```powershell
+   docker compose -f compose.microservices.yml up -d
+   ```
+   - Chỉ khởi chạy 4 DB + Redis + 5 Backend .NET + Gateway + Frontend.
+   - Dung lượng: chỉ tốn ~1.5 GB ổ đĩa, ~1.5 GB RAM.
+   - Phân hệ AI tự động kết nối ra Ollama (`qwen2.5:3b`) và Python Vision chạy trực tiếp trên máy host qua `host.docker.internal` (tận dụng card GPU rời).
+
+2. **Chế độ Đầy đủ (Full All-in-Docker Mode):**
+   ```powershell
+   docker compose -f compose.microservices.yml --profile full up -d
+   ```
+   - Tự động dựng thêm cả 2 container `ollama` (tự pull `qwen2.5:3b`) và `ai-vision` (FastAPI + PaddleOCR + YOLO) bên trong Docker dành cho các thành viên chưa cài Ollama/Python ngoài máy.
+
+Lần đầu chạy profile full tải model/dependencies vision có thể lâu. Nếu thất bại:
 
 ```powershell
 docker compose -f compose.microservices.yml ps

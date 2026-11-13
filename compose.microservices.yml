@@ -161,6 +161,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
   ai-vision:
+    profiles: ["full"]
     build:
       context: ./src/Services/AI/ai_vision_service
       dockerfile: Dockerfile
@@ -176,7 +177,10 @@ services:
       start_period: 120s
     restart: unless-stopped
   ollama:
+    profiles: ["full"]
     image: ollama/ollama:latest
+    ports:
+      - "127.0.0.1:11434:11434"
     volumes:
       - ollama-data:/root/.ollama
     entrypoint: ["/bin/sh", "-c"]
@@ -201,6 +205,8 @@ services:
       args:
         PROJECT: src/Services/AI/Parking.AI.Api/Parking.AI.Api.csproj
         APP_DLL: Parking.AI.Api.dll
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       Ports__Bind: 0.0.0.0
@@ -212,23 +218,19 @@ services:
       Services__IdentityGrpc: http://identity:8081
       Services__ParkingGrpc: http://parking:8081
       Services__AIGrpc: http://ai:8081
-      AiVision__ServiceUrl: http://ai-vision:8000
-      AI__OcrEndpoint: ${OCR_ENDPOINT:-http://ai-vision:8000/ocr/recognize}
+      AiVision__ServiceUrl: ${AI_VISION_URL:-http://host.docker.internal:8000}
+      AI__OcrEndpoint: ${OCR_ENDPOINT:-http://host.docker.internal:8000/ocr/recognize}
       AI__OcrApiKey: ${OCR_API_KEY:-}
       Gemini__ApiKey: ${GEMINI_API_KEY:-}
       AI__GeminiApiKey: ${GEMINI_API_KEY:-}
       Gemini__Model: ${GEMINI_MODEL:-gemini-2.5-flash}
-      Ollama__Endpoint: ${DOCKER_OLLAMA_ENDPOINT:-http://ollama:11434}
-      AI__OllamaEndpoint: ${DOCKER_OLLAMA_ENDPOINT:-http://ollama:11434}
+      Ollama__Endpoint: ${DOCKER_OLLAMA_ENDPOINT:-http://host.docker.internal:11434}
+      AI__OllamaEndpoint: ${DOCKER_OLLAMA_ENDPOINT:-http://host.docker.internal:11434}
       Ollama__Model: ${OLLAMA_MODEL:-qwen2.5:3b}
       AI__OllamaModel: ${OLLAMA_MODEL:-qwen2.5:3b}
     depends_on:
       ai-db:
         condition: service_healthy
-      ai-vision:
-        condition: service_started
-      ollama:
-        condition: service_started
     restart: unless-stopped
   gateway:
     build:

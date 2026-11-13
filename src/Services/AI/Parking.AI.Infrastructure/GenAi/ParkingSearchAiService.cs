@@ -242,11 +242,19 @@ public class ParkingSearchAiService(
         var list = new List<LotData>();
         try
         {
-            // LEFT JOIN LATERAL: Cho phép subquery tham chiếu tới cột c.lot_id của bảng ngoài ai_lot_catalog
+            // LEFT JOIN LATERAL: Lấy thông tin bãi xe thực tế kèm ảnh chụp công suất mới nhất
             await using var cmd = db.CreateCommand("""
-                SELECT c.lot_id, c.name,
-                       COALESCE(s.usable_capacity, 200) AS capacity,
-                       COALESCE(s.occupied_count, 50) AS occupied
+                SELECT c.lot_id,
+                       c.name,
+                       COALESCE(c.address, 'Khu vực bãi đỗ xe ParkMatrix') AS address,
+                       COALESCE(c.latitude, 10.776000) AS latitude,
+                       COALESCE(c.longitude, 106.700000) AS longitude,
+                       COALESCE(c.car_price_per_hour, 20000) AS car_price,
+                       COALESCE(c.motorbike_price_per_hour, 5000) AS motorbike_price,
+                       COALESCE(s.usable_capacity, c.total_slots, 40) AS capacity,
+                       COALESCE(s.occupied_count, 10) AS occupied,
+                       COALESCE(c.has_ev_charging, true) AS has_ev,
+                       COALESCE(c.has_roofed_shelter, true) AS has_shelter
                 FROM ai_lot_catalog c
                 LEFT JOIN LATERAL (
                     SELECT usable_capacity, occupied_count
@@ -254,17 +262,25 @@ public class ParkingSearchAiService(
                     WHERE os.lot_id = c.lot_id
                     ORDER BY os.observed_at DESC LIMIT 1
                 ) s ON true
-                LIMIT 20
+                LIMIT 50
                 """);
             await using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct))
             {
                 var lotId = r.GetGuid(0);
                 var name = r.GetString(1);
-                var cap = r.GetInt32(2);
-                var occ = r.GetInt32(3);
+                var address = r.GetString(2);
+                var lat = Convert.ToDouble(r.GetDecimal(3));
+                var lon = Convert.ToDouble(r.GetDecimal(4));
+                var carPrice = r.GetDecimal(5);
+                var motoPrice = r.GetDecimal(6);
+                var cap = r.GetInt32(7);
+                var occ = r.GetInt32(8);
+                var hasEv = r.GetBoolean(9);
+                var hasShelter = r.GetBoolean(10);
                 var avail = Math.Max(0, cap - occ);
-                list.Add(new LotData(lotId, name, "Khu vực bãi đỗ xe ParkMatrix", 10.7942, 106.7215, 20000, 5000, avail, cap, true, true));
+
+                list.Add(new LotData(lotId, name, address, lat, lon, carPrice, motoPrice, avail, cap, hasEv, hasShelter));
             }
         }
         catch (Exception ex)
@@ -281,12 +297,30 @@ public class ParkingSearchAiService(
                 foreach (var lot in list)
                 {
                     await using var seedCmd = db.CreateCommand("""
-                        INSERT INTO ai_lot_catalog (lot_id, name, updated_at)
-                        VALUES (@id, @name, now())
-                        ON CONFLICT (lot_id) DO UPDATE SET name = EXCLUDED.name, updated_at = now()
+                        INSERT INTO ai_lot_catalog (lot_id, name, address, latitude, longitude, car_price_per_hour, motorbike_price_per_hour, has_ev_charging, has_roofed_shelter, total_slots, updated_at)
+                        VALUES (@id, @name, @address, @lat, @lon, @carPrice, @motoPrice, @hasEv, @hasShelter, @slots, now())
+                        ON CONFLICT (lot_id) DO UPDATE SET 
+                            name = EXCLUDED.name, 
+                            address = EXCLUDED.address,
+                            latitude = EXCLUDED.latitude,
+                            longitude = EXCLUDED.longitude,
+                            car_price_per_hour = EXCLUDED.car_price_per_hour,
+                            motorbike_price_per_hour = EXCLUDED.motorbike_price_per_hour,
+                            has_ev_charging = EXCLUDED.has_ev_charging,
+                            has_roofed_shelter = EXCLUDED.has_roofed_shelter,
+                            total_slots = EXCLUDED.total_slots,
+                            updated_at = now()
                         """);
                     seedCmd.Parameters.AddWithValue("id", lot.Id);
                     seedCmd.Parameters.AddWithValue("name", lot.Name);
+                    seedCmd.Parameters.AddWithValue("address", lot.Address);
+                    seedCmd.Parameters.AddWithValue("lat", Convert.ToDecimal(lot.Latitude));
+                    seedCmd.Parameters.AddWithValue("lon", Convert.ToDecimal(lot.Longitude));
+                    seedCmd.Parameters.AddWithValue("carPrice", lot.CarPricePerHour);
+                    seedCmd.Parameters.AddWithValue("motoPrice", lot.MotorbikePricePerHour);
+                    seedCmd.Parameters.AddWithValue("hasEv", lot.HasEvCharging);
+                    seedCmd.Parameters.AddWithValue("hasShelter", lot.HasRoofedShelter);
+                    seedCmd.Parameters.AddWithValue("slots", lot.TotalSlots);
                     await seedCmd.ExecuteNonQueryAsync(ct);
                 }
                 logger.LogInformation("Đã tự động seed {Count} bãi xe mặc định vào bảng ai_lot_catalog.", list.Count);
@@ -360,10 +394,9 @@ public class ParkingSearchAiService(
 
     private static List<LotData> GetDefaultParkingLots() =>
     [
-        new(Guid.Parse("11111111-1111-1111-1111-111111111111"), "Bãi xe Smart Central Tower", "208 Nguyễn Hữu Cảnh, P.22, Bình Thạnh", 10.7942, 106.7215, 20000, 5000, 350, 400, true, true),
-        new(Guid.Parse("22222222-2222-2222-2222-222222222222"), "Bãi xe Park View Riverside", "20A Ung Văn Khiêm, P.25, Bình Thạnh", 10.8015, 106.7160, 15000, 4000, 120, 250, false, true),
-        new(Guid.Parse("33333333-3333-3333-3333-333333333333"), "Bãi xe Công viên Vinhomes", "720A Điện Biên Phủ, P.22, Bình Thạnh", 10.7920, 106.7198, 25000, 6000, 80, 500, true, true),
-        new(Guid.Parse("44444444-4444-4444-4444-444444444444"), "Bãi xe Giá rẻ Cầu Sài Gòn", "Ung Văn Khiêm, P.25, Bình Thạnh", 10.8030, 106.7230, 10000, 3000, 15, 100, false, false)
+        new(Guid.Parse("11111111-1111-4111-8111-111111111111"), "Demo Quận 1", "Dữ liệu demo — Quận 1", 10.776000, 106.700000, 30000, 4000, 20, 40, true, true),
+        new(Guid.Parse("22222222-2222-4222-8222-222222222222"), "Demo Bình Thạnh", "Dữ liệu demo — Bình Thạnh", 10.790000, 106.710000, 30000, 4000, 20, 40, true, true),
+        new(Guid.Parse("33333333-3333-4333-8333-111111111111"), "Demo Quận 7", "Dữ liệu demo — Quận 7", 10.735000, 106.722000, 30000, 4000, 20, 40, true, true)
     ];
 
     private record LotData(

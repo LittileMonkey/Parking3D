@@ -3881,6 +3881,96 @@ figure {
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.25);
 }
 
+/* ── AI Smart Prompt Box (Luồng 2 - AI Synthesizer) ── */
+.search-ai-prompt-box {
+  margin-top: 14px;
+  background: linear-gradient(135deg, rgba(240, 253, 250, 0.95), rgba(248, 250, 252, 0.95));
+  border: 1px solid rgba(20, 184, 166, 0.35);
+  border-radius: 12px;
+  padding: 10px 14px;
+  box-shadow: 0 2px 6px rgba(20, 184, 166, 0.08);
+  transition: all 0.2s ease;
+}
+
+.search-ai-prompt-box:hover {
+  border-color: rgba(20, 184, 166, 0.6);
+  box-shadow: 0 4px 12px rgba(20, 184, 166, 0.12);
+}
+
+.search-ai-prompt-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  color: #0d9488;
+}
+
+.search-ai-prompt-badge span {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.search-ai-prompt-body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.search-ai-prompt-text {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #134e4a;
+  flex: 1;
+  line-height: 1.45;
+  font-style: italic;
+}
+
+.search-ai-prompt-input {
+  flex: 1;
+  background: #ffffff;
+  border: 1px solid #14b8a6;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #0f172a;
+  outline: none;
+}
+
+.search-ai-prompt-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #0f766e;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.search-ai-prompt-edit-btn:hover {
+  background: #f0fdfa;
+  border-color: #14b8a6;
+}
+
+.search-action-btn.search-ai-btn {
+  background: linear-gradient(135deg, #0f172a 0%, #0d9488 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.search-action-btn.search-ai-btn:hover {
+  background: linear-gradient(135deg, #0d9488 0%, #087f8c 100%);
+  box-shadow: 0 6px 20px rgba(13, 148, 136, 0.45);
+}
+
 /* ── High-Contrast Luminous Trust Bar (Khắc phục chữ mờ Ảnh 4) ── */
 .hero-trust-bar {
   display: flex;
