@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { QRCodeSVG } from "qrcode.react";
+import { StaffDialog, staffDate } from "../../components/staff/StaffUi";
+import { Link, useSearchParams, useOutletContext } from "react-router-dom";
+import type { StaffContext } from "../../components/staff/StaffLayout";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -14,7 +17,6 @@ import {
   ShieldCheck,
   Upload,
   FileText,
-  X,
   Hash,
 } from "lucide-react";
 import {
@@ -23,6 +25,7 @@ import {
   type CheckOutQuoteDto,
   type CheckoutRequest,
   type Payment,
+  type PaymentReceiptDto,
   type StaffSessionRow,
 } from "../../services/api";
 import { staffApi } from "../../services/staff/staffApi";
@@ -34,6 +37,7 @@ import type {
 } from "../../types/staff";
 
 export default function VehicleOperations() {
+  const { selectedLotId } = useOutletContext<StaffContext>();
   const [searchParams] = useSearchParams();
   const initialTab = searchParams.get("tab") === "checkout" ? "checkout" : "checkin";
   const initialPlate = searchParams.get("plate") || "";
@@ -68,14 +72,14 @@ export default function VehicleOperations() {
       try {
         const [lots, assignments] = await Promise.all([api.getParkingLots(), api.getStaffAssignmentsMe()]);
         const assigned = new Set(assignments.map(assignment => assignment.lotId));
-        const results = await Promise.allSettled(lots.filter(lot => assigned.has(lot.id)).map(async lot =>
+        const results = await Promise.allSettled(lots.filter(lot => assigned.has(lot.id) && lot.id === selectedLotId).map(async lot =>
           (await api.getEntryGates(lot.id)).map(gate => ({ ...gate, label: `${lot.name} · ${gate.code}` })),
         ));
         if (!active) return;
         const gates = results.flatMap(result => result.status === "fulfilled" ? result.value : []);
         setEntryGates(gates);
         setCheckInGate(gates[0]?.id ?? "");
-        const exitResults = await Promise.allSettled(lots.filter(lot => assigned.has(lot.id)).map(async lot =>
+        const exitResults = await Promise.allSettled(lots.filter(lot => assigned.has(lot.id) && lot.id === selectedLotId).map(async lot =>
           (await api.getExitGates(lot.id)).map(gate => ({ ...gate, label: `${lot.name} · ${gate.code}` })),
         ));
         if (!active) return;
@@ -90,7 +94,7 @@ export default function VehicleOperations() {
     }
     void loadGates();
     return () => { active = false; };
-  }, []);
+  }, [selectedLotId]);
 
   const [checkInVehicleType, setCheckInVehicleType] = useState<VehicleType>("Car");
   const [checkInLoading, setCheckInLoading] = useState(false);
@@ -117,16 +121,24 @@ export default function VehicleOperations() {
   const [vnpayInfo, setVnpayInfo] = useState<{ paymentId: string; amount: number; paymentUrl: string } | null>(null);
   const [vnpayBusy, setVnpayBusy] = useState(false);
   const [exitPermit, setExitPermit] = useState<{ payload: CheckoutRequest; token: string; confirmKey: string } | null>(null);
+  const [issuedExitQr, setIssuedExitQr] = useState<{ sessionId: string; qrPayload: string; expiresAt?: string } | null>(null);
+  const [qrNow, setQrNow] = useState(Date.now());
+  useEffect(() => {
+    if (!issuedExitQr) return;
+    setQrNow(Date.now());
+    const timer = setInterval(() => setQrNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [issuedExitQr]);
+  const exitQrExpired = Boolean(issuedExitQr?.expiresAt && (!Number.isFinite(Date.parse(issuedExitQr.expiresAt)) || Date.parse(issuedExitQr.expiresAt) <= qrNow));
   const [authorizeKey, setAuthorizeKey] = useState("");
   const [checkoutError, setCheckoutError] = useState("");
   const [mismatchQuote, setMismatchQuote] = useState<CheckOutQuoteDto | null>(null);
-  const [issuedExitQr, setIssuedExitQr] = useState<{ sessionId: string; qrPayload: string; expiresAt?: string } | null>(null);
 
   const [feeInfo, setFeeInfo] = useState<(CheckOutQuoteDto & { gateId: string; detectedPlate: string }) | null>(null);
   const [calculatingFee, setCalculatingFee] = useState(false);
   const [checkOutProcessing, setCheckOutProcessing] = useState(false);
   const [checkOutSuccess, setCheckOutSuccess] = useState<{ message: string; paymentId?: string } | null>(null);
-  const [eReceipt, setEReceipt] = useState<any | null>(null);
+  const [eReceipt, setEReceipt] = useState<PaymentReceiptDto | null>(null);
   const [loadingReceipt, setLoadingReceipt] = useState(false);
 
   // Camera ANPR Boxes State (Bắt đầu trống, chỉ hiển thị biển số sau khi quét AI thật)
@@ -272,7 +284,7 @@ export default function VehicleOperations() {
 
   const loadSessions = async () => {
     setSessionError("");
-    const lots = [...new Set([...entryGates, ...exitGates].map(gate => gate.lotId))];
+    const lots = selectedLotId ? [selectedLotId] : [];
     const results = await Promise.allSettled(lots.map(lotId => api.getStaffSessions(lotId)));
     setSessions(results.flatMap(result => result.status === "fulfilled" ? result.value : []));
     if (results.some(result => result.status === "rejected")) {
@@ -296,6 +308,7 @@ export default function VehicleOperations() {
     setBookingCash(null);
     try {
       const booking = await api.getBooking(cashBookingId.trim());
+      if (booking.lotId !== selectedLotId) throw new Error("Đặt chỗ thuộc bãi khác. Chọn đúng bãi trực trước khi thu tiền.");
       setBookingCash(await api.getBookingCashRequest(booking.bookingId, booking.lotId));
     } catch (err) {
       setBookingCashError(err instanceof Error ? err.message : "Không tìm được yêu cầu thu tiền.");
@@ -537,6 +550,7 @@ export default function VehicleOperations() {
     try {
       const qr = await api.issueCheckOutQr(sessionId);
       const token = qr.qrPayload || qr.qrToken || qr.token || "";
+      if (!token) throw new Error("Máy chủ chưa cấp mã QR. Hãy thử lại.");
       setIssuedExitQr({ sessionId, qrPayload: token, expiresAt: qr.expiresAt });
     } catch (err) {
       setCheckoutError(err instanceof Error ? err.message : "Không phát hành được QR chiều ra.");
@@ -571,7 +585,7 @@ export default function VehicleOperations() {
         <div>
           <h1 className="pm-section-title" style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <Car size={26} color="var(--pm-teal)" />
-            <span>Điều phối Xe Vào &amp; Xe Ra</span>
+            <span>Điều phối vào / ra xe</span>
           </h1>
           <p className="pm-section-subtitle">
             Xử lý tiếp nhận tại cổng vào, kiểm tra mã đặt chỗ QR, tính phí xuất bến và xác nhận xe rời cổng
@@ -729,7 +743,7 @@ export default function VehicleOperations() {
                       </div>
 
                       <label className="pm-form-label">
-                        Tham chiếu chứng cứ (`evidence.reference`) <span className="pm-required">*</span>:
+                        Mã hoặc đường dẫn chứng cứ <span className="pm-required">*</span>:
                         <input
                           type="text"
                           required
@@ -743,7 +757,7 @@ export default function VehicleOperations() {
                     </div>
                   )}
 
-                  {checkInError && <p role="alert" style={{ color: "#f87171", margin: 0 }}>{checkInError}</p>}
+                  {checkInError && <p role="alert" style={{ color: "#b42337", margin: 0 }}>{checkInError}</p>}
 
                   <button
                     type="submit"
@@ -791,7 +805,7 @@ export default function VehicleOperations() {
                     </div>
                     <div className="pm-success-details">
                       <div>Biển số: <strong>{checkInSuccess.licensePlate}</strong></div>
-                      <div>Vị trí gán (BE cấp): <strong className="pm-slot-highlight">{checkInSuccess.slotCode}</strong></div>
+                      <div>Vị trí đỗ được cấp: <strong className="pm-slot-highlight">{checkInSuccess.slotCode}</strong></div>
                       <div>Hình thức vào: <strong>{checkInSuccess.entryMethod || (checkInSuccess.bookingId ? "PRE_BOOKING" : "AUTO_SLOT")}</strong></div>
                       <div>Booking: <strong>{checkInSuccess.bookingId ?? "Walk-in (Không đặt trước)"}</strong></div>
                       <div>Giờ vào: <strong>{new Date(checkInSuccess.checkinAt).toLocaleTimeString("vi-VN")}</strong></div>
@@ -816,7 +830,7 @@ export default function VehicleOperations() {
                   <ArrowUpRight size={19} className="pm-icon-blue" />
                   <h2 className="pm-op-card-title">Tính phí &amp; Xử lý Xe Ra</h2>
                 </div>
-                <span className="pm-badge-success">Cổng Ra G3 Online</span>
+                <span className="pm-badge-success">Cổng ra</span>
               </div>
 
               <div className="pm-op-card-body">
@@ -861,7 +875,7 @@ export default function VehicleOperations() {
                     {exitGates.map(gate => <option key={gate.id} value={gate.id}>{gate.label}</option>)}
                   </select>
                 </label>
-                {checkoutError && <p role="alert" style={{ color: "#f87171" }}>{checkoutError}</p>}
+                {checkoutError && <p role="alert" style={{ color: "#b42337" }}>{checkoutError}</p>}
 
                 {mismatchQuote && !mismatchQuote.isPlateMatched && (
                   <div style={{ border: "1px solid #ef4444", borderRadius: 10, padding: 12, marginTop: 10, background: "rgba(239,68,68,0.12)" }}>
@@ -968,7 +982,7 @@ export default function VehicleOperations() {
                               <div style={{ fontSize: 13 }}>
                                 <div>Payment ID: <code>{vnpayInfo.paymentId}</code></div>
                                 <div>Số tiền: <strong>{vnpayInfo.amount.toLocaleString("vi-VN")} VND</strong></div>
-                                <a href={vnpayInfo.paymentUrl} target="_blank" rel="noreferrer" style={{ color: "#22d3ee" }}>
+                                <a href={vnpayInfo.paymentUrl} target="_blank" rel="noreferrer" style={{ color: "#0d4685" }}>
                                   Mở cổng thanh toán VNPay
                                 </a>
                               </div>
@@ -1025,10 +1039,10 @@ export default function VehicleOperations() {
                         type="button"
                         onClick={() => handleViewReceipt(checkOutSuccess.paymentId)}
                         className="pm-print-btn"
-                        style={{ background: "rgba(34, 211, 238, 0.15)", border: "1px solid #22d3ee", color: "#22d3ee" }}
+                        style={{ background: "rgba(34, 211, 238, 0.15)", border: "1px solid #22d3ee", color: "#0d4685" }}
                       >
                         <FileText size={15} />
-                        <span>{loadingReceipt ? "Đang tải biên lai..." : "Xem E-Receipt (SCRUM-72)"}</span>
+                        <span>{loadingReceipt ? "Đang tải biên lai..." : "Xem biên lai thanh toán"}</span>
                       </button>
                       <button
                         type="button"
@@ -1036,7 +1050,7 @@ export default function VehicleOperations() {
                         className="pm-print-btn"
                       >
                         <Printer size={15} />
-                        <span>In Hoá đơn GTGT</span>
+                        <span>In thông tin giao dịch</span>
                       </button>
                     </div>
                   </div>
@@ -1051,7 +1065,7 @@ export default function VehicleOperations() {
           <div className="pm-op-card-header">
             <div className="pm-card-title-group">
               <Camera size={19} className="pm-icon-teal" />
-              <h2 className="pm-op-card-title">Camera ANPR Giám sát Làn xe</h2>
+              <h2 className="pm-op-card-title">Ảnh camera & nhận diện biển số</h2>
             </div>
 
             {/* Vehicle Type Toggle: Motorcycle (2 Cams) vs Car (4 Cams) */}
@@ -1078,7 +1092,7 @@ export default function VehicleOperations() {
           </div>
 
           <div className="pm-op-card-body">
-            {cameraError && <p role="alert" style={{ color: "#f87171", marginBottom: 10 }}>{cameraError}</p>}
+            {cameraError && <p role="alert" style={{ color: "#b42337", marginBottom: 10 }}>{cameraError}</p>}
             {/* IF MOTORCYCLE: 2-Camera Grid Layout */}
             {cameraVehicleCategory === "Motorcycle" ? (
               <div className="pm-cam-grid-2">
@@ -1086,7 +1100,7 @@ export default function VehicleOperations() {
                 <div className="pm-cam-stream-box">
                   <div className="pm-cam-top-bar">
                     <span className="pm-cam-badge live">
-                      <span className="pm-cam-dot" /> LIVE 30 FPS
+                      <span className="pm-cam-dot" /> ẢNH TẢI LÊN
                     </span>
                     <span className="pm-cam-name">Cam 1: Mặt trước (Toàn cảnh &amp; Người lái)</span>
                     <span className="pm-cam-res">1080P</span>
@@ -1140,7 +1154,7 @@ export default function VehicleOperations() {
                 <div className="pm-cam-stream-box">
                   <div className="pm-cam-top-bar">
                     <span className="pm-cam-badge live">
-                      <span className="pm-cam-dot" /> LIVE 30 FPS
+                      <span className="pm-cam-dot" /> ẢNH TẢI LÊN
                     </span>
                     <span className="pm-cam-name">Cam 2: Mặt sau (ANPR Biển số xe máy)</span>
                     <span className="pm-cam-res">1080P</span>
@@ -1215,7 +1229,7 @@ export default function VehicleOperations() {
                 <div className="pm-cam-stream-box compact">
                   <div className="pm-cam-top-bar">
                     <span className="pm-cam-badge live">
-                      <span className="pm-cam-dot" /> LIVE
+                      <span className="pm-cam-dot" /> ẢNH TẢI LÊN
                     </span>
                     <span className="pm-cam-name">Cam 1: Mặt trước (Front Plate)</span>
                   </div>
@@ -1285,7 +1299,7 @@ export default function VehicleOperations() {
                 <div className="pm-cam-stream-box compact">
                   <div className="pm-cam-top-bar">
                     <span className="pm-cam-badge live">
-                      <span className="pm-cam-dot" /> LIVE
+                      <span className="pm-cam-dot" /> ẢNH TẢI LÊN
                     </span>
                     <span className="pm-cam-name">Cam 2: Mặt sau (Rear Plate)</span>
                   </div>
@@ -1355,7 +1369,7 @@ export default function VehicleOperations() {
                 <div className="pm-cam-stream-box compact">
                   <div className="pm-cam-top-bar">
                     <span className="pm-cam-badge live">
-                      <span className="pm-cam-dot" /> LIVE
+                      <span className="pm-cam-dot" /> ẢNH TẢI LÊN
                     </span>
                     <span className="pm-cam-name">Cam 3: Sườn trái (Left Side)</span>
                   </div>
@@ -1375,7 +1389,7 @@ export default function VehicleOperations() {
                     )}
                     <div className="pm-cam-tag-box">
                       <ShieldCheck size={14} color="#10b981" />
-                      <span>Thân xe &amp; Gương trái OK</span>
+                      <span>{cameraStates["car-cam3"]?.fileUrl ? "Ảnh bên trái · cần kiểm tra thủ công" : "Chưa có ảnh bên trái"}</span>
                     </div>
                   </div>
                   <div className="pm-cam-footer compact">
@@ -1405,7 +1419,7 @@ export default function VehicleOperations() {
                 <div className="pm-cam-stream-box compact">
                   <div className="pm-cam-top-bar">
                     <span className="pm-cam-badge live">
-                      <span className="pm-cam-dot" /> LIVE
+                      <span className="pm-cam-dot" /> ẢNH TẢI LÊN
                     </span>
                     <span className="pm-cam-name">Cam 4: Sườn phải (Right Side)</span>
                   </div>
@@ -1425,7 +1439,7 @@ export default function VehicleOperations() {
                     )}
                     <div className="pm-cam-tag-box">
                       <ShieldCheck size={14} color="#10b981" />
-                      <span>Thân xe &amp; Gương phải OK</span>
+                      <span>{cameraStates["car-cam4"]?.fileUrl ? "Ảnh bên phải · cần kiểm tra thủ công" : "Chưa có ảnh bên phải"}</span>
                     </div>
                   </div>
                   <div className="pm-cam-footer compact">
@@ -1576,155 +1590,27 @@ export default function VehicleOperations() {
       </div>
 
       {/* ─── E-RECEIPT MODAL (SCRUM-72 REAL BACKEND API) ────────────────────── */}
-      {eReceipt && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0, 0, 0, 0.75)",
-            backdropFilter: "blur(6px)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-            padding: 16,
-          }}
-          onClick={() => setEReceipt(null)}
-        >
-          <div
-            style={{
-              background: "#0f172a",
-              border: "1px solid rgba(34, 211, 238, 0.3)",
-              borderRadius: 16,
-              maxWidth: 480,
-              width: "100%",
-              padding: 24,
-              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 30px rgba(34, 211, 238, 0.15)",
-              color: "#f8fafc",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.1)", paddingBottom: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ background: "rgba(16, 185, 129, 0.2)", padding: 8, borderRadius: 8 }}>
-                  <ShieldCheck size={20} color="#10b981" />
-                </div>
-                <div>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: "#fff" }}>Hóa Đơn / Biên Lai Điện Tử</h3>
-                  <span style={{ fontSize: 12, color: "#94a3b8" }}>Hệ thống Smart 3D Parking Baseline V4</span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEReceipt(null)}
-                style={{ background: "transparent", border: "none", color: "#94a3b8", cursor: "pointer" }}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, padding: 16, marginBottom: 16 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13 }}>
-                <span style={{ color: "#94a3b8" }}>Mã hóa đơn (Receipt No):</span>
-                <strong style={{ color: "#38bdf8", fontFamily: "monospace" }}>{eReceipt.receiptNumber}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13 }}>
-                <span style={{ color: "#94a3b8" }}>Cơ sở bãi đỗ:</span>
-                <span>{eReceipt.lotName || "Bãi đỗ xe Trung tâm Quận 1"}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13 }}>
-                <span style={{ color: "#94a3b8" }}>Biển số xe:</span>
-                <strong style={{ color: "#facc15" }}>{eReceipt.plateNumber}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13 }}>
-                <span style={{ color: "#94a3b8" }}>Phương thức:</span>
-                <span>{eReceipt.paymentMethod}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13 }}>
-                <span style={{ color: "#94a3b8" }}>Thời gian thanh toán:</span>
-                <span>{new Date(eReceipt.paidAt).toLocaleString("vi-VN")}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13 }}>
-                <span style={{ color: "#94a3b8" }}>Nhân viên thu ngân:</span>
-                <span>{eReceipt.collectedByStaff || "Nguyễn Văn Hùng"}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, borderTop: "1px dashed rgba(255,255,255,0.15)", fontSize: 15 }}>
-                <span style={{ fontWeight: 600 }}>Tổng tiền thanh toán:</span>
-                <strong style={{ color: "#10b981", fontSize: 18 }}>
-                  {Number(eReceipt.totalAmount).toLocaleString("vi-VN")} {eReceipt.currency || "VND"}
-                </strong>
-              </div>
-            </div>
-
-            {/* Verification Hash Badge */}
-            <div style={{ background: "rgba(34, 211, 238, 0.08)", border: "1px solid rgba(34, 211, 238, 0.2)", borderRadius: 10, padding: 12, marginBottom: 18 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#22d3ee", fontWeight: 600, marginBottom: 4 }}>
-                <Hash size={13} />
-                <span>CHỮ KÝ BẢO MẬT &amp; MÃ BĂM XÁC THỰC SỐ (VERIFICATION HASH)</span>
-              </div>
-              <div style={{ fontFamily: "monospace", fontSize: 10, color: "#94a3b8", wordBreak: "break-all" }}>
-                {eReceipt.verificationHash}
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-              <button
-                type="button"
-                onClick={() => setEReceipt(null)}
-                style={{
-                  background: "rgba(255,255,255,0.08)",
-                  border: "none",
-                  borderRadius: 8,
-                  padding: "8px 16px",
-                  color: "#cbd5e1",
-                  cursor: "pointer",
-                  fontWeight: 600,
-                }}
-              >
-                Đóng
-              </button>
-              <button
-                type="button"
-                onClick={() => window.print()}
-                style={{
-                  background: "linear-gradient(135deg, #087f8c 0%, #14afbe 100%)",
-                  border: "none",
-                  borderRadius: 8,
-                  padding: "8px 18px",
-                  color: "#fff",
-                  cursor: "pointer",
-                  fontWeight: 600,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                }}
-              >
-                <Printer size={15} />
-                <span>In Biên lai</span>
-              </button>
-            </div>
-          </div>
+      {eReceipt && <StaffDialog title="Biên lai thanh toán" onClose={() => setEReceipt(null)}>
+        <div className="staff-stack">
+          <div className="staff-alert success">Giao dịch đã được ghi nhận trên hệ thống.</div>
+          <dl className="staff-detail-grid">
+            <div><dt>Mã biên lai</dt><dd>{eReceipt.receiptNumber}</dd></div>
+            <div><dt>Bãi đỗ</dt><dd>{eReceipt.lotName || "Chưa có thông tin"}</dd></div>
+            <div><dt>Biển số xe</dt><dd>{eReceipt.plateNumber || "—"}</dd></div>
+            <div><dt>Phương thức</dt><dd>{eReceipt.paymentMethod === "CASH" ? "Tiền mặt" : eReceipt.paymentMethod}</dd></div>
+            <div><dt>Thời gian thanh toán</dt><dd>{staffDate(eReceipt.paidAt)}</dd></div>
+            <div><dt>Nhân viên thu tiền</dt><dd>{eReceipt.collectedByStaff || "Không áp dụng / chưa có thông tin"}</dd></div>
+          </dl>
+          <div className="staff-panel staff-row between"><strong>Tổng thanh toán</strong><strong>{Number(eReceipt.totalAmount).toLocaleString("vi-VN")} {eReceipt.currency || "VND"}</strong></div>
+          {eReceipt.verificationHash && <details><summary className="staff-row"><Hash size={15} />Thông tin xác thực biên lai</summary><p className="staff-small" style={{ overflowWrap: "anywhere" }}>{eReceipt.verificationHash}</p></details>}
+          <button className="staff-primary" onClick={() => window.print()}><Printer size={16} />In biên lai</button>
         </div>
-      )}
+      </StaffDialog>}
       {/* ─── CHECK-IN PLATE_MISMATCH OVERRIDE MODAL (SCRUM-111) ───────────────── */}
       {showOverrideModal && (
-        <div className="staff-modal-backdrop" onClick={() => setShowOverrideModal(false)}>
-          <div className="staff-modal pm-dark-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="staff-modal-header pm-dark-modal-header">
-              <h3 className="staff-modal-title" style={{ display: "flex", alignItems: "center", gap: 8, color: "#ffffff" }}>
-                <ShieldCheck size={20} color="#fbbf24" />
-                <span>Xác nhận ngoại lệ lệch biển số (PLATE_MISMATCH)</span>
-              </h3>
-              <button
-                type="button"
-                className="staff-btn-secondary pm-modal-close-btn"
-                onClick={() => setShowOverrideModal(false)}
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="staff-modal-body pm-dark-modal-body" style={{ display: "grid", gap: 12 }}>
-              <p style={{ margin: 0, color: "#fbbf24" }}>
+        <StaffDialog title={"Xác minh biển số không khớp"} onClose={() => { if (!checkInLoading && !evidenceUploading) setShowOverrideModal(false); }}>
+            <div className="staff-modal-body" style={{ display: "grid", gap: 12 }}>
+              <p style={{ margin: 0, color: "#94620b" }}>
                 Biển số thực tế <strong>{checkInPlate}</strong> không khớp với đặt chỗ QR. Nhập lý do đối chiếu (10–500 ký tự) và upload ảnh chứng cứ camera để tiếp tục check-in.
               </p>
               <label className="pm-form-label">
@@ -1751,7 +1637,7 @@ export default function VehicleOperations() {
                 {!evidenceUploading && evidenceFileName && <small>Đã upload ảnh: {evidenceFileName}</small>}
               </label>
               <label className="pm-form-label">
-                Tham chiếu chứng cứ (`evidence.reference`):
+                Mã hoặc đường dẫn chứng cứ:
                 <input
                   type="text"
                   maxLength={2048}
@@ -1760,9 +1646,9 @@ export default function VehicleOperations() {
                   onChange={(e) => { setEvidenceReference(e.target.value); renewCheckInKey(); }}
                 />
               </label>
-              {checkInError && <p role="alert" style={{ color: "#f87171", margin: 0 }}>{checkInError}</p>}
+              {checkInError && <p role="alert" style={{ color: "#b42337", margin: 0 }}>{checkInError}</p>}
             </div>
-            <div className="staff-modal-footer pm-dark-modal-footer">
+            <div className="staff-modal-footer">
               <button type="button" className="staff-btn-secondary" onClick={() => setShowOverrideModal(false)}>
                 Đóng
               </button>
@@ -1776,31 +1662,25 @@ export default function VehicleOperations() {
                 {checkInLoading ? "Đang xử lý..." : "Xác nhận Override & Cho xe vào"}
               </button>
             </div>
-          </div>
-        </div>
+        </StaffDialog>
       )}
 
       {/* ─── ISSUED CHECK-OUT QR MODAL (SCRUM-49/69) ──────────────────────────── */}
       {issuedExitQr && (
-        <div className="staff-modal-backdrop" onClick={() => setIssuedExitQr(null)}>
-          <div className="staff-modal pm-dark-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="staff-modal-header pm-dark-modal-header">
-              <h3 className="staff-modal-title" style={{ color: "#ffffff" }}>Mã QR Chiều Ra (Check-out QR)</h3>
-              <button type="button" className="staff-btn-secondary pm-modal-close-btn" onClick={() => setIssuedExitQr(null)}>
-                <X size={18} />
-              </button>
-            </div>
-            <div className="staff-modal-body pm-dark-modal-body" style={{ display: "grid", gap: 10 }}>
+        <StaffDialog title={"Mã QR ra bãi"} onClose={() => setIssuedExitQr(null)}>
+            <div className="staff-modal-body" style={{ display: "grid", gap: 10 }}>
               <div>Phiên: <strong>{issuedExitQr.sessionId}</strong></div>
-              <textarea readOnly className="pm-form-input" style={{ minHeight: 80 }} value={issuedExitQr.qrPayload} />
+              {exitQrExpired ? <div className="staff-alert error" role="alert">Mã QR đã hết hạn. Đóng hộp thoại và phát hành mã mới.</div> : <div className="staff-qr"><QRCodeSVG value={issuedExitQr.qrPayload} size={210} marginSize={4} title="Mã QR ra bãi" /></div>}
+              <details><summary>Xem nội dung mã</summary><textarea aria-label="Nội dung QR ra bãi" readOnly className="pm-form-input" style={{ minHeight: 80 }} value={issuedExitQr.qrPayload} /></details>
               {issuedExitQr.expiresAt && (
                 <small>Hết hạn: {new Date(issuedExitQr.expiresAt).toLocaleString("vi-VN")}</small>
               )}
             </div>
-            <div className="staff-modal-footer pm-dark-modal-footer">
+            <div className="staff-modal-footer">
               <button type="button" className="staff-btn-secondary" onClick={() => setIssuedExitQr(null)}>Đóng</button>
               <button
                 type="button"
+                disabled={exitQrExpired}
                 className="pm-cta-btn pm-btn-teal"
                 style={{ width: "auto", padding: "8px 18px" }}
                 onClick={() => {
@@ -1811,11 +1691,10 @@ export default function VehicleOperations() {
                   setIssuedExitQr(null);
                 }}
               >
-                Dùng QR này để Check-out
+                Dùng mã để kiểm tra xe ra
               </button>
             </div>
-          </div>
-        </div>
+        </StaffDialog>
       )}
     </div>
   );

@@ -1,15 +1,14 @@
 import NotificationBell from "./NotificationBell";
+import CustomerAccountMenu from "./CustomerAccountMenu";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   ArrowRight,
   ChevronDown,
-  LogOut,
   Menu,
   Navigation,
   ParkingCircle,
   Search,
-  User,
   X,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
@@ -21,7 +20,6 @@ type CustomerLayoutProps = {
   onRequestLogout?: () => void;
   landing?: boolean;
   booking?: boolean;
-  preview?: boolean;
 };
 
 export default function CustomerLayout({
@@ -30,13 +28,15 @@ export default function CustomerLayout({
   onRequestLogout,
   landing = false,
   booking = false,
-  preview = false,
 }: CustomerLayoutProps) {
   const { user, isAuthenticated, logout } = useAuth();
   const { lang, setLang, t } = useLanguage();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [bookingMenuOpen, setBookingMenuOpen] = useState(false);
   const bookingMenuRef = useRef<HTMLDivElement>(null);
+  const [popover, setPopover] = useState<"account" | "notifications" | null>(null);
+  const location = useLocation();
+  useEffect(() => { setPopover(null); setMobileMenuOpen(false); setBookingMenuOpen(false); }, [location.pathname, location.search]);
 
   const userRoles = (user?.roles ?? (user?.role ? [user.role] : [])).map((r) => r.toUpperCase());
   const isStaff = userRoles.some((r) => r.includes("STAFF"));
@@ -67,6 +67,7 @@ export default function CustomerLayout({
   const closeMenus = () => {
     setBookingMenuOpen(false);
     setMobileMenuOpen(false);
+    setPopover(null);
   };
   const requestLogout = () => {
     closeMenus();
@@ -135,10 +136,9 @@ export default function CustomerLayout({
             {isAuthenticated ? (
               <>
                 <span className="customer-nav-user">{user?.fullName || user?.userName} ({roleLabel})</span>
-                <Link to="/account" onClick={closeMenus} className="nav-item-pill">{lang === "en" ? "Vehicles & bookings" : "Xe & đặt chỗ"}</Link>
-                <Link to="/security" onClick={closeMenus} className="nav-item-pill">{lang === "en" ? "Security" : "Bảo mật"}</Link>
+                <Link to="/account" onClick={closeMenus} className="nav-item-pill">{lang === "en" ? "My account" : "Trang cá nhân"}</Link>
                 {portalPath && (
-                  <Link to={portalPath} onClick={closeMenus} className="nav-item-pill mobile-nav-portal-link" style={{ color: "#38bdf8", fontWeight: 700 }}>
+                  <Link to={portalPath} onClick={closeMenus} className="nav-item-pill mobile-nav-portal-link" style={{ color: "#0d4685", fontWeight: 700 }}>
                     {portalPath.includes("staff") ? "→ Vào Staff Portal" : "→ Vào Admin Dashboard"}
                   </Link>
                 )}
@@ -151,6 +151,7 @@ export default function CustomerLayout({
               </>
             )}
           </div>
+          <div className="customer-mobile-language"><span>Ngôn ngữ / Language</span><div className="lang-switcher-pill"><button type="button" className={`lang-btn-pill ${lang === "vi" ? "active" : ""}`} onClick={() => setLang("vi")}>VN</button><button type="button" className={`lang-btn-pill ${lang === "en" ? "active" : ""}`} onClick={() => setLang("en")}>EN</button></div></div>
         </nav>
 
         <div className="header-actions-pill">
@@ -161,38 +162,9 @@ export default function CustomerLayout({
             <button type="button" className={`lang-btn-pill ${lang === "en" ? "active" : ""}`}
               onClick={() => setLang("en")} title="English">EN</button>
           </div>
-          {!preview && <NotificationBell />}
-          {isAuthenticated && <><Link className="customer-account-shortcut" to="/account">{lang === "en" ? "Vehicles & bookings" : "Xe & đặt chỗ"}</Link><Link className="customer-account-shortcut" to="/security">{lang === "en" ? "Security" : "Bảo mật"}</Link></>}
+          <NotificationBell open={popover === "notifications"} onOpenChange={open => setPopover(open ? "notifications" : null)} />
           {isAuthenticated ? (
-            <div className="user-profile-pill">
-              <span className="avatar-circle-pill"><User size={15} /></span>
-              <span className="user-info-pill">
-                <span className="user-name-pill">{user?.fullName || user?.userName}</span>
-                <span className="user-role-pill">{roleLabel}</span>
-              </span>
-              {portalPath && (
-                <Link
-                  to={portalPath}
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    padding: "4px 9px",
-                    borderRadius: "9999px",
-                    background: "rgba(56, 189, 248, 0.15)",
-                    color: "#38bdf8",
-                    border: "1px solid rgba(56, 189, 248, 0.3)",
-                    textDecoration: "none",
-                    whiteSpace: "nowrap",
-                  }}
-                  title={portalPath.includes("staff") ? "Vào trang Staff Operations" : "Vào trang Admin Dashboard"}
-                >
-                  {portalPath.includes("staff") ? "Staff" : "Admin"}
-                </Link>
-              )}
-              <button type="button" className="logout-btn-pill" title={t("nav.logout")} aria-label={t("nav.logout")} onClick={requestLogout}>
-                <LogOut size={14} />
-              </button>
-            </div>
+            <CustomerAccountMenu open={popover === "account"} onOpenChange={open => setPopover(open ? "account" : null)} onLogout={requestLogout} portalPath={portalPath} />
           ) : (
             <div className="auth-btns-pill">
               <Link className="auth-btn-pill-login" to="/login">{t("nav.login")}</Link>
@@ -207,7 +179,7 @@ export default function CustomerLayout({
             aria-label={mobileMenuOpen ? "Đóng menu" : "Mở menu"}
             aria-expanded={mobileMenuOpen}
             aria-controls="customer-main-nav"
-            onClick={() => setMobileMenuOpen(open => !open)}
+            onClick={() => { setMobileMenuOpen(open => !open); setPopover(null); }}
           >
             {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>

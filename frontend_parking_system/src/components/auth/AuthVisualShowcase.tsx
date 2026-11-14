@@ -12,8 +12,7 @@ export default function AuthVisualShowcase({ recovery = false }: { recovery?: bo
         </div>
         <ol className="auth-recovery-steps" aria-label="Các bước khôi phục mật khẩu">
           <li><span>01</span>Email</li>
-          <li><span>02</span>Mã OTP</li>
-          <li><span>03</span>Mật khẩu mới</li>
+          <li><span>02</span>Mã OTP & mật khẩu mới</li>
         </ol>
       </div>
     );

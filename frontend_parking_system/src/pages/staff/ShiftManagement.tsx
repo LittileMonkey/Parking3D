@@ -1,603 +1,163 @@
 import { useEffect, useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom";
-import { RotateCcw, PlayCircle, Send, CheckCircle2, Clock, AlertTriangle, UserCheck } from "lucide-react";
+import { Clock, Plus, RotateCcw, CheckCircle2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useIdempotencyKey } from "../../hooks/useIdempotencyKey";
-import { api, ApiError, request, type ShiftHandoverDto } from "../../services/api";
+import { api, ApiError, type ShiftHandoverDto, type ShiftHandoverSummaryDto, type ShiftHandoverHistoryItemDto } from "../../services/api";
 import { operations } from "../../services/operations";
-
-type Shift = { id: string; lotId: string; staffUserId: string; startedAt: string };
-interface RosterMember { staffUserId: string; name: string; roleCode?: string }
-
+import { StaffDialog, StaffPagination, StaffStatus, handoverStatuses, historyActions, staffDate } from "../../components/staff/StaffUi";
+import type { StaffContext } from "../../components/staff/StaffLayout";
+type Shift = {
+    id: string;
+    lotId: string;
+    staffUserId: string;
+    startedAt: string;
+};
+const fields = [["completedTasks", "Công việc đã hoàn thành"], ["unresolvedIssues", "Sự cố chưa xử lý"], ["pendingTransactions", "Giao dịch chờ xác nhận"], ["equipmentStatus", "Tình trạng thiết bị"], ["notesForNext", "Lưu ý cho ca tiếp theo"]] as const;
+const emptyForm = { completedTasks: "", unresolvedIssues: "", pendingTransactions: "", equipmentStatus: "", notesForNext: "" };
 export default function ShiftManagement() {
-  const { selectedLotId } = useOutletContext<{ selectedLotId: string }>();
-  const { user } = useAuth();
-  const [shifts, setShifts] = useState<Shift[]>([]);
-  const [handovers, setHandovers] = useState<ShiftHandoverDto[]>([]);
-  const [staffNames, setStaffNames] = useState<Record<string, string>>({});
-  const [historyFilter, setHistoryFilter] = useState<"All" | "PendingConfirmation" | "Confirmed" | "Cancelled">("All");
-  const [receiver, setReceiver] = useState("");
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({
-    completedTasks: "",
-    unresolvedIssues: "",
-    pendingTransactions: "",
-    equipmentStatus: "",
-    notesForNext: "",
-  });
-  const mine = shifts.find((shift) => shift.staffUserId === user?.userId);
-  const [revision, setRevision] = useState(0);
-  const { key: createHandoverKey, renewKey: renewCreateHandoverKey } = useIdempotencyKey("handover");
-  const confirmKeysRef = useRef<Record<string, string>>({});
-
-  useEffect(() => {
-    let current = true;
-    setShifts([]);
-    setHandovers([]);
-    setReceiver("");
-    setError("");
-    if (!selectedLotId) return;
-    const isManager = Boolean(user?.roles?.some(r => r === "PARKING_MANAGER" || r === "ADMIN") || user?.role === "PARKING_MANAGER" || user?.role === "ADMIN");
-    const rosterPromise = isManager
-      ? request<RosterMember[]>(`/api/v1/staff-assignments?lotId=${encodeURIComponent(selectedLotId)}`).catch(() => [] as RosterMember[])
-      : Promise.resolve([] as RosterMember[]);
-
-    Promise.all([
-      operations.shifts(selectedLotId),
-      api.getShiftHandovers(selectedLotId, historyFilter === "All" ? undefined : historyFilter),
-      rosterPromise,
-    ])
-      .then(async ([active, list, roster]) => {
-        const details = await Promise.all(
-          list.items.map((item) => api.getShiftHandoverById(selectedLotId, item.handoverId))
-        );
-        if (current) {
-          const map: Record<string, string> = {};
-          if (user?.userId) {
-            map[user.userId] = user.fullName || user.email || user.userName || "Bạn";
-          }
-          for (const member of roster) {
-            if (member.staffUserId && member.name) map[member.staffUserId] = member.name;
-          }
-          setStaffNames(map);
-          setShifts(active);
-          setHandovers(details);
-        }
-      })
-      .catch((err) => {
-        if (current) setError(err instanceof Error ? err.message : "Không tải được dữ liệu ca trực.");
-      });
-    return () => {
-      current = false;
-    };
-  }, [selectedLotId, revision, historyFilter, user?.userId]);
-
-  const formatStaffLabel = (staffId: string) => {
-    if (staffNames[staffId]) return staffNames[staffId];
-    if (user?.userId === staffId) return user.fullName || user.email || "Bạn";
-    return `Nhân viên #${staffId.slice(0, 8)}`;
-  };
-
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    setError("");
-    setNotice("");
-    const next = shifts.find((shift) => shift.id === receiver);
-    if (!mine || !next) {
-      setError("Cả người giao và nhận phải bắt đầu ca tại bãi này.");
-      return;
-    }
-    if (next.staffUserId === user?.userId) {
-      setError("Người nhận ca phải khác người giao ca.");
-      return;
-    }
-    if (mine.lotId !== selectedLotId || next.lotId !== selectedLotId) {
-      setError("Ca giao và ca nhận phải thuộc cùng bãi đang chọn.");
-      return;
-    }
-    setBusy(true);
-    try {
-      await api.createShiftHandover(
-        selectedLotId,
-        {
-          ...form,
-          senderShiftId: mine.id,
-          receiverShiftId: next.id,
-          receiverUserId: next.staffUserId,
-        },
-        createHandoverKey
-      );
-      setForm({
-        completedTasks: "",
-        unresolvedIssues: "",
-        pendingTransactions: "",
-        equipmentStatus: "",
-        notesForNext: "",
-      });
-      setReceiver("");
-      renewCreateHandoverKey();
-      setNotice("Đã gửi biên bản bàn giao ca.");
-      setRevision((value) => value + 1);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Không lưu được bàn giao.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function startMyShift() {
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      await operations.startShift(selectedLotId);
-      setNotice("Đã mở ca trực mới.");
-      setRevision((value) => value + 1);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Không mở được ca trực.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function confirmHandover(item: ShiftHandoverDto) {
-    setBusy(true);
-    setError("");
-    setNotice("");
-    const cacheKey = `${item.handoverId}:${item.version}`;
-    if (!confirmKeysRef.current[cacheKey]) {
-      confirmKeysRef.current[cacheKey] = crypto.randomUUID();
-    }
-    try {
-      await api.confirmShiftHandover(
-        selectedLotId,
-        item.handoverId,
-        { expectedVersion: item.version },
-        confirmKeysRef.current[cacheKey]
-      );
-      setNotice("Đã xác nhận nhận ca trực.");
-      setRevision((value) => value + 1);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
+    const { selectedLotId } = useOutletContext<StaffContext>();
+    const { user } = useAuth();
+    const [shifts, setShifts] = useState<Shift[]>([]), [items, setItems] = useState<ShiftHandoverSummaryDto[]>([]);
+    const [page, setPage] = useState(1), [total, setTotal] = useState(0), [filter, setFilter] = useState("All"), [revision, setRevision] = useState(0);
+    const [error, setError] = useState(""), [notice, setNotice] = useState(""), [busy, setBusy] = useState(false), [loading, setLoading] = useState(true);
+    const [creating, setCreating] = useState(false), [receiver, setReceiver] = useState(""), [detailId, setDetailId] = useState<string | null>(null);
+    const [form, setForm] = useState(emptyForm);
+    const mine = shifts.find(s => s.staffUserId === user?.userId);
+    const { key, renewKey } = useIdempotencyKey("handover");
+    const staffName = (id: string) => id === user?.userId ? user.fullName || "Bạn" : `Nhân viên #${id.slice(0, 8)}`;
+    useEffect(() => {
+        let current = true;
+        setLoading(true);
+        setError("");
+        Promise.all([operations.shifts(selectedLotId), api.getShiftHandovers(selectedLotId, filter, page, 10)]).then(([active, list]) => {
+            if (current) {
+                setShifts(active);
+                setItems(list.items);
+                setTotal(list.totalCount);
+            }
+        }).catch(err => { if (current)
+            setError(err.message || "Không tải được ca trực."); }).finally(() => { if (current)
+            setLoading(false); });
+        return () => { current = false; };
+    }, [selectedLotId, filter, page, revision]);
+    async function start() {
+        if (busy)
+            return;
+        setBusy(true);
+        setError("");
         try {
-          const latest = await api.getShiftHandoverById(selectedLotId, item.handoverId);
-          setHandovers((prev) => prev.map((row) => (row.handoverId === item.handoverId ? latest : row)));
-          setError(
-            `Xung đột phiên bản (409): Biên bản đã cập nhật lên v${latest.version} (${latest.status}). Vui lòng kiểm tra và xác nhận lại.`
-          );
-        } catch {
-          setRevision((value) => value + 1);
-          setError("Xung đột phiên bản (409). Đã tải lại danh sách biên bản.");
+            await operations.startShift(selectedLotId);
+            setNotice("Đã bắt đầu ca trực.");
+            setRevision(n => n + 1);
         }
-      } else {
-        setError(err instanceof Error ? err.message : "Không xác nhận được bàn giao.");
-      }
-    } finally {
-      setBusy(false);
+        catch (err) {
+            setError(err instanceof Error ? err.message : "Không mở được ca trực.");
+        }
+        finally {
+            setBusy(false);
+        }
     }
-  }
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      {/* Top Shift Status & Action Bar */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 12,
-          padding: "16px 20px",
-          borderRadius: 16,
-          background: "rgba(15, 23, 42, 0.7)",
-          border: "1px solid rgba(255, 255, 255, 0.12)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 10,
-              background: mine ? "rgba(16, 185, 129, 0.2)" : "rgba(245, 158, 11, 0.2)",
-              color: mine ? "#34d399" : "#fbbf24",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Clock size={20} />
-          </div>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#ffffff" }}>
-              {mine ? "Bạn đang trong ca trực hoạt động" : "Bạn chưa bắt đầu ca trực tại bãi này"}
-            </div>
-            <div style={{ fontSize: 12, color: "rgba(255, 255, 255, 0.6)" }}>
-              {mine
-                ? `Bắt đầu lúc: ${new Date(mine.startedAt).toLocaleString("vi-VN")}`
-                : "Bấm 'Bắt đầu ca' để tiếp nhận quyền check-in và bàn giao ca."}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button
-            type="button"
-            className="pm-btn-secondary"
-            disabled={busy || !selectedLotId}
-            onClick={() => setRevision((value) => value + 1)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "9px 16px",
-              borderRadius: 10,
-              background: "rgba(255, 255, 255, 0.08)",
-              border: "1px solid rgba(255, 255, 255, 0.15)",
-              color: "#ffffff",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            <RotateCcw size={15} /> Tải lại
-          </button>
-
-          {!mine && (
-            <button
-              type="button"
-              disabled={busy || !selectedLotId}
-              onClick={() => void startMyShift()}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "9px 18px",
-                borderRadius: 10,
-                background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
-                border: "none",
-                color: "#ffffff",
-                fontSize: 13,
-                fontWeight: 700,
-                cursor: "pointer",
-                boxShadow: "0 4px 14px rgba(16, 185, 129, 0.4)",
-              }}
-            >
-              <PlayCircle size={16} /> Bắt đầu ca trực
-            </button>
-          )}
-        </div>
-      </div>
-
-      {error && (
-        <div
-          style={{
-            background: "rgba(239, 68, 68, 0.18)",
-            border: "1px solid rgba(239, 68, 68, 0.4)",
-            borderRadius: 12,
-            padding: "12px 16px",
-            color: "#fca5a5",
-            fontSize: 13,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-          }}
-        >
-          <AlertTriangle size={16} /> {error}
-        </div>
-      )}
-
-      {notice && (
-        <div
-          style={{
-            background: "rgba(16, 185, 129, 0.18)",
-            border: "1px solid rgba(16, 185, 129, 0.4)",
-            borderRadius: 12,
-            padding: "12px 16px",
-            color: "#86efac",
-            fontSize: 13,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-          }}
-        >
-          <CheckCircle2 size={16} /> {notice}
-        </div>
-      )}
-
-      {/* Main Shift Handover Form Card */}
-      <div
-        style={{
-          background: "rgba(15, 23, 42, 0.75)",
-          backdropFilter: "blur(20px)",
-          border: "1px solid rgba(255, 255, 255, 0.12)",
-          borderRadius: 20,
-          padding: "24px 26px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 16,
-        }}
-      >
-        <div style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.1)", paddingBottom: 12 }}>
-          <h2 style={{ fontSize: 17, fontWeight: 700, color: "#ffffff", margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
-            <UserCheck size={19} color="#38bdf8" /> Tạo biên bản bàn giao ca trực mới
-          </h2>
-          <p style={{ fontSize: 12.5, color: "rgba(255, 255, 255, 0.6)", margin: "4px 0 0 0" }}>
-            Người nhận ca phải đang trong ca trực tại cùng bãi đỗ. Ca của bạn chỉ kết thúc khi nhân viên nhận xác nhận biên bản.
-          </p>
-        </div>
-
-        <form onSubmit={submit}>
-          <fieldset
-            disabled={busy || !mine}
-            style={{ border: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 14 }}
-          >
-            <div>
-              <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "rgba(255, 255, 255, 0.9)", marginBottom: 6 }}>
-                Nhân viên nhận ca trực *
-              </label>
-              <select
-                required
-                className="pm-form-select"
-                style={{
-                  width: "100%",
-                  height: 44,
-                  background: "rgba(10, 15, 26, 0.8)",
-                  border: "1px solid rgba(255, 255, 255, 0.16)",
-                  borderRadius: 10,
-                  color: "#ffffff",
-                  padding: "0 14px",
-                  fontSize: 13.5,
-                  outline: "none",
-                }}
-                value={receiver}
-                onChange={(e) => {
-                  setReceiver(e.target.value);
-                  renewCreateHandoverKey();
-                }}
-              >
-                <option value="">-- Chọn nhân viên nhận đang mở ca --</option>
-                {shifts
-                  .filter((shift) => shift.staffUserId !== user?.userId)
-                  .map((shift) => (
-                    <option key={shift.id} value={shift.id}>
-                      {formatStaffLabel(shift.staffUserId)} · Bắt đầu {new Date(shift.startedAt).toLocaleString("vi-VN")}
-                    </option>
-                  ))}
-              </select>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14 }}>
-              {(
-                [
-                  ["completedTasks", "Công việc đã hoàn thành trong ca"],
-                  ["unresolvedIssues", "Sự cố / Xe tồn chưa xử lý"],
-                  ["pendingTransactions", "Giao dịch tiền mặt / Chờ xác nhận"],
-                  ["equipmentStatus", "Tình trạng Barrier, Camera & Thiết bị"],
-                  ["notesForNext", "Lưu ý quan trọng cho ca tiếp theo"],
-                ] as const
-              ).map(([field, label]) => (
-                <div key={field} style={{ gridColumn: field === "notesForNext" ? "1 / -1" : "auto" }}>
-                  <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "rgba(255, 255, 255, 0.9)", marginBottom: 6 }}>
-                    {label} *
-                  </label>
-                  <textarea
-                    required
-                    maxLength={2000}
-                    rows={field === "notesForNext" ? 3 : 2}
-                    style={{
-                      width: "100%",
-                      background: "rgba(10, 15, 26, 0.8)",
-                      border: "1px solid rgba(255, 255, 255, 0.16)",
-                      borderRadius: 10,
-                      color: "#ffffff",
-                      padding: "10px 14px",
-                      fontSize: 13,
-                      fontFamily: "inherit",
-                      outline: "none",
-                      resize: "vertical",
-                    }}
-                    value={form[field]}
-                    placeholder={`Ghi nhận cụ thể ${label.toLowerCase()}...`}
-                    onChange={(e) => {
-                      setForm({ ...form, [field]: e.target.value });
-                      renewCreateHandoverKey();
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-
-            <button
-              type="submit"
-              disabled={busy || !mine || !receiver}
-              style={{
-                alignSelf: "flex-end",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "11px 24px",
-                borderRadius: 10,
-                background: "linear-gradient(135deg, #06b6d4 0%, #2563eb 100%)",
-                border: "none",
-                color: "#ffffff",
-                fontSize: 14,
-                fontWeight: 700,
-                cursor: busy || !mine || !receiver ? "not-allowed" : "pointer",
-                opacity: busy || !mine || !receiver ? 0.6 : 1,
-                boxShadow: "0 6px 20px rgba(6, 182, 212, 0.35)",
-                marginTop: 6,
-              }}
-            >
-              <Send size={16} /> Gửi biên bản bàn giao
-            </button>
-          </fieldset>
-        </form>
-      </div>
-
-      {/* Handover History List */}
-      <div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: "#ffffff", margin: 0 }}>
-            Lịch sử &amp; Biên bản bàn giao liên quan ({handovers.length})
-          </h2>
-          <select
-            className="pm-form-select"
-            style={{
-              width: "auto",
-              height: 38,
-              background: "rgba(10, 15, 26, 0.8)",
-              border: "1px solid rgba(255, 255, 255, 0.15)",
-              borderRadius: 8,
-              color: "#ffffff",
-              padding: "0 12px",
-              fontSize: 13,
-            }}
-            value={historyFilter}
-            onChange={(e) => setHistoryFilter(e.target.value as typeof historyFilter)}
-            aria-label="Lọc lịch sử bàn giao"
-          >
-            <option value="All">Tất cả trạng thái</option>
-            <option value="PendingConfirmation">Chờ xác nhận</option>
-            <option value="Confirmed">Đã xác nhận hoàn tất</option>
-            <option value="Cancelled">Đã hủy</option>
-          </select>
-        </div>
-
-        {handovers.length === 0 ? (
-          <div
-            style={{
-              padding: "32px 20px",
-              textAlign: "center",
-              borderRadius: 14,
-              background: "rgba(15, 23, 42, 0.5)",
-              border: "1px dashed rgba(255, 255, 255, 0.15)",
-              color: "rgba(255, 255, 255, 0.5)",
-              fontSize: 13.5,
-            }}
-          >
-            Chưa có biên bản bàn giao nào cho bộ lọc hiện tại.
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {handovers.map((item) => {
-              const isPending = item.status === "PendingConfirmation";
-              const isReceiverMe = item.receiverUserId === user?.userId;
-
-              return (
-                <div
-                  key={item.handoverId}
-                  style={{
-                    background: "rgba(15, 23, 42, 0.7)",
-                    backdropFilter: "blur(16px)",
-                    border: isPending && isReceiverMe ? "1px solid #38bdf8" : "1px solid rgba(255, 255, 255, 0.1)",
-                    borderRadius: 16,
-                    padding: "18px 20px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 10,
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span
-                        style={{
-                          padding: "3px 10px",
-                          borderRadius: "9999px",
-                          fontSize: 11.5,
-                          fontWeight: 700,
-                          background:
-                            item.status === "Confirmed"
-                              ? "rgba(16, 185, 129, 0.2)"
-                              : item.status === "Cancelled"
-                              ? "rgba(239, 68, 68, 0.2)"
-                              : "rgba(245, 158, 11, 0.2)",
-                          color:
-                            item.status === "Confirmed"
-                              ? "#34d399"
-                              : item.status === "Cancelled"
-                              ? "#fca5a5"
-                              : "#fbbf24",
-                        }}
-                      >
-                        {item.status === "PendingConfirmation"
-                          ? "Chờ xác nhận"
-                          : item.status === "Confirmed"
-                          ? "Đã xác nhận"
-                          : "Đã hủy"}
-                      </span>
-                      <span style={{ fontSize: 12, color: "rgba(255, 255, 255, 0.5)" }}>
-                        Tạo lúc: {new Date(item.createdAt).toLocaleString("vi-VN")} · Phiên bản v{item.version}
-                      </span>
-                    </div>
-
-                    {isReceiverMe && isPending && (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void confirmHandover(item)}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                          padding: "8px 16px",
-                          borderRadius: 8,
-                          background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
-                          border: "none",
-                          color: "#ffffff",
-                          fontSize: 13,
-                          fontWeight: 700,
-                          cursor: "pointer",
-                          boxShadow: "0 4px 12px rgba(16, 185, 129, 0.35)",
-                        }}
-                      >
-                        <CheckCircle2 size={15} /> Xác nhận nhận ca
-                      </button>
-                    )}
-                  </div>
-
-                  <div style={{ fontSize: 13, color: "rgba(255, 255, 255, 0.8)", display: "flex", gap: 20, flexWrap: "wrap" }}>
-                    <div>
-                      Người giao: <strong style={{ color: "#ffffff" }}>{formatStaffLabel(item.senderUserId)}</strong>
-                    </div>
-                    <div>
-                      Người nhận: <strong style={{ color: "#ffffff" }}>{formatStaffLabel(item.receiverUserId)}</strong>
-                    </div>
-                    {item.confirmedAt && (
-                      <div>
-                        Xác nhận lúc: <span style={{ color: "#86efac" }}>{new Date(item.confirmedAt).toLocaleString("vi-VN")}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-                      gap: 10,
-                      background: "rgba(0, 0, 0, 0.25)",
-                      borderRadius: 10,
-                      padding: "12px 14px",
-                      fontSize: 12.5,
-                      color: "rgba(255, 255, 255, 0.75)",
-                    }}
-                  >
-                    <div><strong style={{ color: "#ffffff" }}>Đã làm:</strong> {item.completedTasks}</div>
-                    <div><strong style={{ color: "#ffffff" }}>Chưa xử lý:</strong> {item.unresolvedIssues}</div>
-                    <div><strong style={{ color: "#ffffff" }}>Giao dịch chờ:</strong> {item.pendingTransactions}</div>
-                    <div><strong style={{ color: "#ffffff" }}>Thiết bị:</strong> {item.equipmentStatus}</div>
-                    <div style={{ gridColumn: "1 / -1" }}>
-                      <strong style={{ color: "#ffffff" }}>Lưu ý ca sau:</strong> {item.notesForNext}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+    async function submit(event: React.FormEvent) {
+        event.preventDefault();
+        if (busy)
+            return;
+        const next = shifts.find(s => s.id === receiver);
+        if (!mine || !next || next.staffUserId === user?.userId || mine.lotId !== selectedLotId || next.lotId !== selectedLotId) {
+            setError("Người giao và người nhận phải có ca đang mở tại cùng bãi.");
+            return;
+        }
+        if (Object.values(form).some(v => !v.trim())) {
+            setError("Điền nội dung cụ thể; nhập ‘Không có’ nếu không có việc tồn.");
+            return;
+        }
+        setBusy(true);
+        setError("");
+        try {
+            await api.createShiftHandover(selectedLotId, { ...form, senderShiftId: mine.id, receiverShiftId: next.id, receiverUserId: next.staffUserId }, key);
+            setForm(emptyForm);
+            setReceiver("");
+            renewKey();
+            setCreating(false);
+            setNotice("Đã gửi biên bản. Ca của bạn kết thúc khi người nhận xác nhận.");
+            setPage(1);
+            setRevision(n => n + 1);
+        }
+        catch (err) {
+            setError(err instanceof Error ? err.message : "Không gửi được bàn giao.");
+        }
+        finally {
+            setBusy(false);
+        }
+    }
+    return <div className="staff-page">
+    <div className="staff-page-heading"><div><span className="staff-eyebrow">TIẾP NỐI CÔNG VIỆC</span><h1>Bàn giao ca trực</h1><p>Ghi lại công việc, đối soát các khoản chờ và chuyển giao rõ ràng cho người nhận ca.</p></div><button className="staff-button" disabled={loading || busy} onClick={() => setRevision(n => n + 1)}><RotateCcw size={16}/>Tải lại</button></div>
+    {error && !creating && <div className="staff-alert error" role="alert">{error}</div>}{notice && <div className="staff-alert success" role="status">{notice}</div>}
+    <section className="staff-panel staff-shift-banner"><div className="staff-row"><Clock size={25}/><div><strong>{mine ? "Bạn đang trong ca trực" : "Bạn chưa bắt đầu ca trực"}</strong><div className="staff-small staff-muted">{mine ? `Bắt đầu ${staffDate(mine.startedAt)}` : "Bắt đầu ca để tiếp nhận và bàn giao công việc tại bãi này."}</div></div></div>{mine ? <button className="staff-primary" onClick={() => { setCreating(true); setError(""); }}><Plus size={17}/>Tạo biên bản</button> : <button className="staff-primary" disabled={busy || loading} onClick={() => void start()}>Bắt đầu ca trực</button>}</section>
+    <section className="staff-panel staff-stack"><div className="staff-row between"><h2>Biên bản liên quan đến bạn</h2><label className="staff-field">Lọc trạng thái bàn giao<select value={filter} onChange={e => { setFilter(e.target.value); setPage(1); }}><option value="All">Tất cả trạng thái</option>{Object.entries(handoverStatuses).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label></div>
+      {loading ? <div className="staff-empty" role="status">Đang tải biên bản…</div> : !items.length ? <div className="staff-empty">Chưa có biên bản phù hợp với bộ lọc.</div> : <div className="staff-handover-list">{items.map(item => <article className="staff-handover-card staff-stack" key={item.handoverId}><div className="staff-row between"><StaffStatus status={item.status} labels={handoverStatuses}/><span className="staff-muted staff-small">{staffDate(item.createdAt)}</span></div><div><strong>{staffName(item.senderUserId)} → {staffName(item.receiverUserId)}</strong><div className="staff-small staff-muted">{item.confirmedAt ? `Đã xác nhận ${staffDate(item.confirmedAt)}` : item.receiverUserId === user?.userId ? "Bạn là người nhận biên bản này." : "Theo dõi phản hồi từ người nhận ca."}</div></div><div><button className="staff-button" onClick={() => setDetailId(item.handoverId)}>Xem biên bản & lịch sử</button></div></article>)}</div>}
+      <StaffPagination page={page} total={total} busy={loading} onChange={setPage}/>
+    </section>
+    {creating && <StaffDialog title="Tạo biên bản bàn giao" onClose={() => { if (!busy) {
+        setCreating(false);
+        setError("");
+    } }}><form className="staff-stack" onSubmit={submit}>{error && <div className="staff-alert error" role="alert">{error}</div>}<p className="staff-muted staff-small">Người nhận cần có ca đang mở tại cùng bãi. Ca của bạn vẫn hoạt động tới khi biên bản được xác nhận.</p><label className="staff-field">Người nhận ca *<select required value={receiver} onChange={e => { setReceiver(e.target.value); renewKey(); }}><option value="">Chọn người nhận đang trong ca</option>{shifts.filter(s => s.staffUserId !== user?.userId).map(s => <option key={s.id} value={s.id}>{staffName(s.staffUserId)} · {staffDate(s.startedAt)}</option>)}</select></label>{shifts.filter(s => s.staffUserId !== user?.userId).length === 0 && <div className="staff-alert">Chưa có nhân viên khác đang mở ca tại bãi này.</div>}<div className="staff-form-grid">{fields.map(([id, label]) => <label className={`staff-field ${id === "notesForNext" ? "full" : ""}`} key={id}>{label} *<textarea required maxLength={2000} rows={3} placeholder="Ghi nội dung hoặc ‘Không có’." value={form[id]} onChange={e => { setForm({ ...form, [id]: e.target.value }); renewKey(); }}/></label>)}</div><button className="staff-primary" disabled={busy || !mine || !receiver}>{busy ? "Đang gửi…" : "Gửi biên bản bàn giao"}</button></form></StaffDialog>}
+    {detailId && <HandoverDetails lotId={selectedLotId} id={detailId} userId={user?.userId || ""} staffName={staffName} onClose={() => setDetailId(null)} onConfirmed={() => { setNotice("Đã xác nhận nhận ca."); setRevision(n => n + 1); }}/>}
+  </div>;
+}
+function HandoverDetails({ lotId, id, userId, staffName, onClose, onConfirmed }: {
+    lotId: string;
+    id: string;
+    userId: string;
+    staffName: (id: string) => string;
+    onClose: () => void;
+    onConfirmed: () => void;
+}) {
+    const [item, setItem] = useState<ShiftHandoverDto | null>(null), [history, setHistory] = useState<ShiftHandoverHistoryItemDto[]>([]);
+    const [page, setPage] = useState(1), [total, setTotal] = useState(0), [error, setError] = useState(""), [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [revision, setRevision] = useState(0);
+    const attempt = useRef<{
+        signature: string;
+        key: string;
+        expiresAt: number;
+    } | null>(null);
+    useEffect(() => { let current = true; setLoading(true); setError(""); Promise.all([api.getShiftHandoverById(lotId, id), api.getShiftHandoverHistory(lotId, id, page, 10)]).then(([record, log]) => { if (current) {
+        setItem(record);
+        setHistory(log.items);
+        setTotal(log.totalCount);
+    } }).catch(err => { if (current)
+        setError(err.message); }).finally(() => { if (current)
+        setLoading(false); }); return () => { current = false; }; }, [lotId, id, page, revision]);
+    async function confirm() {
+        if (!item || busy || loading || item.receiverUserId !== userId || item.status !== "PendingConfirmation")
+            return;
+        const signature = `${id}:${item.version}`;
+        if (!attempt.current || attempt.current.signature !== signature || attempt.current.expiresAt < Date.now())
+            attempt.current = { signature, key: crypto.randomUUID(), expiresAt: Date.now() + 600000 };
+        setBusy(true);
+        setError("");
+        try {
+            const updated = await api.confirmShiftHandover(lotId, id, { expectedVersion: item.version }, attempt.current.key);
+            setItem(updated);
+            onConfirmed();
+            setRevision(n => n + 1);
+        }
+        catch (err) {
+            if (err instanceof ApiError && err.status === 409) {
+                try {
+                    setItem(await api.getShiftHandoverById(lotId, id));
+                }
+                catch {
+                    setItem(null);
+                }
+                setError("Biên bản vừa thay đổi. Kiểm tra nội dung mới trước khi xác nhận lại.");
+            }
+            else
+                setError(err instanceof Error ? err.message : "Không xác nhận được biên bản.");
+        }
+        finally {
+            setBusy(false);
+        }
+    }
+    return <StaffDialog title="Biên bản bàn giao" onClose={() => { if (!busy)
+        onClose(); }}><div className="staff-stack">{error && <div className="staff-alert error" role="alert">{error}<button className="staff-button" disabled={busy} onClick={() => setRevision(n => n + 1)}>Tải lại</button></div>}{loading && <p role="status">Đang tải biên bản…</p>}{item && <><StaffStatus status={item.status} labels={handoverStatuses}/><dl className="staff-detail-grid"><div><dt>Người giao</dt><dd>{staffName(item.senderUserId)}</dd></div><div><dt>Người nhận</dt><dd>{staffName(item.receiverUserId)}</dd></div>{fields.map(([key, label]) => <div key={key}><dt>{label}</dt><dd>{item[key] || "Không có"}</dd></div>)}</dl>{item.receiverUserId === userId && item.status === "PendingConfirmation" && <button className="staff-primary" disabled={busy || loading} onClick={() => void confirm()}><CheckCircle2 size={17}/>{busy ? "Đang xác nhận…" : "Xác nhận nhận ca"}</button>}</>}<h3>Lịch sử bàn giao</h3>{!loading && !error && !history.length && <p className="staff-muted">Chưa có lịch sử thao tác.</p>}<ol className="staff-timeline">{history.map(entry => <li key={entry.id}><strong>{historyActions[entry.action] || entry.action}</strong><div className="staff-small staff-muted">{staffDate(entry.performedAt)} · {staffName(entry.performedByUserId)}</div>{entry.newReceiverUserId && <p>Người nhận: {staffName(entry.newReceiverUserId)}</p>}{entry.reason && <p>{entry.reason}</p>}</li>)}</ol><StaffPagination page={page} total={total} busy={loading || busy} onChange={setPage}/></div></StaffDialog>;
 }

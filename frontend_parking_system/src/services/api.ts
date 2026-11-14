@@ -1,3 +1,6 @@
+import { authStorage } from "./authStorage";
+import { createRegistrationRequest } from "./registration";
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
 export interface BuildingEnvironment {
@@ -51,6 +54,15 @@ export interface RegisterPayload {
   email: string;
   password: string;
   fullName: string;
+  phoneE164: string;
+}
+
+export interface RegistrationResult {
+  id: string;
+  fullName: string;
+  emailNormalized: string;
+  phoneE164: string;
+  roles: string[];
 }
 
 export interface EmailOtpResponse {
@@ -262,9 +274,9 @@ export class ApiError extends Error {
 
 let refreshInFlight: Promise<string | null> | null = null;
 
-async function tryRefreshAccessToken(): Promise<string | null> {
+export async function tryRefreshAccessToken(): Promise<string | null> {
   if (refreshInFlight) return refreshInFlight;
-  const currentRefresh = sessionStorage.getItem("parking.refreshToken");
+  const currentRefresh = authStorage.getItem("parking.refreshToken");
   if (!currentRefresh) return null;
 
   refreshInFlight = (async () => {
@@ -278,10 +290,10 @@ async function tryRefreshAccessToken(): Promise<string | null> {
       const body = (await response.json()) as ApiEnvelope<AuthTokens>;
       const tokens = body.result ?? (body as unknown as AuthTokens);
       const nextAccess = tokens?.accessToken ?? tokens?.token;
-      if (!nextAccess) return null;
-      sessionStorage.setItem("parking.accessToken", nextAccess);
+      if (!nextAccess || body.isSuccess === false || authStorage.getItem("parking.refreshToken") !== currentRefresh) return null;
+      authStorage.setItem("parking.accessToken", nextAccess);
       if (tokens?.refreshToken) {
-        sessionStorage.setItem("parking.refreshToken", tokens.refreshToken);
+        authStorage.setItem("parking.refreshToken", tokens.refreshToken);
       }
       return nextAccess;
     } catch {
@@ -301,7 +313,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
       headers.set("Content-Type", "application/json");
     }
 
-    const token = overrideToken ?? sessionStorage.getItem("parking.accessToken");
+    const token = overrideToken ?? authStorage.getItem("parking.accessToken");
     if (token) headers.set("Authorization", `Bearer ${token}`);
 
     try {
@@ -332,8 +344,9 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     }
   }
 
-  if (!response.ok || body.isSuccess === false) {
-    const serverMessage = [body.message, body.detail, body.title]
+  if (!response.ok || body.isSuccess === false || body.IsSuccess === false) {
+    // Identity's exception middleware serializes its envelope with PascalCase.
+    const serverMessage = [body.message, body.Message, body.detail, body.title]
       .find((value): value is string => typeof value === "string");
     const fallbackMessages: Record<number, string> = {
       401: path === "/api/v1/auth/login" ? "Email hoặc mật khẩu không đúng." : "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
@@ -346,11 +359,12 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
       ?? (response.status >= 500
         ? "Máy chủ API đang gặp lỗi hoặc chưa sẵn sàng. Kiểm tra backend tại localhost:8080 rồi thử lại."
         : fallbackMessages[response.status] ?? `Yêu cầu thất bại (${response.status}).`);
-    const errorCode = typeof body.errorCode === "string" ? body.errorCode : null;
+    const rawCode = body.errorCode ?? body.ErrorCode;
+    const errorCode = typeof rawCode === "string" ? rawCode : null;
     throw new ApiError(message, response.status, errorCode);
   }
 
-  return (body.result ?? body) as T;
+  return (body.result ?? body.Result ?? body) as T;
 }
 
 export const api = {
@@ -581,10 +595,10 @@ export const api = {
     });
   },
 
-  async register(payload: RegisterPayload): Promise<EmailOtpResponse> {
-    return request<EmailOtpResponse>("/api/v1/auth/register", {
+  async register(payload: RegisterPayload): Promise<RegistrationResult> {
+    return request<RegistrationResult>("/api/v1/auth/register", {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify(createRegistrationRequest(payload)),
     });
   },
 
@@ -603,7 +617,7 @@ export const api = {
   },
 
   async logout(): Promise<void> {
-    const refreshToken = sessionStorage.getItem("parking.refreshToken");
+    const refreshToken = authStorage.getItem("parking.refreshToken");
     if (refreshToken) await request<void>("/api/v1/auth/logout", { method: "POST", body: JSON.stringify({ refreshToken }) });
   },
 
@@ -939,6 +953,10 @@ export const api = {
     return request<ShiftHandoverDto>(`/api/v1/parking-lots/${lotId}/shift-handovers/${handoverId}`);
   },
 
+  async getShiftHandoverHistory(lotId: string, handoverId: string, page = 1, pageSize = 10): Promise<{ items: ShiftHandoverHistoryItemDto[]; totalCount: number }> {
+    return request<{ items: ShiftHandoverHistoryItemDto[]; totalCount: number }>(`/api/v1/parking-lots/${encodeURIComponent(lotId)}/shift-handovers/${encodeURIComponent(handoverId)}/history?page=${page}&pageSize=${pageSize}`);
+  },
+
   async createShiftHandover(lotId: string, payload: CreateShiftHandoverApiPayload, idempotencyKey?: string): Promise<ShiftHandoverDto> {
     const headers: Record<string, string> = {};
     if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
@@ -1232,7 +1250,7 @@ export interface IncidentSummaryDto {
   title: string;
   type: string;
   severity: "Low" | "Medium" | "High" | "Critical";
-  status: "Open" | "InProgress" | "Resolved" | "Escalated";
+  status: "Open" | "InProgress" | "Resolved" | "Escalated" | "Cancelled";
   description?: string;
   relatedPlate?: string | null;
   relatedSessionId?: string | null;
@@ -1273,6 +1291,18 @@ export interface CreateIncidentApiPayload {
   relatedGate?: string;
   relatedSessionId?: string;
   evidence?: IncidentEvidenceDto[];
+}
+
+export interface ShiftHandoverHistoryItemDto {
+  id: string;
+  handoverId: string;
+  lotId: string;
+  action: string;
+  oldReceiverUserId?: string | null;
+  newReceiverUserId?: string | null;
+  performedByUserId: string;
+  reason?: string | null;
+  performedAt: string;
 }
 
 export interface ShiftHandoverSummaryDto {

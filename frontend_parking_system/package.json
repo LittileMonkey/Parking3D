@@ -10,7 +10,10 @@
     "test:parking": "node --test src/components/parking/parkingAppearance.test.mjs src/components/parking/parkingRealtime.test.mjs",
     "test:realtime": "node --test src/components/parking/parkingRealtime.test.mjs",
     "test:hold": "node --test src/services/bookingHold.test.mjs",
-    "test:payment": "node --test src/services/paymentReturnContext.test.mjs src/services/staff/staffApi.test.mjs"
+    "test:payment": "node --test src/services/paymentReturnContext.test.mjs src/services/staff/staffApi.test.mjs",
+    "test:staff": "node --test src/services/staff/staffApi.test.mjs src/services/staff/api.staff.test.mjs",
+    "test:registration": "node --test src/services/registration.test.mjs",
+    "test:auth": "node --test src/services/authStorage.test.mjs"
   },
   "dependencies": {
     "@microsoft/signalr": "^9.0.19",

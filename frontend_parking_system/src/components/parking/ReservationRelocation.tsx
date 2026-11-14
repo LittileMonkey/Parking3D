@@ -37,7 +37,7 @@ export default function ReservationRelocation({ lotId, onMoved }: { lotId: strin
   }
 
   return (
-    <section
+    <section className="staff-relocation"
       style={{
         background: 'rgba(15, 23, 42, 0.75)',
         backdropFilter: 'blur(24px)',
