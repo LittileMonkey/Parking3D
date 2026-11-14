@@ -145,7 +145,7 @@ app.MapGet("/api/v1/payments/vnpay/return", async (HttpContext context, IPayment
 
     if(context.Request.Headers.Accept.ToString().Contains("text/html",StringComparison.OrdinalIgnoreCase))
     {
-        var frontend=app.Configuration["Frontend:BaseUrl"]??"http://localhost:3000";
+        var frontend=app.Configuration["Frontend:BaseUrl"]??"http://localhost:5173";
         return Results.Redirect(frontend.TrimEnd('/')+"/payment-return"+context.Request.QueryString);
     }
     var result = await service.HandleVnPayReturnAsync(queryParams, ct);

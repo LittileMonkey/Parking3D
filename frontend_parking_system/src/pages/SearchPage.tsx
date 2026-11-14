@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { ArrowLeft, ArrowRight, Check, Clock3, LocateFixed, MapPin, ParkingCircle, Search, ShieldCheck } from "lucide-react";
 import { ApiError, api, type LotAvailability, type LotLayout3DDto, type ParkingSearchItem, type ParkingLevelAvailability, type UserVehicle } from "../services/api";
 import ParkingViewer, { type ModelLevel } from "../components/parking/ParkingViewer";
 import { applySlotStatusChanges, type SlotStatusChange } from "../components/parking/parkingRealtime";
 import { useParkingHub } from "../components/parking/useParkingHub";
 import { useAuth } from "../context/AuthContext";
 import CustomerLayout from "../components/customer/CustomerLayout";
+import BookingSteps from "../components/customer/BookingSteps";
 import { useIdempotencyKey } from "../hooks/useIdempotencyKey";
 import "./Booking.css";
 
@@ -45,11 +47,11 @@ function getErrorMessage(error: unknown) {
     return error instanceof Error ? error.message : "Đã có lỗi không mong muốn. Vui lòng thử lại.";
   }
 
-  if (error.status === 0) return "Không thể kết nối Gateway. Hãy kiểm tra API đang chạy rồi thử lại.";
+  if (error.status === 0) return "Chưa thể kết nối dịch vụ. Vui lòng kiểm tra kết nối và thử lại.";
   if (error.status === 401) return "Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Hãy đăng nhập lại.";
   if (error.status === 403) return error.message;
   if (error.status === 409) return "Chỗ đỗ vừa thay đổi hoặc không còn khả dụng. Hãy tải lại tình trạng chỗ.";
-  if (error.status === 503) return "Dịch vụ hiện chưa sẵn sàng. Vui lòng thử lại sau.";
+  if (error.status >= 500) return "Chưa thể tải dữ liệu bãi đỗ lúc này. Vui lòng thử lại sau.";
   return error.message;
 }
 
@@ -57,9 +59,24 @@ function formatMoney(amount: number, currency = "VND") {
   return new Intl.NumberFormat("vi-VN", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
 }
 
-export default function SearchPage() {
+const featureLabels: Record<string, string> = {
+  EV_CHARGING: "Sạc xe điện", ACCESSIBLE: "Hỗ trợ tiếp cận", PRIORITY: "Chỗ ưu tiên",
+  COVERED: "Có mái che", NEAR_ELEVATOR: "Gần thang máy", CCTV: "Camera an ninh",
+};
+function featureLabel(value: string) { return featureLabels[value.toUpperCase()] ?? value; }
+function operatingLabel(value: string) {
+  const labels: Record<string, string> = { OPEN: "Đang mở cửa", ACTIVE: "Đang hoạt động", CLOSED: "Đang đóng cửa", TEMPORARILYCLOSED: "Tạm đóng cửa", INACTIVE: "Ngừng hoạt động" };
+  return labels[value.toUpperCase()] ?? value;
+}
+function dateLabel(value: string) {
+  return new Date(value).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+export default function SearchPage({ selection = false }: { selection?: boolean }) {
   const navigate = useNavigate();
+  const { lotId } = useParams();
   const [searchParams] = useSearchParams();
+  const preview = import.meta.env.DEV && searchParams.get("preview") === "1";
   const { isAuthenticated } = useAuth();
   const { key: bookingKey, renewKey: renewBookingKey } = useIdempotencyKey("book");
 
@@ -75,7 +92,7 @@ export default function SearchPage() {
 
   const paramSortBy = searchParams.get("sortBy")?.toUpperCase();
   const paramCriteria = searchParams.get("criteria")?.toLowerCase() || "";
-  const initialSortBy: "NEAREST" | "CHEAPEST" = paramSortBy === "NEAREST" || (!paramSortBy && paramCriteria.includes("nearest") && !paramCriteria.includes("cheapest"))
+  const initialSortBy: "NEAREST" | "CHEAPEST" = !preview && (paramSortBy === "NEAREST" || (!paramSortBy && paramCriteria.includes("nearest") && !paramCriteria.includes("cheapest")))
     ? "NEAREST"
     : "CHEAPEST";
 
@@ -85,11 +102,24 @@ export default function SearchPage() {
     : (Number(paramRadius) >= 1 && Number(paramRadius) <= 50 ? Number(paramRadius) : 5);
 
   const [vehicleType, setVehicleType] = useState<VehicleType>(initialVehicle);
-  const [startsAt, setStartsAt] = useState(() => toLocalDateTime(new Date(Date.now() + 30 * 60_000)));
+  const [startsAt, setStartsAt] = useState(() => {
+    const savedStart = searchParams.get("startsAt");
+    return savedStart && Number.isFinite(new Date(savedStart).getTime())
+      ? savedStart : toLocalDateTime(new Date(Date.now() + 30 * 60_000));
+  });
   const [duration, setDuration] = useState(initialDuration);
   const [sortBy, setSortBy] = useState<"NEAREST" | "CHEAPEST">(initialSortBy);
   const [radiusKm, setRadiusKm] = useState(initialRadius);
-  const [position, setPosition] = useState<{ latitude: number; longitude: number } | null>(null);
+  const initialPosition = useMemo(() => {
+    const lat = searchParams.get("latitude");
+    const lng = searchParams.get("longitude");
+    if (!lat?.trim() || !lng?.trim()) return null;
+    const latitude = Number(lat), longitude = Number(lng);
+    return Number.isFinite(latitude) && Number.isFinite(longitude)
+      && latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180
+      ? { latitude, longitude } : null;
+  }, [searchParams]);
+  const [position, setPosition] = useState<{ latitude: number; longitude: number } | null>(initialPosition);
   const [manualLatitude, setManualLatitude] = useState("");
   const [manualLongitude, setManualLongitude] = useState("");
   const [locationMessage, setLocationMessage] = useState("");
@@ -117,12 +147,19 @@ export default function SearchPage() {
   const [bookingError, setBookingError] = useState("");
   const [isCreatingBooking, setIsCreatingBooking] = useState(false);
   const availabilityRequestId = useRef(0);
+  const searchRequestId = useRef(0);
+  const restoredSelection = useRef(false);
+  const summaryRef = useRef<HTMLElement>(null);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [resumeNotice, setResumeNotice] = useState("");
+  useEffect(() => { window.scrollTo(0, 0); }, []);
 
   const manualLocationEntered = manualLatitude.trim() !== "" || manualLongitude.trim() !== "";
   const parsedLatitude = Number(manualLatitude);
   const parsedLongitude = Number(manualLongitude);
   const searchPosition = manualLocationEntered
-    ? Number.isFinite(parsedLatitude) && Number.isFinite(parsedLongitude)
+    ? manualLatitude.trim() !== "" && manualLongitude.trim() !== ""
+      && Number.isFinite(parsedLatitude) && Number.isFinite(parsedLongitude)
       && parsedLatitude >= -90 && parsedLatitude <= 90
       && parsedLongitude >= -180 && parsedLongitude <= 180
       ? { latitude: parsedLatitude, longitude: parsedLongitude }
@@ -139,6 +176,7 @@ export default function SearchPage() {
   const searchIsCurrent = Boolean(searchSnapshot && searchSnapshot === criteriaSignature);
 
   useEffect(() => {
+    if (initialPosition) setPosition(initialPosition);
     const v = searchParams.get("vehicle") || searchParams.get("vehicleType");
     if (v) {
       setVehicleType(v.toLowerCase().includes("bike") || v.toLowerCase().includes("motor") ? "Motorbike" : "Car");
@@ -149,7 +187,9 @@ export default function SearchPage() {
     }
     const s = searchParams.get("sortBy")?.toUpperCase();
     const c = searchParams.get("criteria")?.toLowerCase() || "";
-    if (s === "NEAREST" || (s !== "CHEAPEST" && c.includes("nearest") && !c.includes("cheapest"))) {
+    if (preview) {
+      setSortBy("CHEAPEST");
+    } else if (s === "NEAREST" || (s !== "CHEAPEST" && c.includes("nearest") && !c.includes("cheapest"))) {
       setSortBy("NEAREST");
     } else if (s === "CHEAPEST" || c.includes("cheapest")) {
       setSortBy("CHEAPEST");
@@ -163,10 +203,10 @@ export default function SearchPage() {
         setRadiusKm(num);
       }
     }
-  }, [searchParams]);
+  }, [searchParams, initialPosition, preview]);
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || preview) {
       setVehicles([]);
       setVehicleId("");
       setVehicleError("");
@@ -187,7 +227,7 @@ export default function SearchPage() {
     });
 
     return () => { active = false; };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, preview]);
 
   const loadAvailability = useCallback(async (lot: ParkingSearchItem, silent = false) => {
     const requestId = ++availabilityRequestId.current;
@@ -207,7 +247,9 @@ export default function SearchPage() {
       if (Number.isNaN(start.getTime())) throw new Error("Vui lòng chọn thời gian bắt đầu hợp lệ.");
       const end = new Date(start.getTime() + duration * 60_000);
       const cachedLayout = layoutCacheRef.current[lot.parkingLotId];
-      const [result, layoutResult] = await Promise.all([
+      const [result, layoutResult] = preview
+        ? [(await import("./bookingPreview")).getPreviewAvailability(lot.parkingLotId, start.toISOString(), end.toISOString(), vehicleType), null] as const
+        : await Promise.all([
         api.getAvailability(lot.parkingLotId, start.toISOString(), end.toISOString(), vehicleType),
         cachedLayout ? Promise.resolve(cachedLayout) : api.getLotLayout3D(lot.parkingLotId).catch(() => null),
       ]);
@@ -216,6 +258,7 @@ export default function SearchPage() {
       }
       if (requestId === availabilityRequestId.current) {
         setAvailability(result);
+        setUpdatedAt(new Date());
         setLotLayout(layoutResult ?? cachedLayout ?? null);
         setAvailabilitySnapshot(criteriaSignature);
         setAvailabilityVehicleType(vehicleType);
@@ -225,6 +268,18 @@ export default function SearchPage() {
         setSelectedSlotId(current => result.levels.some(level =>
           level.slots.some(slot => slot.slotId === current && slot.status.toUpperCase() === "AVAILABLE"
             && slot.supportedVehicleTypes.some(type => normalizeVehicleType(type) === vehicleType))) ? current : "");
+        if (!restoredSelection.current) {
+          restoredSelection.current = true;
+          const requestedSlot = searchParams.get("slot");
+          const requestedLevel = result.levels.find(level => level.slots.some(slot => slot.slotId === requestedSlot
+            && slot.status.toUpperCase() === "AVAILABLE" && slot.supportedVehicleTypes.some(type => normalizeVehicleType(type) === vehicleType)));
+          if (requestedLevel && requestedSlot) {
+            setSelectedLevelCode(requestedLevel.levelCode);
+            setSelectedSlotId(requestedSlot);
+          } else if (requestedSlot) {
+            setResumeNotice("Ô bạn chọn trước đó không còn khả dụng. Vui lòng chọn một ô còn trống khác.");
+          }
+        }
       }
     } catch (cause) {
       if (requestId === availabilityRequestId.current) setAvailabilityError(getErrorMessage(cause));
@@ -234,7 +289,7 @@ export default function SearchPage() {
         setIsRefreshingAvailability(false);
       }
     }
-  }, [startsAt, duration, vehicleType, criteriaSignature]);
+  }, [startsAt, duration, vehicleType, criteriaSignature, searchParams, preview]);
 
   const executeSearch = useCallback(async (
     targetVehicleType: VehicleType,
@@ -245,6 +300,7 @@ export default function SearchPage() {
     targetPosition: { latitude: number; longitude: number } | null,
     targetLotIdOrCode?: string | null
   ) => {
+    const requestId = ++searchRequestId.current;
     setSearchError("");
     setSelectedLot(null);
     setAvailability(null);
@@ -258,7 +314,7 @@ export default function SearchPage() {
       setSearchError("Thời lượng phải từ 30 phút đến 24 giờ.");
       return;
     }
-    if (new Date(targetStartsAt).getTime() <= Date.now()) {
+    if (!Number.isFinite(new Date(targetStartsAt).getTime()) || new Date(targetStartsAt).getTime() <= Date.now()) {
       setSearchError("Thời gian bắt đầu phải ở trong tương lai.");
       return;
     }
@@ -279,7 +335,9 @@ export default function SearchPage() {
     setHasSearched(true);
     setIsSearching(true);
     try {
-      const result = await api.searchParkingLots({
+      const result = preview
+        ? (await import("./bookingPreview")).getPreviewSearch(durationMinutes, targetVehicleType)
+        : await api.searchParkingLots({
         vehicleType: targetVehicleType,
         startTime: new Date(targetStartsAt).toISOString(),
         expectedDuration: durationMinutes,
@@ -287,54 +345,59 @@ export default function SearchPage() {
         radiusKm: targetRadiusKm,
         ...(targetSortBy === "NEAREST" && targetPosition ? targetPosition : {}),
       });
+      if (requestId !== searchRequestId.current) return;
       const items = result.items ?? [];
       setResults(items);
       setTotalCount(result.totalCount ?? items.length);
       setSearchSnapshot(sig);
 
-      const lotTarget = targetLotIdOrCode || searchParams.get("lot");
-      if (lotTarget && lotTarget !== "all" && items.length > 0) {
+      const lotTarget = targetLotIdOrCode;
+      if (selection && lotTarget) {
         const matched = items.find(i =>
-          i.parkingLotId === lotTarget ||
-          i.code?.toLowerCase().includes(lotTarget.toLowerCase()) ||
-          i.name?.toLowerCase().includes(lotTarget.toLowerCase())
+          i.parkingLotId === lotTarget
         );
         if (matched) {
           void loadAvailability(matched);
+        } else {
+          setSearchError("Bãi này không còn phù hợp với khung giờ hoặc loại xe đã chọn. Hãy quay lại để chọn bãi khác.");
         }
       }
     } catch (cause) {
+      if (requestId !== searchRequestId.current) return;
       setResults([]);
       setSearchSnapshot("");
       setSearchError(getErrorMessage(cause));
     } finally {
-      setIsSearching(false);
+      if (requestId === searchRequestId.current) setIsSearching(false);
     }
-  }, [searchParams, loadAvailability]);
+  }, [selection, loadAvailability, preview]);
 
   const submitSearch = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
+    initialSearchTriggered.current = true;
+    // Keep the search URL current so browser Back restores the submitted trip.
+    navigate(`/booking?${tripParams()}`, { replace: true });
     await executeSearch(vehicleType, startsAt, duration, sortBy, radiusKm, searchPosition);
   };
 
   const initialSearchTriggered = useRef(false);
   useEffect(() => {
     if (initialSearchTriggered.current) return;
-    const hasParams = searchParams.has("vehicle") || searchParams.has("duration") || searchParams.has("lot") || searchParams.has("radius") || searchParams.has("sortBy") || searchParams.has("criteria");
+    const hasParams = preview || selection || searchParams.has("vehicle") || searchParams.has("duration") || searchParams.has("lot") || searchParams.has("radius") || searchParams.has("sortBy") || searchParams.has("criteria");
     if (hasParams) {
       initialSearchTriggered.current = true;
-      const initialStart = toLocalDateTime(new Date(Date.now() + 30 * 60_000));
+      const initialStart = startsAt;
       void executeSearch(
         initialVehicle,
         initialStart,
         initialDuration,
         initialSortBy,
         initialRadius,
-        null,
-        searchParams.get("lot")
+        initialPosition,
+        selection ? lotId : null
       );
     }
-  }, [searchParams, executeSearch, initialVehicle, initialDuration, initialSortBy, initialRadius]);
+  }, [searchParams, executeSearch, initialVehicle, initialDuration, initialSortBy, initialRadius, initialPosition, selection, lotId, startsAt, preview]);
 
   const useCurrentLocation = () => {
     setLocationMessage("");
@@ -355,10 +418,14 @@ export default function SearchPage() {
     );
   };
 
-  const [bookingMode, setBookingMode] = useState<"EXACT_SLOT" | "AUTO_SLOT">("EXACT_SLOT");
+  const [bookingMode, setBookingMode] = useState<"EXACT_SLOT" | "AUTO_SLOT">(searchParams.get("mode") === "AUTO_SLOT" ? "AUTO_SLOT" : "EXACT_SLOT");
 
   const createBooking = async () => {
     setBookingError("");
+    if (preview) {
+      setBookingError("Bạn đang xem thử giao diện. Không tạo đặt chỗ hay thanh toán từ dữ liệu mẫu.");
+      return;
+    }
     if (!isAuthenticated) {
       setBookingError("Bạn cần đăng nhập để tạo booking.");
       return;
@@ -516,7 +583,7 @@ export default function SearchPage() {
     });
   }, [vehicleType]);
   const parkingHubStatus = useParkingHub(
-    availabilityIsCurrent,
+    !preview && availabilityIsCurrent,
     selectedLot?.parkingLotId ?? null,
     applyRealtimeStatusChanges,
   );
@@ -525,287 +592,167 @@ export default function SearchPage() {
     ?? compatibleVehicles.find(vehicle => vehicle.isDefault)
     ?? compatibleVehicles[0]
     ?? null;
+  useEffect(() => {
+    renewBookingKey();
+  }, [selectedSlotId, selectedVehicle?.id, bookingMode, startsAt, duration, renewBookingKey]);
 
   useEffect(() => {
-    if (!selectedLot || !availabilityIsCurrent) return;
+    if (preview || !selectedLot || !availabilityIsCurrent) return;
     const timer = window.setInterval(() => void loadAvailability(selectedLot, true), 10_000);
     return () => window.clearInterval(timer);
-  }, [selectedLot, availabilityIsCurrent, startsAt, duration, vehicleType, criteriaSignature]);
+  }, [selectedLot, availabilityIsCurrent, loadAvailability, preview]);
+
+  function tripParams() {
+    const params = new URLSearchParams({ vehicle: vehicleType, startsAt, duration: String(duration), sortBy, radius: String(radiusKm) });
+    if (preview) params.set("preview", "1");
+    if (sortBy === "NEAREST" && searchPosition) {
+      params.set("latitude", String(searchPosition.latitude));
+      params.set("longitude", String(searchPosition.longitude));
+    }
+    return params;
+  }
+  function chooseLot(lot: ParkingSearchItem) {
+    navigate(`/booking/${encodeURIComponent(lot.parkingLotId)}?${tripParams()}`);
+    window.scrollTo(0, 0);
+  }
+  const backToSearch = `/booking?${tripParams()}`;
+  const returnParams = tripParams();
+  if (selectedSlotId) returnParams.set("slot", selectedSlotId);
+  returnParams.set("mode", bookingMode);
+  const returnTo = `/booking/${encodeURIComponent(lotId ?? "")}?${returnParams}`;
+  const loginTo = `/login?${new URLSearchParams({ returnTo })}`;
+  const estimatedFee = selectedLot?.estimatedPricing?.estimatedTotalFee;
+  const estimatedPrice = typeof estimatedFee === "number" && Number.isFinite(estimatedFee)
+    ? formatMoney(estimatedFee, selectedLot?.estimatedPricing.currency ?? "VND") : "Chưa có giá";
+  const canBook = (bookingMode === "AUTO_SLOT" || selectedSlot?.status.toUpperCase() === "AVAILABLE")
+    && Boolean(selectedVehicle) && availabilityIsCurrent && (availability?.availableCount ?? 0) > 0 && !isCreatingBooking;
 
   return (
-    <CustomerLayout>
-      <main className="customer-page">
-      <header className="customer-page-heading">
-        <p className="customer-eyebrow">HÀNH TRÌNH ĐẶT CHỖ</p>
-        <h1>Tìm và đặt chỗ</h1>
-        <p>Tìm bãi, xem tầng và tình trạng slot trực tiếp, chọn xe tài khoản rồi giữ chỗ và theo dõi booking.</p>
-      </header>
+    <CustomerLayout booking preview={preview}>
+      <main className={`customer-page booking-flow-page${selection ? " booking-selection-page" : ""}`}>
+        {preview && <div className="booking-preview-banner" role="note"><div><strong>Chế độ xem thử giao diện</strong><p>Bãi, sơ đồ, giá và tình trạng chỗ đều là dữ liệu mẫu. Không tạo đặt chỗ hoặc thanh toán thật.</p></div><Link className="booking-preview-exit" to="/booking">Thoát xem thử</Link></div>}
+        {selection && <Link className="booking-back-link" to={backToSearch}><ArrowLeft size={16} />Quay lại chọn bãi</Link>}
+        <BookingSteps current={selection ? 2 : 1} />
+        <header className="customer-page-heading">
+          <p className="customer-eyebrow">{selection ? "CHỌN VỊ TRÍ CỦA BẠN" : "MỘT CHỖ ĐỖ, MỌI HÀNH TRÌNH"}</p>
+          <h1>{selection ? selectedLot?.name ?? "Chọn chỗ đỗ của bạn" : "Tìm bãi cho hành trình của bạn."}</h1>
+          <p>{selection ? selectedLot?.address ?? "Chọn ô trên sơ đồ, kiểm tra thông tin rồi tiếp tục thanh toán." : "Chọn thời gian gửi xe. So sánh bãi phù hợp và xem tổng phí dự kiến trước khi đặt."}</p>
+        </header>
 
-      <form className="customer-panel search-panel" id="search-form" onSubmit={submitSearch}>
-        <div className="customer-form-grid">
-          <label className="customer-field">
-            <span>Loại phương tiện</span>
-            <select value={vehicleType} onChange={(event) => setVehicleType(event.target.value as VehicleType)}>
-              <option value="Car">Ô tô</option>
-              <option value="Motorbike">Xe máy</option>
-            </select>
-          </label>
-          <label className="customer-field">
-            <span>Thời gian bắt đầu</span>
-            <input type="datetime-local" value={startsAt} min={toLocalDateTime(new Date())}
-              onChange={(event) => setStartsAt(event.target.value)} required />
-          </label>
-          <label className="customer-field">
-            <span>Thời lượng (phút)</span>
-            <input type="number" min={30} max={1440} step={15} value={duration}
-              onChange={(event) => setDuration(Number(event.target.value))} required />
-          </label>
-          <label className="customer-field">
-            <span>Sắp xếp kết quả</span>
-            <select value={sortBy} onChange={(event) => setSortBy(event.target.value as "NEAREST" | "CHEAPEST")}>
-              <option value="CHEAPEST">Giá thấp nhất</option>
-              <option value="NEAREST">Gần nhất</option>
-            </select>
-          </label>
-          <label className="customer-field">
-            <span>Bán kính (km)</span>
-            <input type="number" min={1} max={50} step={1} value={radiusKm}
-              onChange={(event) => setRadiusKm(Number(event.target.value))} required />
-          </label>
-        </div>
-
-        <div className="customer-search-actions">
-          {sortBy === "NEAREST" && (
-            <div className="booking-manual-location">
-              <button className="customer-button secondary" type="button" onClick={useCurrentLocation}>
-                Lấy vị trí GPS
-              </button>
-              <label className="customer-field">
-                <span>Vĩ độ</span>
-                <input type="number" min={-90} max={90} step="any" value={manualLatitude}
-                  onChange={event => setManualLatitude(event.target.value)} placeholder="10.7769" />
+        {!selection && <>
+          <form className="customer-panel search-panel" id="search-form" onSubmit={submitSearch}>
+            <div className="customer-form-grid">
+              <label className="customer-field"><span>Loại phương tiện</span>
+                <select value={vehicleType} onChange={event => setVehicleType(event.target.value as VehicleType)}>
+                  <option value="Car">Ô tô</option><option value="Motorbike">Xe máy</option>
+                </select>
               </label>
-              <label className="customer-field">
-                <span>Kinh độ</span>
-                <input type="number" min={-180} max={180} step="any" value={manualLongitude}
-                  onChange={event => setManualLongitude(event.target.value)} placeholder="106.7008" />
+              <label className="customer-field"><span>Thời gian vào bãi</span>
+                <input type="datetime-local" value={startsAt} min={toLocalDateTime(new Date())} onChange={event => setStartsAt(event.target.value)} required />
               </label>
-              <span className="customer-help-text" aria-live="polite">
-                {locationMessage || "Không cấp GPS? Nhập tọa độ địa điểm để tính khoảng cách đường chim bay."}
-              </span>
+              <label className="customer-field"><span>Thời lượng gửi (phút)</span>
+                <input type="number" min={30} max={1440} step={15} value={duration} onChange={event => setDuration(Number(event.target.value))} required />
+              </label>
+              <label className="customer-field"><span>Ưu tiên tìm kiếm</span>
+                <select value={sortBy} onChange={event => setSortBy(event.target.value as "NEAREST" | "CHEAPEST")}>
+                  <option value="CHEAPEST">Tổng giá thấp nhất</option>{!preview && <option value="NEAREST">Gần vị trí của bạn</option>}
+                </select>
+              </label>
             </div>
-          )}
-          <button className="customer-button primary" type="submit" disabled={isSearching}>
-            {isSearching ? "Đang tìm..." : "Tìm bãi"}
-          </button>
-        </div>
-        {searchError && (
-          <div className="customer-alert error" role="alert">
-            {searchError} {searchError.includes("đăng nhập") && <Link to="/login">Đăng nhập lại</Link>}
-          </div>
-        )}
-      </form>
-
-      <section className="customer-results">
-        <div className="customer-section-heading">
-          <div><h2>Kết quả tìm kiếm</h2><p>{isSearching ? "Đang tải dữ liệu từ hệ thống..." : hasSearched ? `${totalCount} bãi phù hợp` : "Chưa tìm kiếm"}</p></div>
-          <span className="customer-source-label">Dữ liệu tìm kiếm từ API</span>
-        </div>
-        {!searchIsCurrent && results.length > 0 && (
-          <div className="customer-alert warning" role="status">
-            Tiêu chí đã thay đổi; kết quả, giá và chỗ bên dưới đã cũ. Hãy tìm lại để tiếp tục đặt.
-          </div>
-        )}
-
-        {!isSearching && !searchError && results.length === 0 && (
-          <div className="customer-empty">
-            {hasSearched ? "Chưa có bãi phù hợp. Hãy chỉnh tiêu chí và thử lại." : "Chọn loại xe, thời gian gửi và tiêu chí sắp xếp rồi tìm bãi."}
-          </div>
-        )}
-
-        <div className="customer-result-list">
-          {results.map((lot) => (
-            <article className={`customer-lot-card${selectedLot?.parkingLotId === lot.parkingLotId ? " selected" : ""}`} key={lot.parkingLotId}>
-              <div className="customer-lot-copy">
-                <span className="customer-lot-code">{lot.code || "BÃI ĐỖ"}</span>
-                <h3>{lot.name}</h3>
-                <p>{lot.address || "Địa chỉ chưa được cung cấp"}</p>
-                <div className="customer-lot-facts">
-                  {sortBy === "NEAREST" && <span>{Number(lot.distanceKm).toFixed(2)} km · đường chim bay</span>}
-                  <span>{lot.availableSlots} chỗ đang khả dụng</span>
-                  <span>{lot.operatingStatus}</span>
+            {sortBy === "NEAREST" && <div className="booking-location-options">
+              <div className="booking-location-row">
+                <button className="customer-button secondary" type="button" onClick={useCurrentLocation}><LocateFixed size={17} />Dùng vị trí hiện tại</button>
+                <label className="customer-field"><span>Bán kính tìm kiếm (km)</span>
+                  <input type="number" min={1} max={50} step={1} value={radiusKm} onChange={event => setRadiusKm(Number(event.target.value))} required />
+                </label>
+                <p className="customer-help-text" role="status">{locationMessage || (searchPosition ? "Đã có vị trí tìm kiếm. Khoảng cách tính theo đường chim bay." : "Cho phép truy cập vị trí để tìm bãi gần bạn.")}</p>
+              </div>
+              <details className="booking-coordinate-options"><summary>Nhập tọa độ địa điểm khác</summary>
+                <div className="booking-coordinate-fields">
+                  <label className="customer-field"><span>Vĩ độ</span><input type="number" min={-90} max={90} step="any" value={manualLatitude} onChange={event => setManualLatitude(event.target.value)} placeholder="10.7769" /></label>
+                  <label className="customer-field"><span>Kinh độ</span><input type="number" min={-180} max={180} step="any" value={manualLongitude} onChange={event => setManualLongitude(event.target.value)} placeholder="106.7008" /></label>
                 </div>
-                {lot.supportedFeatures?.length ? <p className="customer-features">{lot.supportedFeatures.join(" · ")}</p> : null}
-              </div>
-              <div className="customer-lot-price">
-                <span>Ước tính · {duration} phút</span>
-                <strong>{typeof lot.estimatedPricing?.estimatedTotalFee === "number"
-                  && Number.isFinite(lot.estimatedPricing.estimatedTotalFee)
-                  ? formatMoney(lot.estimatedPricing.estimatedTotalFee, lot.estimatedPricing.currency ?? "VND")
-                  : "Chưa có giá"}</strong>
-                <small>{lot.estimatedPricing?.billingDetails || "Giá ước tính; bãi xe xác nhận mức phí cuối cùng."}</small>
-                <button className="customer-button secondary" type="button" onClick={() => void loadAvailability(lot)}
-                  disabled={!searchIsCurrent || isSearching}>
-                  {selectedLot?.parkingLotId === lot.parkingLotId ? "Tải lại chỗ trống" : "Chọn bãi"}
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
+              </details>
+            </div>}
+            <div className="customer-search-actions">
+              <p><Clock3 size={16} />{currentRange ? `Dự kiến rời bãi lúc ${dateLabel(currentRange.endsAt)}` : "Chọn thời gian vào và thời lượng gửi xe."}</p>
+              <button className="customer-button primary" type="submit" disabled={isSearching}><Search size={17} />{isSearching ? "Đang tìm bãi…" : "Tìm bãi phù hợp"}</button>
+            </div>
+            {searchError && <div className="customer-alert error" role="alert">{searchError}</div>}
+            {import.meta.env.DEV && !preview && <a className="booking-preview-entry" href="/booking?preview=1">Xem thử giao diện không cần backend<ArrowRight size={15} /></a>}
+          </form>
 
-      {selectedLot && (
-        <section className="customer-panel availability-panel" aria-live="polite">
-          <div className="customer-section-heading">
-            <div><p className="customer-eyebrow">{selectedLot.code || "PARKING LOT"}</p><h2>{selectedLot.name}</h2></div>
-            {availability && <span className="availability-count">{availability.availableCount} / {availability.totalSlots} chỗ trống</span>}
-          </div>
-          <div className="booking-live-status">
-            <p className="customer-help-text">
-              Availability được đồng bộ tự động mỗi 10 giây; máy chủ kiểm tra lại khi giữ chỗ.
-              {isRefreshingAvailability ? " Đang đồng bộ..." : ""}
-            </p>
-            <button className="customer-button secondary" type="button"
-              onClick={() => void loadAvailability(selectedLot)} disabled={isLoadingAvailability || !searchIsCurrent}>
-              Làm mới chỗ
-            </button>
-          </div>
-          {availability && !availabilityIsCurrent && (
-            <div className="customer-alert warning" role="status">
-              Tiêu chí hoặc khung giờ đã thay đổi. Hãy tìm lại bãi rồi tải availability trước khi chọn ô.
-            </div>
-          )}
+          <section className="customer-results" aria-busy={isSearching}>
+            <div className="customer-section-heading"><div><h2>{hasSearched ? "Bãi đỗ dành cho bạn" : "Bắt đầu tìm chỗ đỗ"}</h2><p role="status">{isSearching ? "Đang tìm bãi phù hợp…" : hasSearched ? `${totalCount} bãi phù hợp với thời gian gửi xe` : "Kết quả và tổng phí dự kiến sẽ hiển thị tại đây."}</p></div></div>
+            {!searchIsCurrent && results.length > 0 && <div className="customer-alert warning" role="status">Bạn đã thay đổi tiêu chí. Hãy tìm lại để cập nhật giá và chỗ trống.</div>}
+            {isSearching && <div className="booking-result-skeletons" aria-hidden="true">{[1, 2, 3].map(i => <div key={i} />)}</div>}
+            {!isSearching && !searchError && results.length === 0 && <div className="customer-empty booking-empty-state"><ParkingCircle size={32} /><h3>{hasSearched ? "Chưa tìm thấy bãi phù hợp" : "Hành trình thuận tiện bắt đầu từ đây"}</h3><p>{hasSearched ? "Thử thay đổi giờ vào, thời lượng hoặc phạm vi tìm kiếm." : "Điền thông tin phía trên để xem những bãi đỗ phù hợp với bạn."}</p></div>}
+            {!isSearching && <div className="customer-result-list">
+              {results.map(lot => <article className="customer-lot-card" key={lot.parkingLotId}>
+                <div className="booking-lot-top"><span className="booking-lot-icon"><ParkingCircle size={24} /></span><span className="booking-operating-status">{operatingLabel(lot.operatingStatus)}</span></div>
+                <div className="customer-lot-copy"><span className="customer-lot-code">{lot.code || "BÃI ĐỖ"}</span><h3>{lot.name}</h3>
+                  <p className="booking-lot-address"><MapPin size={15} />{lot.address || "Địa chỉ chưa được cung cấp"}</p>
+                  <div className="customer-lot-facts"><span>{lot.availableSlots} chỗ khả dụng</span>{sortBy === "NEAREST" && <span>{Number(lot.distanceKm).toFixed(2)} km · đường chim bay</span>}</div>
+                  {!!lot.supportedFeatures?.length && <p className="customer-features">{lot.supportedFeatures.map(featureLabel).join(" · ")}</p>}
+                </div>
+                <div className="customer-lot-price"><span>Tổng phí ước tính · {duration} phút</span><strong>{typeof lot.estimatedPricing?.estimatedTotalFee === "number" && Number.isFinite(lot.estimatedPricing.estimatedTotalFee) ? formatMoney(lot.estimatedPricing.estimatedTotalFee, lot.estimatedPricing.currency ?? "VND") : "Chưa có giá"}</strong>
+                  <details className="booking-price-details"><summary>Chi tiết cách tính phí</summary><p>{lot.estimatedPricing?.billingDetails || "Phí cuối cùng được xác định theo chính sách bãi và thời gian gửi thực tế."}</p></details>
+                  <button className="customer-button primary" type="button" onClick={() => chooseLot(lot)} disabled={!searchIsCurrent}>Chọn bãi<ArrowRight size={17} /></button>
+                </div>
+              </article>)}
+            </div>}
+          </section>
+        </>}
 
-          {isLoadingAvailability && <div className="customer-empty" role="status">Đang tải availability từ máy chủ...</div>}
-          {availabilityError && (
-            <div className="customer-alert error" role="alert">
-              {availabilityError} {availabilityError.includes("đăng nhập") && <Link to="/login">Đăng nhập lại</Link>}
-            </div>
-          )}
-          {availability && availabilityIsCurrent && availability.levels.length > 0 && (
-            <label className="customer-field booking-level-picker">
-              <span>Chọn tầng</span>
-              <select value={selectedLevelCode} onChange={event => {
-                setSelectedLevelCode(event.target.value);
-                setSelectedSlotId("");
-              }}>
-                {availability.levels.map(level => (
-                  <option value={level.levelCode} key={level.levelId}>{level.levelName} ({level.levelCode})</option>
-                ))}
-              </select>
-            </label>
-          )}
-          {availability && availabilityIsCurrent && (
-            <p className="booking-realtime-status" role="status" aria-live="polite">
-              {parkingHubStatus === "connected" && "Cập nhật trạng thái ô theo thời gian thực."}
-              {parkingHubStatus === "connecting" && "Đang kết nối cập nhật trạng thái thời gian thực..."}
-              {parkingHubStatus === "reconnecting" && "Đang kết nối lại realtime; trạng thái vẫn được làm mới định kỳ."}
-              {parkingHubStatus === "disconnected" && "Realtime chưa kết nối; trạng thái vẫn được làm mới định kỳ."}
-            </p>
-          )}
-          {availability && availabilityIsCurrent && levelSlots.length === 0 && (
-            <div className="customer-empty">Tầng này không có slot phù hợp với loại xe đã chọn.</div>
-          )}
-          {availability && availabilityIsCurrent && availability.availableCount === 0 && (
-            <div className="customer-alert warning" role="status">
-              Khung giờ này hiện đã hết chỗ khả dụng. Hãy chọn bãi hoặc thời gian khác.
-            </div>
-          )}
-          {levelSlots.length > 0 && availabilityIsCurrent && (
+        {selection && <>
+          <div className="booking-trip-bar"><span>{vehicleType === "Car" ? "Ô tô" : "Xe máy"}</span><span><Clock3 size={16} />{dateLabel(startsAt)}{currentRange && ` → ${dateLabel(currentRange.endsAt)}`}</span><Link to={backToSearch}>Đổi thời gian</Link></div>
+          {isSearching && <div className="customer-panel customer-empty" role="status">Đang kiểm tra giá và chỗ trống cho chuyến đi của bạn…</div>}
+          {searchError && <div className="customer-alert error" role="alert">{searchError}<Link to={backToSearch}>Quay lại tìm bãi</Link></div>}
+          {selectedLot && <section className="availability-panel">
             <div className="booking-map-layout">
-              <section className="booking-map-card" aria-label="Sơ đồ slot bãi đỗ">
-                <ParkingViewer levels={viewerLevels}
-                  selectedLevelCode={selectedLevelCode} selectedId={selectedSlotId || null}
-                  onSelect={slot => {
-                    setSelectedSlotId(slot.slotId);
-                    setBookingError("");
-                  }} />
-                <div className="booking-legend" aria-label="Chú giải trạng thái slot">
-                  <span><i className="available" />Còn chỗ</span>
-                  <span><i className="held" />Đang giữ</span>
-                  <span><i className="occupied" />Đang có xe</span>
-                  <span><i className="maintenance" />Bảo trì</span>
-                  <span><i className="selected" />Đang chọn</span>
+              <section className="booking-map-card" aria-label="Chọn ô đỗ">
+                <div className="booking-map-heading"><div><h2>Chọn chỗ trên sơ đồ</h2><p>Chạm vào ô còn trống hoặc chọn nhanh từ danh sách.</p></div>{availability && <span className="availability-count">{availability.availableCount} chỗ trống</span>}</div>
+                <div className="booking-map-toolbar">
+                  {availability && availabilityIsCurrent && availability.levels.length > 0 && <label className="customer-field booking-level-picker"><span>Tầng đỗ xe</span><select value={selectedLevelCode} onChange={event => { setSelectedLevelCode(event.target.value); setSelectedSlotId(""); }}>
+                    {availability.levels.map(level => <option value={level.levelCode} key={level.levelId}>{level.levelName} ({level.levelCode})</option>)}
+                  </select></label>}
+                  <button className="customer-button secondary" type="button" onClick={() => void loadAvailability(selectedLot, true)} disabled={isLoadingAvailability || isRefreshingAvailability || !searchIsCurrent}>{isRefreshingAvailability ? "Đang cập nhật…" : "Làm mới"}</button>
                 </div>
-                <div className="customer-slot-grid booking-slot-grid" aria-label="Danh sách slot">
-                  {levelSlots.map(slot => (
-                    <button className={`slot-${slot.status.toLowerCase()}${selectedSlotId === slot.slotId ? " selected" : ""}`}
-                      type="button" key={slot.slotId} aria-pressed={selectedSlotId === slot.slotId}
-                        disabled={!availabilityIsCurrent || slot.status.toUpperCase() !== "AVAILABLE"}
-                      onClick={() => {
-                        setSelectedSlotId(slot.slotId);
-                        setBookingError("");
-                      }}>
-                      <strong>{slot.slotCode}</strong>
-                      <span>{slot.zoneCode} · {slotStatusLabel(slot.status)}</span>
-                    </button>
-                  ))}
-                </div>
+                <p className="booking-realtime-status" role="status">{preview ? "Sơ đồ và trạng thái minh họa · Không cập nhật trực tiếp" : <>{updatedAt ? `Cập nhật ${updatedAt.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : "Đang tải chỗ trống…"}{availabilityIsCurrent && (parkingHubStatus === "connected" ? " · Trực tiếp" : " · Tự động làm mới mỗi 10 giây")}</>}</p>
+                {isLoadingAvailability && <div className="customer-empty" role="status">Đang tải sơ đồ và tình trạng chỗ…</div>}
+                {availabilityError && <div className="customer-alert error" role="alert">{availabilityError}</div>}
+                {resumeNotice && <div className="customer-alert warning" role="status">{resumeNotice}</div>}
+                {availability && !availabilityIsCurrent && <div className="customer-alert warning" role="status">Khung giờ hoặc tình trạng chỗ không còn hiệu lực. <Link to={backToSearch}>Tìm lại bãi</Link></div>}
+                {availabilityIsCurrent && availability?.availableCount === 0 && <div className="customer-alert warning" role="status">Khung giờ này đã hết chỗ. Hãy chọn bãi hoặc thời gian khác.</div>}
+                {availabilityIsCurrent && levelSlots.length > 0 && <>
+                  <ParkingViewer levels={viewerLevels} selectedLevelCode={selectedLevelCode} selectedId={selectedSlotId || null} onSelect={slot => { setSelectedSlotId(slot.slotId); setBookingError(""); }} />
+                  <div className="booking-legend" aria-label="Chú giải trạng thái ô đỗ"><span><i className="available" />Còn chỗ</span><span><i className="held" />Đang giữ</span><span><i className="occupied" />Có xe</span><span><i className="maintenance" />Bảo trì</span><span><i className="selected" /><Check size={12} />Đang chọn</span></div>
+                  <details className="booking-slot-list"><summary>Chọn nhanh từ danh sách · {levelSlots.length} ô</summary>
+                    <div className="customer-slot-grid booking-slot-grid" aria-label="Danh sách ô đỗ">{levelSlots.map(slot => <button className={`slot-${slot.status.toLowerCase()}${selectedSlotId === slot.slotId ? " selected" : ""}`} type="button" key={slot.slotId} aria-pressed={selectedSlotId === slot.slotId} disabled={slot.status.toUpperCase() !== "AVAILABLE"} onClick={() => { setSelectedSlotId(slot.slotId); setBookingError(""); }}><strong>{selectedSlotId === slot.slotId && <Check size={13} />}{slot.slotCode}</strong><span>{slotStatusLabel(slot.status)}</span></button>)}</div>
+                  </details>
+                </>}
+                {availabilityIsCurrent && levelSlots.length === 0 && <div className="customer-empty">{availability?.levels.length ? "Tầng này chưa có ô phù hợp với loại xe đã chọn." : "Bãi chưa có dữ liệu sơ đồ. Vui lòng chọn bãi khác."}</div>}
               </section>
-              <aside className="booking-selection-card" aria-live="polite">
-                <h3>Chi tiết slot</h3>
-                {selectedSlot ? (
-                  <>
-                    <strong className="booking-selected-code">{selectedSlot.slotCode}</strong>
-                    <p>{selectedSlot.floorName} · Khu {selectedSlot.zoneCode}</p>
-                    <p className={`booking-status-text slot-${selectedSlot.status.toLowerCase()}`}>
-                      {slotStatusLabel(selectedSlot.status)}
-                    </p>
-                    {selectedSlot.features.length > 0 && <p>{selectedSlot.features.join(" · ")}</p>}
-                  </>
-                ) : <p>Chọn một ô trên sơ đồ 3D hoặc danh sách để xem chi tiết.</p>}
 
-                <label className="customer-field"><span>Cách chọn ô</span>
-                  <select value={bookingMode} disabled={isCreatingBooking} onChange={e => { setBookingMode(e.target.value as "EXACT_SLOT" | "AUTO_SLOT"); renewBookingKey(); }}>
-                    <option value="EXACT_SLOT">Chọn ô trên sơ đồ</option><option value="AUTO_SLOT">Hệ thống chọn ô còn trống</option>
-                  </select>
-                </label>
-                <label className="customer-field booking-vehicle-picker">
-                  <span>Phương tiện trong tài khoản</span>
-                  <select value={selectedVehicle?.id ?? ""} onChange={event => setVehicleId(event.target.value)}
-                    disabled={!isAuthenticated || isLoadingVehicles || compatibleVehicles.length === 0}>
-                    <option value="">
-                      {isLoadingVehicles ? "Đang tải xe..." : "Chọn phương tiện"}
-                    </option>
-                    {compatibleVehicles.map(vehicle => (
-                      <option value={vehicle.id} key={vehicle.id}>
-                        {vehicle.isDefault ? "Mặc định · " : ""}{maskPlate(vehicle.licensePlate)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {vehicleError && (
-                  <div className="customer-alert error" role="alert">
-                    {vehicleError} {vehicleError.includes("đăng nhập") && <Link to="/login">Đăng nhập lại</Link>}
-                  </div>
-                )}
-                {!isAuthenticated && (
-                  <p className="booking-vehicle-note">Đăng nhập để tải phương tiện tài khoản và giữ chỗ. <Link to="/login">Đăng nhập</Link></p>
-                )}
-                {isAuthenticated && !isLoadingVehicles && !vehicleError && compatibleVehicles.length === 0 && (
-                  <p className="booking-vehicle-note">Tài khoản chưa có phương tiện phù hợp. Hãy thêm xe trong hồ sơ tài khoản rồi thử lại.</p>
-                )}
-                {selectedVehicle && <p className="booking-vehicle-note">Biển số được ẩn một phần để bảo vệ thông tin cá nhân.</p>}
-                {bookingError && (
-                  <div className="customer-alert error" role="alert">
-                    {bookingError}
-                    {bookingError.includes("Phiên đăng nhập") && <> <Link to="/login">Đăng nhập lại</Link></>}
-                    {bookingError.includes("đăng nhập") && !bookingError.includes("Phiên đăng nhập") && <> <Link to="/login">Đăng nhập</Link></>}
-                  </div>
-                )}
-                <button className="customer-button primary" type="button" onClick={() => void createBooking()}
-                  disabled={(bookingMode === "EXACT_SLOT" && (!selectedSlot || selectedSlot.status.toUpperCase() !== "AVAILABLE")) || !selectedVehicle
-                    || !availabilityIsCurrent || isCreatingBooking}>
-                  {isCreatingBooking ? "Đang giữ chỗ..." : "Giữ chỗ và tiếp tục thanh toán"}
-                </button>
+              <aside className="booking-selection-card" id="booking-summary" ref={summaryRef} tabIndex={-1}>
+                <p className="customer-eyebrow">KIỂM TRA TRƯỚC KHI ĐẶT</p><h2>Thông tin đặt chỗ</h2>
+                <div className="booking-selected-space"><ParkingCircle size={24} /><div><strong className="booking-selected-code">{bookingMode === "AUTO_SLOT" ? "Tự động chọn ô" : selectedSlot?.slotCode ?? "Chưa chọn ô"}</strong><span>{bookingMode === "AUTO_SLOT" ? "Hệ thống chọn ô phù hợp khi giữ chỗ" : selectedSlot ? `${selectedSlot.floorName} · Khu ${selectedSlot.zoneCode}` : "Chọn ô còn trống trên sơ đồ"}</span></div>{selectedSlot && bookingMode === "EXACT_SLOT" && <Check size={18} />}</div>
+                <dl className="booking-summary-facts"><div><dt>Bãi đỗ</dt><dd>{selectedLot.name}</dd></div><div><dt>Vào bãi</dt><dd>{dateLabel(startsAt)}</dd></div><div><dt>Rời bãi dự kiến</dt><dd>{currentRange ? dateLabel(currentRange.endsAt) : "—"}</dd></div><div><dt>Thời lượng</dt><dd>{duration} phút · {vehicleType === "Car" ? "Ô tô" : "Xe máy"}</dd></div></dl>
+                <label className="customer-field"><span>Cách chọn chỗ</span><select value={bookingMode} disabled={isCreatingBooking} onChange={event => { setBookingMode(event.target.value as "EXACT_SLOT" | "AUTO_SLOT"); renewBookingKey(); }}><option value="EXACT_SLOT">Tự chọn ô trên sơ đồ</option><option value="AUTO_SLOT">Để hệ thống chọn ô phù hợp</option></select></label>
+                {isAuthenticated && !preview && <label className="customer-field booking-vehicle-picker"><span>Phương tiện của bạn</span><select value={selectedVehicle?.id ?? ""} onChange={event => setVehicleId(event.target.value)} disabled={isLoadingVehicles || compatibleVehicles.length === 0}><option value="">{isLoadingVehicles ? "Đang tải phương tiện…" : "Chọn phương tiện"}</option>{compatibleVehicles.map(vehicle => <option value={vehicle.id} key={vehicle.id}>{vehicle.isDefault ? "Mặc định · " : ""}{maskPlate(vehicle.licensePlate)}</option>)}</select></label>}
+                {vehicleError && <div className="customer-alert error" role="alert">{vehicleError} <Link to={loginTo}>Đăng nhập lại</Link></div>}
+                {!preview && isAuthenticated && !isLoadingVehicles && !vehicleError && compatibleVehicles.length === 0 && <p className="booking-vehicle-note">Bạn chưa có phương tiện phù hợp. <Link to="/account">Thêm phương tiện trong tài khoản</Link> rồi quay lại đặt chỗ.</p>}
+                <div className="booking-summary-price"><span>Tổng phí ước tính</span><strong>{estimatedPrice}</strong></div>
+                <details className="booking-price-details"><summary>Cách tính phí</summary><p>{selectedLot.estimatedPricing?.billingDetails || "Phí được ước tính theo thời lượng gửi xe. Mức phí cuối cùng theo chính sách của bãi và thời gian gửi thực tế."}</p></details>
+                {preview ? <p className="booking-vehicle-note">Bạn có thể chọn ô và đổi tầng để xem bố cục. Giá hiển thị chỉ để minh họa.</p> : !isAuthenticated && <p className="booking-vehicle-note">Đăng nhập để chọn phương tiện và tiếp tục. Bãi, thời gian và ô đang chọn sẽ được giữ lại trong lựa chọn của bạn.</p>}
+                {bookingError && <div className="customer-alert error" role="alert">{bookingError}{bookingError.includes("đăng nhập") && <Link to={loginTo}>Đăng nhập lại</Link>}</div>}
+                {preview ? <><button className="customer-button primary booking-preview-disabled" type="button" disabled>Chỉ xem thử · Không tạo đặt chỗ</button><Link className="booking-preview-result-link" to={`/bookings/preview?${new URLSearchParams({ preview: "success", lot: selectedLot.parkingLotId, slot: selectedSlot?.slotCode ?? "A01", vehicle: vehicleType, startsAt, duration: String(duration) })}`}>Xem màn hình thanh toán thành công<ArrowRight size={15} /></Link></> : isAuthenticated ? <button className="customer-button primary" type="button" onClick={() => void createBooking()} disabled={!canBook}>{isCreatingBooking ? "Đang giữ chỗ…" : "Giữ chỗ & thanh toán"}<ArrowRight size={17} /></button> : <Link className="customer-button primary" to={loginTo}>Đăng nhập để tiếp tục<ArrowRight size={17} /></Link>}
+                <p className="booking-check-note"><ShieldCheck size={16} />Chọn ô chưa tạo giữ chỗ. Tình trạng chỗ được kiểm tra lại khi bạn xác nhận.</p>
               </aside>
             </div>
-          )}
-          {availability && availabilityIsCurrent && availability.levels.length === 0 && (
-            <div className="customer-empty">Bãi chưa có dữ liệu tầng và slot.</div>
-          )}
-        </section>
-      )}
+            <div className="booking-mobile-bar"><div><span>{bookingMode === "AUTO_SLOT" ? "Hệ thống chọn ô" : selectedSlot ? `Ô ${selectedSlot.slotCode}` : "Chưa chọn ô"}</span><strong>{estimatedPrice}</strong></div><button className="customer-button primary" type="button" onClick={() => { summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); summaryRef.current?.focus({ preventScroll: true }); }}>Kiểm tra & tiếp tục<ArrowRight size={16} /></button></div>
+          </section>}
+        </>}
       </main>
     </CustomerLayout>
   );

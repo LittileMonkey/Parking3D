@@ -205,6 +205,28 @@ export interface Payment {
   version: number;
 }
 
+export interface BookingPaymentStatus {
+  bookingId: string;
+  paymentId: string;
+  paymentMethod: string;
+  paymentStatus: string;
+  bookingStatus: string;
+  sessionStatus: string;
+  totalAmount: number;
+  currency: string;
+  lastUpdatedAt: string;
+}
+
+export interface VnPayReturnResult {
+  isSuccess: boolean;
+  message: string;
+  txnRef: string;
+  amount: number;
+  bankCode: string;
+  transactionNo: string;
+  responseCode: string;
+}
+
 export interface ApprovedFaqAnswer {
   documentId: string;
   revision: number;
@@ -443,8 +465,27 @@ export const api = {
     });
   },
 
-  async getBooking(bookingId: string): Promise<BookingDetail> {
-    return request<BookingDetail>(`/api/v1/bookings/${encodeURIComponent(bookingId)}`);
+  async getBooking(bookingId: string, signal?: AbortSignal): Promise<BookingDetail> {
+    return request<BookingDetail>(`/api/v1/bookings/${encodeURIComponent(bookingId)}`, { signal });
+  },
+
+  async getBookingPaymentStatus(bookingId: string, signal?: AbortSignal): Promise<BookingPaymentStatus> {
+    return request<BookingPaymentStatus>(`/api/v1/payments/${encodeURIComponent(bookingId)}/status`, { signal });
+  },
+
+  async verifyVnPayReturn(query: string, signal?: AbortSignal): Promise<VnPayReturnResult> {
+    // This anonymous endpoint returns a raw business result. Its isSuccess=false
+    // is a verified payment outcome, not an API envelope failure.
+    const response = await fetch(`${API_BASE_URL}/api/v1/payments/vnpay/return${query}`, {
+      headers: { Accept: "application/json" }, signal,
+    });
+    const body = await response.json();
+    if (!response.ok) throw new ApiError(body.message ?? "Không thể xác minh kết quả VNPay.", response.status);
+    const result = body.result ?? body;
+    if (typeof result.isSuccess !== "boolean" || typeof result.txnRef !== "string" || typeof result.responseCode !== "string") {
+      throw new Error("Kết quả VNPay chưa đầy đủ. Vui lòng kiểm tra lại trạng thái đặt chỗ.");
+    }
+    return result as VnPayReturnResult;
   },
 
   async getBookingCashRequest(bookingId: string, lotId: string): Promise<Payment> {
@@ -766,8 +807,8 @@ export const api = {
   /**
    * [REAL API PAYMENT] Tra cứu biên lai điện tử (E-Receipt) sau thanh toán (SCRUM-72)
    */
-  async getPaymentReceipt(paymentId: string): Promise<PaymentReceiptDto> {
-    return request<PaymentReceiptDto>(`/api/v1/payments/${encodeURIComponent(paymentId)}/receipt`);
+  async getPaymentReceipt(paymentId: string, signal?: AbortSignal): Promise<PaymentReceiptDto> {
+    return request<PaymentReceiptDto>(`/api/v1/payments/${encodeURIComponent(paymentId)}/receipt`, { signal });
   },
 
   /**
@@ -1066,7 +1107,8 @@ export const api = {
 export interface PaymentReceiptDto {
   receiptNumber: string;
   paymentId: string;
-  bookingId: string;
+  bookingId: string | null;
+  sessionId?: string | null;
   lotName: string;
   plateNumber: string;
   paymentMethod: string;

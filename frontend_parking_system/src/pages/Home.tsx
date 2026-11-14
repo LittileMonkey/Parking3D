@@ -1,846 +1,124 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import {
-  ArrowRight,
-  BadgeCheck,
-  Calendar,
-  Car,
-  Check,
-  ChevronDown,
-  Clock,
-  Cpu,
-  CreditCard,
-  Droplets,
-  FileText,
-  Filter,
-  Flame,
-  LogOut,
-  MapPin,
-  Navigation,
-  ParkingCircle,
-  Radio,
-  Scan,
-  Search,
-  ShieldCheck,
-  SlidersHorizontal,
-  Sun,
-  Wind,
-  X,
-  Zap,
-} from "lucide-react";
-import { useAuth } from "../context/AuthContext";
-import { useLanguage } from "../context/LanguageContext";
-import { api, type BuildingEnvironment, type ParkingSlot } from "../services/api";
+import { useEffect, useState, type FormEvent } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowDown, ArrowRight, Car, Check, ChevronDown, Clock3, CreditCard, LocateFixed, MapPin, ParkingCircle, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Bike, Layers3 } from "lucide-react";
 import CustomerLayout from "../components/customer/CustomerLayout";
-
-const parkingPhotos = [
-  {
-    src: "https://images.unsplash.com/photo-1506521781263-d8422e82f27a?auto=format&fit=crop&w=800&q=80",
-    alt: "Bãi đỗ xe tầng hầm với hệ thống đèn dẫn hướng LED từng vị trí",
-    tag: "TẦNG HẦM B1 - TÒA NHÀ MAIN",
-    title: "Đèn dẫn hướng LED từng ô đỗ",
-  },
-  {
-    src: "https://images.unsplash.com/photo-1590674899484-d5640e854abe?auto=format&fit=crop&w=800&q=80",
-    alt: "Cổng kiểm soát xe thông minh với camera ANPR AI mở Barie trong 0.3s",
-    tag: "TRẠM TỐC ĐỘ XUẤT VIỆT",
-    title: "ANPR AI mở Barie trong 0.3s",
-  },
-  {
-    src: "https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=800&q=80",
-    alt: "Trạm sạc xe điện siêu nhanh DC cho phương tiện EV",
-    tag: "KHU SẠC XE ĐIỆN",
-    title: "Trạm sạc nhanh DC thế hệ mới",
-  },
-];
-
-function slotStatus(status: string, lang: string = "vi") {
-  const normalized = status.toLowerCase();
-  if (normalized.includes("available")) return { className: "available", label: lang === "en" ? "Available" : "Còn chỗ" };
-  if (normalized.includes("reserved") || normalized.includes("held")) return { className: "reserved", label: lang === "en" ? "Reserved" : "Đang giữ" };
-  if (normalized.includes("occupied")) return { className: "occupied", label: lang === "en" ? "Occupied" : "Đang có xe" };
-  if (normalized.includes("maintenance")) return { className: "maintenance", label: lang === "en" ? "Maintenance" : "Bảo trì" };
-  return { className: "maintenance", label: status || (lang === "en" ? "Unknown" : "Không rõ") };
-}
-
-const SOLUTIONS = [
-  {
-    icon: <Radio className="w-5 h-5 text-cyan-600" />,
-    title: "Tình Trạng Chỗ Theo Thời Gian Thực",
-    desc: "Cảm biến siêu âm gắn trực tiếp tại tầng ô đỗ xe truyền dữ liệu trực tuyến về gateway IoT kết nối 2 giây/lần qua mạng LoRaWAN/Mesh.",
-    tag: "Cảm biến kép Dual-Sensor",
-  },
-  {
-    icon: <Calendar className="w-5 h-5 text-cyan-600" />,
-    title: "Đặt Trước Vị Trí Đỗ Xe",
-    desc: "Khóa giữ chỗ tự động xem trước 60 phút trước khi đến nơi. Tự động nhận diện khoảng cách xe di chuyển và hoàn tiền linh hoạt nếu hủy chuyến.",
-    tag: "Đảm bảo vị trí chuẩn xác",
-  },
-  {
-    icon: <CreditCard className="w-5 h-5 text-cyan-600" />,
-    title: "Thanh Toán Đa Phương Thức",
-    desc: "Hỗ trợ quét nạp qua MoMo, VNPAY, Viettel Money, thẻ quốc tế Visa/MasterCard và ParkMatrix QuickPay tự động trừ tiền khi nhận diện biển số ra cổng.",
-    tag: "Không dừng tốn một giây",
-  },
-  {
-    icon: <Scan className="w-5 h-5 text-cyan-600" />,
-    title: "Tự Động Nhận Diện Biển Số (ANPR)",
-    desc: "Thuật toán Deep Learning nhận diện kể cả chuẩn biển số mờ/bẩn trong mọi điều kiện ánh sáng, góc nghiêng hay mưa gió. Barie mở tự động dưới 0.3s.",
-    tag: "Edge AI Camera tốc độ cao",
-  },
-  {
-    icon: <Zap className="w-5 h-5 text-cyan-600" />,
-    title: "Quản Lý Đa Phương Tiện & EV",
-    desc: "Định vị phân luồng riêng cho ô tô/xe điện/xe máy/trạm sạc AC/DC, và đồng bộ dòng xe đến/đi, điều hướng dễ dàng không lo tắc nghẽn.",
-    tag: "Tích hợp trụ sạc nhanh",
-  },
-  {
-    icon: <FileText className="w-5 h-5 text-cyan-600" />,
-    title: "Lịch Sử & Hóa Đơn Điện Tử",
-    desc: "Tự động xuất hóa đơn GTGT điện tử chuẩn Tổng cục Thuế ngay khi thanh toán, dễ dàng tra cứu lịch sử hành trình và xuất báo cáo đề xuất.",
-    tag: "Chuẩn hóa hóa đơn điện tử",
-  },
-];
+import HomeFaq from "../components/customer/HomeFaq";
+import LandingParkingPreview from "../components/customer/LandingParkingPreview";
+import { useLanguage } from "../context/LanguageContext";
+import { api, type ParkingLot } from "../services/api";
+import "./Home.css";
 
 export default function Home() {
-  const { logout } = useAuth();
-  const { lang, t } = useLanguage();
-  const [slots, setSlots] = useState<ParkingSlot[]>([]);
-  const [apiState, setApiState] = useState<"loading" | "online" | "offline">("loading");
-  const [showLogout, setShowLogout] = useState(false);
-  const [mapTab, setMapTab] = useState<"map" | "satellite" | "3d">("map");
+  const { lang } = useLanguage();
+  const navigate = useNavigate();
+  const text = (vi: string, en: string) => lang === "en" ? en : vi;
+  const [lots, setLots] = useState<ParkingLot[]>([]);
+  const [catalogState, setCatalogState] = useState<"loading" | "ready" | "error">("loading");
+  const [retry, setRetry] = useState(0);
+  const [lotId, setLotId] = useState("all");
+  const [vehicle, setVehicle] = useState("Car");
+  const [duration, setDuration] = useState("120");
+  const [sortBy, setSortBy] = useState<"CHEAPEST" | "NEAREST">("CHEAPEST");
+  const [radius, setRadius] = useState("5");
+  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState("");
 
-  // Search Filter Criteria States
-  const [searchVehicle, setSearchVehicle] = useState<"car" | "bike" | "ev">("car");
-  const [searchLocation, setSearchLocation] = useState<string>("all");
-  const [searchDuration, setSearchDuration] = useState<string>("120"); // 2 hours
-  const [searchRadius, setSearchRadius] = useState<string>("5"); // 5 km
-  const [selectedFilters, setSelectedFilters] = useState<string[]>(["cheapest"]);
-
-  const toggleFilter = (filterKey: string) => {
-    setSelectedFilters((prev) => {
-      if (filterKey === "nearest") {
-        const withoutCheapest = prev.filter((k) => k !== "cheapest");
-        return withoutCheapest.includes("nearest")
-          ? withoutCheapest.filter((k) => k !== "nearest")
-          : [...withoutCheapest, "nearest"];
-      }
-      if (filterKey === "cheapest") {
-        const withoutNearest = prev.filter((k) => k !== "nearest");
-        return withoutNearest.includes("cheapest")
-          ? withoutNearest.filter((k) => k !== "cheapest")
-          : [...withoutNearest, "cheapest"];
-      }
-      return prev.includes(filterKey)
-        ? prev.filter((k) => k !== filterKey)
-        : [...prev, filterKey];
-    });
-  };
-
-  const [envData, setEnvData] = useState<BuildingEnvironment | null>(null);
   useEffect(() => {
     let active = true;
-    Promise.all([api.checkHealth(), api.getSlots()]).then(([healthy, items]) => {
+    setCatalogState("loading");
+    api.getParkingLots().then(items => {
       if (!active) return;
-      setSlots(items); setApiState(healthy ? "online" : "offline");
-    }).catch(() => { if (active) setApiState("offline"); });
-    async function loadEnvironment() {
-      try { const value = await api.getBuildingEnvironment(); if (active) setEnvData(value); }
-      catch { if (active) setEnvData(null); }
-    }
-    void loadEnvironment();
-    const timer = setInterval(loadEnvironment, 15000);
-    return () => { active = false; clearInterval(timer); };
-  }, []);
+      setLots(items);
+      setCatalogState("ready");
+    }).catch(() => { if (active) setCatalogState("error"); });
+    return () => { active = false; };
+  }, [retry]);
 
-  const handleLogout = async () => {
-    await logout();
-    setShowLogout(false);
+  const bookingUrl = (targetLot = lotId, position?: GeolocationCoordinates, ranking = sortBy) => {
+    const params = new URLSearchParams({ lot: targetLot, vehicle, duration, radius, sortBy: ranking });
+    const start = new Date(Date.now() + 30 * 60_000);
+    params.set("startsAt", new Date(start.getTime() - start.getTimezoneOffset() * 60_000).toISOString().slice(0, 16));
+    if (position) {
+      params.set("latitude", String(position.latitude));
+      params.set("longitude", String(position.longitude));
+    }
+    return `${targetLot === "all" ? "/booking" : `/booking/${encodeURIComponent(targetLot)}`}?${params}`;
   };
 
-  const marqueeTelemetryItems = envData ? (
-    <>
-      <span className="telemetry-item">
-        <span className="live-dot-green" /> <strong>{t("topbar.infra")}</strong> {t("topbar.active")}
-      </span>
-      <span className="bar-divider">•</span>
+  const submitSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLocationError("");
+    if (sortBy === "CHEAPEST") { navigate(bookingUrl()); return; }
+    if (!navigator.geolocation) {
+      setLocationError(text("Trình duyệt chưa hỗ trợ GPS. Hãy chọn Giá phù hợp hoặc nhập tọa độ ở trang tìm kiếm.", "GPS is unavailable. Choose Best price or enter coordinates on the search page."));
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(position => {
+      setLocating(false);
+      navigate(bookingUrl(lotId, position.coords));
+    }, () => {
+      setLocating(false);
+      setLocationError(text("Chưa lấy được vị trí. Hãy cho phép GPS và thử lại, hoặc chọn Giá phù hợp.", "Location is unavailable. Allow GPS and try again, or choose Best price."));
+    }, { timeout: 8000, maximumAge: 60000 });
+  };
 
-      <span className="telemetry-item smoke-item">
-        <Flame size={14} className="text-amber-500 mr-1" />
-        {t("topbar.smoke")} <strong className="val-highlight">{envData.smokeDensity}</strong> ({envData.smokeStatus === "AN TOÀN" ? t("topbar.safe") : t("topbar.warning")})
-      </span>
-      <span className="bar-divider">•</span>
-
-      <span className="telemetry-item aqi-item">
-        <Wind size={14} className="text-teal-600 mr-1" />
-        {t("topbar.air")} <strong className="val-highlight">AQI {envData.airQualityIndex}</strong> - {envData.airQualityIndex <= 50 ? t("topbar.good") : t("topbar.moderate")} | CO₂: {envData.co2Level}
-      </span>
-      <span className="bar-divider">•</span>
-
-      <span className="telemetry-item weather-item">
-        <Sun size={14} className="text-yellow-500 mr-1" />
-        {t("topbar.weather")} <strong>{lang === "en" ? t("topbar.city") : envData.city} {envData.temperature}</strong> ({lang === "en" ? t("topbar.weather_desc") : envData.weatherCondition})
-      </span>
-      <span className="bar-divider">•</span>
-
-      <span className="telemetry-item humidity-item">
-        <Droplets size={14} className="text-cyan-500 mr-1" />
-        {t("topbar.humidity")} <strong>{envData.humidity}</strong>
-      </span>
-      <span className="bar-divider">•</span>
-    </>
-  ) : <span className="telemetry-item">Chưa có dữ liệu cảm biến được xác nhận.</span>;
+  const steps = [
+    { icon: Search, title: text("Tìm bãi phù hợp", "Find your parking"), description: text("Chọn phương tiện, thời lượng và so sánh các bãi theo nhu cầu.", "Choose your vehicle and duration, then compare parking lots.") },
+    { icon: Layers3, title: text("Chọn chỗ & thanh toán", "Choose a space & pay"), description: text("Xem sơ đồ bãi, chọn vị trí và hoàn tất thanh toán trong thời gian giữ chỗ.", "View the layout, choose a space and complete payment before your hold expires.") },
+    { icon: ParkingCircle, title: text("Đến bãi, bắt đầu hành trình", "Arrive and get on with your day"), description: text("Theo dõi đặt chỗ trong tài khoản và dùng mã QR đã xác nhận khi đến bãi.", "Track your booking in your account and use your confirmed QR code on arrival.") },
+  ];
+  const benefits = [
+    { icon: MapPin, title: text("Một nơi, nhiều lựa chọn", "One place, more choices"), description: text("Khám phá các bãi trong hệ thống, xem địa chỉ và chọn điểm đến phù hợp.", "Explore parking lots in the platform and find a location that works for you.") },
+    { icon: CreditCard, title: text("Biết giá trước khi đặt", "Know the estimate before booking"), description: text("So sánh chi phí dự kiến cho đúng thời lượng gửi xe. Giá được tính theo biểu giá từng bãi.", "Compare estimates for your actual parking duration, using each lot’s pricing plan.") },
+    { icon: ShieldCheck, title: text("Chủ động mỗi lượt đỗ", "Stay in control of your visit"), description: text("Quản lý phương tiện, theo dõi trạng thái và xem lại thông tin đặt chỗ trong tài khoản.", "Manage your vehicles, track status and find your bookings in your account.") },
+  ];
 
   return (
-    <CustomerLayout
-      onRequestLogout={() => setShowLogout(true)}
-      topSlot={
-        <div className="top-status-bar marquee-status-bar" aria-label="Bảng tin môi trường và cảm biến bãi đỗ xe trực tuyến">
-          <div className="marquee-track">
-            <div className="marquee-content">{marqueeTelemetryItems}</div>
-            <div className="marquee-content" aria-hidden="true">{marqueeTelemetryItems}</div>
+    <CustomerLayout landing>
+      <main className="lp-home">
+        <section className="lp-hero" aria-labelledby="lp-title">
+          <div className="lp-container lp-hero-grid">
+            <div className="lp-hero-copy">
+              <p className="lp-eyebrow"><span /> {text("MỖI HÀNH TRÌNH, MỘT CHỖ ĐỖ", "A SPACE FOR EVERY JOURNEY")}</p>
+              <h1 id="lp-title">{text("Tìm chỗ đỗ phù hợp.", "Find your parking space.")}<br /><span>{text("Nhẹ nhàng mỗi hành trình.", "Make every journey easier.")}</span></h1>
+              <p className="lp-hero-description">{text("Tìm bãi, xem giá dự kiến và đặt chỗ trước. Để việc đỗ xe trở thành phần đơn giản nhất trong ngày của bạn.", "Find parking, compare estimates and book ahead. Make parking the easiest part of your day.")}</p>
+              <a className="lp-text-link" href="#how-it-works">{text("Khám phá cách đặt chỗ", "See how it works")} <ArrowDown size={16} /></a>
+              <div className="lp-hero-points"><span><Check size={15} />{text("Ô tô & xe máy", "Cars & motorbikes")}</span><span><Check size={15} />{text("Giá theo thời lượng", "Duration-based estimates")}</span><span><Check size={15} />{text("Sơ đồ trực quan", "Visual lot layouts")}</span></div>
+            </div>
+            <LandingParkingPreview />
           </div>
-        </div>
-      }
-    >
-
-      <main>
-        {/* ── 3. Light Hero Section with Clarified Background & Animations ── */}
-        <section className="hero-light-section hero-animated-parking-bg">
-          {/* Clean High-Resolution Parking Background */}
-          <div className="parking-motion-bg">
-            <div className="hero-bg-overlay-glass" />
-          </div>
-
-
-          <div className="page-width hero-light-content">
-            <div className="hero-pill-badge">
-              <span className="pill-dot" />
-              {t("hero.badge")}
-            </div>
-
-            <h1 className="hero-light-title">
-              {t("hero.title_part1")}
-              <br />
-              {t("hero.title_part2")} <span className="text-gradient-cyan">{t("hero.title_part3")}</span>
-            </h1>
-
-            {/* Interactive Multi-Criteria Search Card */}
-            <div className="search-interactive-card">
-              {/* Miniature Car Circling Around Search Card Perimeter */}
-              <div className="card-perimeter-car-track" aria-hidden="true">
-                <div className="card-patrol-car">
-                  {/* Thought Bubble Question Mark */}
-                  <div className="patrol-bubble">
-                    <span className="patrol-q">?</span>
-                  </div>
-
-                  {/* Dual Headlights Light Cones */}
-                  <div className="patrol-headlights" />
-
-                  {/* Top-Down View Cyber Car SVG */}
-                  <svg className="patrol-car-svg" viewBox="0 0 54 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="2" y="2" width="50" height="24" rx="7" fill="rgba(0,0,0,0.3)" />
-                    <rect x="7" y="0" width="10" height="3" rx="1.5" fill="#1e293b" />
-                    <rect x="37" y="0" width="10" height="3" rx="1.5" fill="#1e293b" />
-                    <rect x="7" y="25" width="10" height="3" rx="1.5" fill="#1e293b" />
-                    <rect x="37" y="25" width="10" height="3" rx="1.5" fill="#1e293b" />
-                    <rect x="3" y="2.5" width="48" height="23" rx="7" fill="url(#patrolBodyGrad)" stroke="#38bdf8" strokeWidth="1" />
-                    <path d="M42 5.5C45 9 45 19 42 22.5" stroke="#bae6fd" strokeWidth="1" strokeLinecap="round" opacity="0.6" />
-                    <path d="M35 5C38 8 38 20 35 23H32C34 18 34 10 32 5H35Z" fill="#0f172a" />
-                    <path d="M34 6.5C36 9 36 19 34 21.5" stroke="#38bdf8" strokeWidth="1" opacity="0.8" />
-                    <rect x="18" y="5" width="14" height="18" rx="3" fill="#0f172a" />
-                    <rect x="19.5" y="6.5" width="11" height="15" rx="2" fill="#0369a1" fillOpacity="0.4" />
-                    <path d="M15 5C13 8 13 20 15 23H17C15 18 15 10 17 5H15Z" fill="#0f172a" />
-                    <rect x="49" y="4" width="2" height="4" rx="1" fill="#fef08a" />
-                    <rect x="49" y="20" width="2" height="4" rx="1" fill="#fef08a" />
-                    <rect x="3" y="4" width="1.5" height="4" rx="0.75" fill="#ef4444" />
-                    <rect x="3" y="20" width="1.5" height="4" rx="0.75" fill="#ef4444" />
-                    <defs>
-                      <linearGradient id="patrolBodyGrad" x1="3" y1="14" x2="51" y2="14" gradientUnits="userSpaceOnUse">
-                        <stop stopColor="#0369a1" />
-                        <stop offset="0.5" stopColor="#0284c7" />
-                        <stop offset="1" stopColor="#38bdf8" />
-                      </linearGradient>
-                    </defs>
-                  </svg>
-                </div>
+          <div className="lp-container">
+            <form className="lp-search" onSubmit={submitSearch} aria-label={text("Tìm bãi đỗ xe", "Find parking")}>
+              <div className="lp-search-heading"><h2>{text("Bạn cần đỗ xe ở đâu?", "Where are you parking?")}</h2><span><LocateFixed size={14} />{text("Tìm theo nhu cầu của bạn", "Find what works for you")}</span></div>
+              <div className="lp-search-grid">
+                <label className="lp-field lp-location-field" htmlFor="search-location"><span><MapPin size={15} />{text("Bãi đỗ", "Parking lot")}</span><select id="search-location" value={lotId} onChange={event => setLotId(event.target.value)}><option value="all">{text("Tất cả bãi trong hệ thống", "All parking lots")}</option>{lots.map(lot => <option value={lot.id} key={lot.id}>{lot.name}</option>)}</select></label>
+                <label className="lp-field" htmlFor="search-vehicle"><span>{vehicle === "Car" ? <Car size={15} /> : <Bike size={15} />}{text("Phương tiện", "Vehicle")}</span><select id="search-vehicle" value={vehicle} onChange={event => setVehicle(event.target.value)}><option value="Car">{text("Ô tô", "Car")}</option><option value="Motorbike">{text("Xe máy", "Motorbike")}</option></select></label>
+                <label className="lp-field" htmlFor="search-duration"><span><Clock3 size={15} />{text("Thời lượng gửi", "Parking duration")}</span><select id="search-duration" value={duration} onChange={event => setDuration(event.target.value)}>{[30, 60, 120, 240, 480, 1440].map(minutes => <option value={minutes} key={minutes}>{minutes === 30 ? text("30 phút", "30 minutes") : text(`${minutes / 60} giờ`, `${minutes / 60} hours`)}</option>)}</select></label>
+                <button className="lp-button lp-primary" type="submit" disabled={locating}><Search size={18} />{locating ? text("Đang lấy vị trí…", "Locating…") : text("Tìm bãi đỗ", "Find parking")}<ArrowRight size={17} /></button>
               </div>
-              {/* Vehicle Type Tabs */}
-              <div className="search-vehicle-tabs">
-                <button
-                  type="button"
-                  className={`vehicle-tab-btn ${searchVehicle === "car" ? "active" : ""}`}
-                  onClick={() => setSearchVehicle("car")}
-                >
-                  <Car size={16} />
-                  <span>{lang === "en" ? "Car 4 - 7 Seats" : "Ô tô 4 - 7 chỗ"}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`vehicle-tab-btn ${searchVehicle === "bike" ? "active" : ""}`}
-                  onClick={() => setSearchVehicle("bike")}
-                >
-                  <Navigation size={16} />
-                  <span>{lang === "en" ? "Motorbike" : "Xe máy"}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`vehicle-tab-btn ${searchVehicle === "ev" ? "active" : ""}`}
-                  onClick={() => setSearchVehicle("ev")}
-                >
-                  <Zap size={16} />
-                  <span>{lang === "en" ? "EV Charging Station" : "Trạm sạc xe điện EV"}</span>
-                </button>
-              </div>
-
-              {/* Search Inputs Grid */}
-              <div className="search-inputs-grid">
-                {/* Location / Lot Selector */}
-                <div className="search-field-group">
-                  <label htmlFor="search-location">
-                    <MapPin size={13} className="field-icon-muted" />
-                    <span>{lang === "en" ? "LOCATION / PARKING LOT" : "KHU VỰC / BÃI ĐỖ XE"}</span>
-                  </label>
-                  <div className="search-select-wrapper">
-                    <select
-                      id="search-location"
-                      value={searchLocation}
-                      onChange={(e) => setSearchLocation(e.target.value)}
-                      className="search-field-select"
-                    >
-                      <option value="all">{lang === "en" ? "All Facilities (HCMC)" : "Tất cả bãi đỗ xe (TP. Hồ Chí Minh)"}</option>
-                      <option value="landmark81">{lang === "en" ? "Landmark 81 Central Park" : "Landmark 81 Central Park (Bình Thạnh)"}</option>
-                      <option value="bitexco">{lang === "en" ? "Bitexco Financial Tower" : "Bitexco Financial Tower (Quận 1)"}</option>
-                      <option value="ftown3">{lang === "en" ? "F-Town 3 (Hi-Tech Park)" : "F-Town 3 (Khu Công Nghệ Cao)"}</option>
-                      <option value="tan_son_nhat">{lang === "en" ? "Tan Son Nhat Airport - TCP" : "Sân bay Tân Sơn Nhất - Nhà xe TCP"}</option>
-                    </select>
-                    <ChevronDown size={14} className="select-arrow" />
-                  </div>
-                </div>
-
-                {/* Duration Selector */}
-                <div className="search-field-group">
-                  <label htmlFor="search-duration">
-                    <Clock size={13} className="field-icon-muted" />
-                    <span>{lang === "en" ? "EXPECTED DURATION" : "THỜI LƯỢNG DỰ KIẾN"}</span>
-                  </label>
-                  <div className="search-select-wrapper">
-                    <select
-                      id="search-duration"
-                      value={searchDuration}
-                      onChange={(e) => setSearchDuration(e.target.value)}
-                      className="search-field-select"
-                    >
-                      <option value="60">{lang === "en" ? "1 Hour (Short stay)" : "1 giờ (Tiêu chuẩn)"}</option>
-                      <option value="120">{lang === "en" ? "2 - 4 Hours (Half-day)" : "2 - 4 giờ (Nửa ngày)"}</option>
-                      <option value="480">{lang === "en" ? "4 - 8 Hours (Full-day)" : "4 - 8 giờ (Trong ngày)"}</option>
-                      <option value="1440">{lang === "en" ? "Overnight (24h)" : "Gửi qua đêm (Overnight)"}</option>
-                    </select>
-                    <ChevronDown size={14} className="select-arrow" />
-                  </div>
-                </div>
-
-                {/* Search Radius */}
-                <div className="search-field-group">
-                  <label htmlFor="search-radius">
-                    <SlidersHorizontal size={13} className="field-icon-muted" />
-                    <span>{lang === "en" ? "SEARCH RADIUS" : "PHẠM VI TÌM KIẾM"}</span>
-                  </label>
-                  <div className="search-select-wrapper">
-                    <select
-                      id="search-radius"
-                      value={searchRadius}
-                      onChange={(e) => setSearchRadius(e.target.value)}
-                      className="search-field-select"
-                    >
-                      <option value="2">{lang === "en" ? "< 2 km (Walking)" : "Bán kính < 2 km (Đi bộ)"}</option>
-                      <option value="5">{lang === "en" ? "< 5 km (Recommended)" : "Bán kính < 5 km (Tối ưu)"}</option>
-                      <option value="10">{lang === "en" ? "< 10 km (Expanded)" : "Bán kính < 10 km (Mở rộng)"}</option>
-                      <option value="all">{lang === "en" ? "Entire city" : "Toàn thành phố"}</option>
-                    </select>
-                    <ChevronDown size={14} className="select-arrow" />
-                  </div>
-                </div>
-
-                {/* Submit Search Button */}
-                <div className="search-btn-col">
-                  <Link
-                    to={`/booking?lot=${searchLocation}&vehicle=${searchVehicle}&duration=${searchDuration}&radius=${searchRadius}&criteria=${selectedFilters.join(",")}&sortBy=${selectedFilters.includes("nearest") ? "NEAREST" : "CHEAPEST"}`}
-                    className="search-action-btn"
-                  >
-                    <Search size={18} />
-                    <span>{lang === "en" ? "Find Parking" : "Tìm Bãi Đỗ"}</span>
-                    <ArrowRight size={15} />
-                  </Link>
-                </div>
-              </div>
-
-              {/* Priority Criteria Filter Row */}
-              <div className="search-criteria-row">
-                <span className="criteria-label">
-                  <Filter size={13} className="field-icon-muted mr-1" />
-                  {lang === "en" ? "Priority Criteria:" : "Tiêu chí ưu tiên:"}
-                </span>
-                <div className="criteria-chips-list">
-                  <button
-                    type="button"
-                    className={`criteria-chip ${selectedFilters.includes("nearest") ? "is-selected" : ""}`}
-                    onClick={() => toggleFilter("nearest")}
-                  >
-                    <Navigation size={12} className="chip-icon" />
-                    <span>{lang === "en" ? "Nearest (GPS)" : "Gần tôi nhất (GPS)"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`criteria-chip ${selectedFilters.includes("cheapest") ? "is-selected" : ""}`}
-                    onClick={() => toggleFilter("cheapest")}
-                  >
-                    <CreditCard size={12} className="chip-icon" />
-                    <span>{lang === "en" ? "Cheapest Price" : "Giá thấp nhất"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`criteria-chip ${selectedFilters.includes("available") ? "is-selected" : ""}`}
-                    onClick={() => toggleFilter("available")}
-                  >
-                    <Check size={12} className="chip-icon" />
-                    <span>{lang === "en" ? "Most Slots Available" : "Nhiều chỗ trống nhất"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`criteria-chip ${selectedFilters.includes("ev_station") ? "is-selected" : ""}`}
-                    onClick={() => toggleFilter("ev_station")}
-                  >
-                    <Zap size={12} className="chip-icon" />
-                    <span>{lang === "en" ? "Fast EV Charger" : "Có trụ sạc EV"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`criteria-chip ${selectedFilters.includes("sheltered") ? "is-selected" : ""}`}
-                    onClick={() => toggleFilter("sheltered")}
-                  >
-                    <ShieldCheck size={12} className="chip-icon" />
-                    <span>{lang === "en" ? "Sheltered & Security" : "Có mái che & Camera AI"}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* High-Contrast Luminous Trust Bar */}
-            <div className="hero-trust-bar">
-              <div className="trust-item">
-                <BadgeCheck size={16} className="trust-icon" />
-                <span>{t("hero.trust_1")}</span>
-              </div>
-              <div className="trust-item">
-                <ShieldCheck size={16} className="trust-icon" />
-                <span>{t("hero.trust_2")}</span>
-              </div>
-              <div className="trust-item">
-                <Zap size={16} className="trust-icon" />
-                <span>{t("hero.trust_3")}</span>
-              </div>
-            </div>
+              <details className="lp-advanced"><summary><SlidersHorizontal size={15} />{text("Tùy chọn tìm kiếm", "Search options")}<ChevronDown size={15} /></summary><div className="lp-options-grid"><fieldset><legend>{text("Sắp xếp theo", "Sort by")}</legend><label><input type="radio" name="home-sort" value="CHEAPEST" checked={sortBy === "CHEAPEST"} onChange={() => { setSortBy("CHEAPEST"); setLocationError(""); }} />{text("Giá phù hợp", "Best price")}</label><label><input type="radio" name="home-sort" value="NEAREST" checked={sortBy === "NEAREST"} onChange={() => setSortBy("NEAREST")} />{text("Gần tôi nhất · cần GPS", "Nearest to me · requires GPS")}</label></fieldset><label className="lp-field" htmlFor="search-radius"><span>{text("Bán kính khi dùng GPS", "Radius when using GPS")}</span><select id="search-radius" value={radius} onChange={event => setRadius(event.target.value)}>{[2, 5, 10, 20].map(km => <option key={km} value={km}>{km} km</option>)}</select></label></div></details>
+              {locationError && <p className="lp-inline-error" role="alert">{locationError} <Link to="/booking">{text("Mở tìm kiếm", "Open search")}</Link></p>}
+            </form>
           </div>
         </section>
 
-        {/* ── 4. Stats Bar (4 White Cards) ── */}
-        <section className="stats-light-section">
-          <div className="page-width stats-grid-4">
-            <div className="stat-card-white">
-              <div className="stat-card-header">
-                <span className="stat-label">{t("stat.facilities")}</span>
-                <div className="stat-icon-box bg-cyan-light">
-                  <ParkingCircle size={20} className="text-cyan-600" />
-                </div>
-              </div>
-              <div className="stat-number">1,450+</div>
-              <div className="stat-subtitle">{t("stat.facilities_sub")}</div>
-              <div className="stat-card-footer">
-                <span>{t("stat.facilities_desc")}</span>
-                <a href="#gis-section" className="stat-link">
-                  {t("stat.facilities_link")}
-                </a>
-              </div>
-            </div>
-
-            <div className="stat-card-white">
-              <div className="stat-card-header">
-                <span className="stat-label">{t("stat.accuracy")}</span>
-                <div className="stat-icon-box bg-cyan-light">
-                  <Scan size={20} className="text-cyan-600" />
-                </div>
-              </div>
-              <div className="stat-number">99.4%</div>
-              <div className="stat-subtitle">{t("stat.accuracy_sub")}</div>
-              <div className="stat-card-footer">
-                <span>{t("stat.accuracy_desc")}</span>
-                <a href="#gis-section" className="stat-link">
-                  {t("stat.accuracy_link")}
-                </a>
-              </div>
-            </div>
-
-            <div className="stat-card-white">
-              <div className="stat-card-header">
-                <span className="stat-label">{t("stat.traffic")}</span>
-                <div className="stat-icon-box bg-cyan-light">
-                  <Car size={20} className="text-cyan-600" />
-                </div>
-              </div>
-              <div className="stat-number">32,000+</div>
-              <div className="stat-subtitle">{t("stat.traffic_sub")}</div>
-              <div className="stat-card-footer">
-                <span>{t("stat.traffic_desc")}</span>
-                <a href="#gis-section" className="stat-link">
-                  {t("stat.traffic_link")}
-                </a>
-              </div>
-            </div>
-
-            <div className="stat-card-white">
-              <div className="stat-card-header">
-                <span className="stat-label">{t("stat.auto")}</span>
-                <div className="stat-icon-box bg-cyan-light">
-                  <Cpu size={20} className="text-cyan-600" />
-                </div>
-              </div>
-              <div className="stat-number">100%</div>
-              <div className="stat-subtitle">{t("stat.auto_sub")}</div>
-              <div className="stat-card-footer">
-                <span>{t("stat.auto_desc")}</span>
-                <a href="#gis-section" className="stat-link">
-                  {t("stat.auto_link")}
-                </a>
-              </div>
-            </div>
-          </div>
+        <section className="lp-section lp-container" id="parking-lots" aria-labelledby="lp-lots-title">
+          <div className="lp-section-heading"><div><p className="lp-eyebrow">{text("KHÁM PHÁ ĐIỂM ĐẾN", "EXPLORE YOUR NEXT STOP")}</p><h2 id="lp-lots-title">{text("Một chỗ đỗ cho kế hoạch của bạn.", "A parking space for your plans.")}</h2><p>{text("Chọn bãi để xem sơ đồ, chỗ trống và giá dự kiến cho lượt gửi xe.", "Choose a lot to view its layout, availability and an estimate for your visit.")}</p></div><Link className="lp-text-link" to="/booking">{text("Xem tất cả bãi", "Explore all parking")}<ArrowRight size={17} /></Link></div>
+          {catalogState === "loading" ? <div className="lp-lot-grid" role="status" aria-label={text("Đang tải bãi đỗ", "Loading parking lots")}>{[0, 1, 2].map(n => <div className="lp-lot-skeleton" key={n} aria-hidden="true" />)}</div>
+            : catalogState === "error" ? <div className="lp-catalog-state" role="status"><MapPin size={30} /><div><h3>{text("Các điểm đến đang chờ bạn.", "Your next stop is waiting.")}</h3><p>{text("Chưa thể tải danh sách bãi đỗ lúc này. Bạn có thể thử lại hoặc mở trang tìm kiếm.", "We couldn't load parking lots right now. Try again or open the search page.")}</p></div><button type="button" className="lp-button lp-secondary" onClick={() => setRetry(n => n + 1)}><RefreshCw size={16} />{text("Thử lại", "Try again")}</button></div>
+              : lots.length === 0 ? <div className="lp-catalog-state" role="status"><ParkingCircle size={30} /><p>{text("Chưa có bãi đỗ được công bố. Vui lòng quay lại sau.", "No parking lots have been published yet. Please check back later.")}</p></div>
+                : <div className="lp-lot-grid">{lots.slice(0, 3).map((lot, index) => <article className="lp-lot-card" key={lot.id}><div className={`lp-lot-art lp-lot-art-${index}`} aria-hidden="true"><ParkingCircle size={46} strokeWidth={1.2} /><span>{lot.code}</span><div className="lp-lot-lines" /></div><div className="lp-lot-body"><h3>{lot.name}</h3><p><MapPin size={15} />{lot.address}</p><Link className="lp-text-link" to={bookingUrl(lot.id, undefined, "CHEAPEST")}>{text("Xem giá & chỗ trống", "View estimates & availability")}<ArrowRight size={16} /></Link></div></article>)}</div>}
         </section>
 
-        {/* ── 5. GIS Map Center ── */}
-        <section className="gis-light-section" id="gis-section">
-          <div className="page-width">
-            <div className="gis-top-header">
-              <div>
-                <span className="section-pill-tag">{t("gis.hub")}</span>
-                <h2 className="section-title-light">{t("gis.title")}</h2>
-                <p className="section-sub-light">
-                  {t("gis.desc")}
-                </p>
-              </div>
+        <section className="lp-steps-section" id="how-it-works"><div className="lp-container lp-section"><div className="lp-section-heading"><div><p className="lp-eyebrow">{text("ĐƠN GIẢN TỪ BƯỚC ĐẦU", "SIMPLE FROM THE START")}</p><h2>{text("Ba bước. Một hành trình nhẹ nhàng.", "Three steps. An easier journey.")}</h2></div><p>{text("Từ tìm bãi đến khi đỗ xe, mọi thứ theo cùng một luồng.", "From finding a space to arrival, follow one simple flow.")}</p></div><ol className="lp-steps-grid">{steps.map((step, index) => <li key={index}><div className="lp-step-top"><span className="lp-step-number">0{index + 1}</span><step.icon size={24} strokeWidth={1.5} /></div><h3>{step.title}</h3><p>{step.description}</p></li>)}</ol></div></section>
 
-              <div className="map-controls-group">
-                <button
-                  className={`map-tab ${mapTab === "map" ? "active" : ""}`}
-                  onClick={() => setMapTab("map")}
-                >
-                  {t("gis.map")}
-                </button>
-                <button
-                  className={`map-tab ${mapTab === "satellite" ? "active" : ""}`}
-                  onClick={() => setMapTab("satellite")}
-                >
-                  {t("gis.satellite")}
-                </button>
-                <button
-                  className={`map-tab ${mapTab === "3d" ? "active" : ""}`}
-                  onClick={() => setMapTab("3d")}
-                >
-                  {t("gis.3d")}
-                </button>
-                <button className="map-icon-btn" title="Chế độ xem lưới">
-                  <SlidersHorizontal size={16} />
-                </button>
-              </div>
-            </div>
-            <p className="customer-home-map-note">
-              {lang === "en"
-                ? "The homepage map is illustrative. Use live lot search for current availability and duration-based price estimates."
-                : "Bản đồ trang chủ mang tính minh họa. Dùng tìm kiếm bãi để xem chỗ trống và giá ước tính từ API."}
-              {" "}<Link to="/booking">{lang === "en" ? "Search lots" : "Tìm và đặt chỗ"}</Link>
-            </p>
+        <section className="lp-section lp-container" id="benefits"><div className="lp-section-heading"><div><p className="lp-eyebrow">{text("DÀNH CHO NHỮNG ĐIỀU QUAN TRỌNG HƠN", "MAKE TIME FOR WHAT MATTERS")}</p><h2>{text("Bớt lo chỗ đỗ. Thêm thời gian cho bạn.", "Less parking worry. More time for you.")}</h2></div></div><div className="lp-benefits-grid">{benefits.map(benefit => <article key={benefit.title}><span className="lp-benefit-icon"><benefit.icon size={24} strokeWidth={1.6} /></span><h3>{benefit.title}</h3><p>{benefit.description}</p></article>)}</div></section>
 
-            {/* Interactive Vector GIS Canvas */}
-            <div className="gis-canvas-card">
-              {/* Map Background Grid Simulation */}
-              <div className="vector-map-bg">
-                <svg className="map-vector-svg" viewBox="0 0 1000 500">
-                  <path
-                    d="M 50 100 Q 250 50 450 180 T 950 300"
-                    fill="none"
-                    stroke="#cbd5e1"
-                    strokeWidth="12"
-                    opacity="0.5"
-                  />
-                  <path
-                    d="M 100 450 Q 300 250 600 200 T 900 50"
-                    fill="none"
-                    stroke="#94a3b8"
-                    strokeWidth="8"
-                    opacity="0.4"
-                  />
-                  <path
-                    d="M 200 150 Q 500 350 800 120"
-                    fill="none"
-                    stroke="#0284c7"
-                    strokeWidth="3"
-                    strokeDasharray="6,6"
-                  />
-                </svg>
+        <HomeFaq lots={lots} />
 
-                {/* Left Live Overlay Widget */}
-                <div className="gis-overlay-widget">
-                  <div className="widget-header">
-                    <span className="dot-live" /> {t("gis.hub_title")}
-                    <span className="live-hub-tag">DEMO VIEW</span>
-                  </div>
-                  <div className="widget-stat-row">
-                    <span>{t("gis.hub_open")}</span>
-                    <strong>{t("gis.hub_open_val")}</strong>
-                  </div>
-                  <div className="widget-stat-row">
-                    <span>{t("gis.hub_avail")}</span>
-                    <strong className="text-emerald-600">{t("gis.hub_avail_val")}</strong>
-                  </div>
-                  <div className="widget-stat-row">
-                    <span>{t("gis.hub_fill")}</span>
-                    <strong>84.2%</strong>
-                  </div>
-                  <div className="mini-chart">
-                    <svg viewBox="0 0 100 20" className="w-full h-5 text-cyan-600 stroke-current">
-                      <path d="M0 15 Q 25 5 50 12 T 100 2" fill="none" strokeWidth="2" />
-                    </svg>
-                  </div>
-                </div>
-
-                {/* Map Pins / Callouts */}
-                <div className="map-pin-badge pin-1" style={{ top: "25%", left: "32%" }}>
-                  <div className="pin-badge-header">
-                    <span className="badge-status-dot green" /> {t("gis.pin1_name")}
-                    <span className="badge-tag-green">{t("gis.pin1_tag")}</span>
-                  </div>
-                  <div className="pin-badge-body">
-                    <strong>35.000đ/h</strong> · 0.8 km · <a href="#gis-section">{t("gis.view_detail")}</a>
-                  </div>
-                </div>
-
-                <div className="map-pin-badge pin-2" style={{ top: "18%", left: "55%" }}>
-                  <div className="pin-badge-header">
-                    <span className="badge-status-dot green" /> {t("gis.pin2_name")}
-                    <span className="badge-tag-green">{t("gis.pin2_tag")}</span>
-                  </div>
-                  <div className="pin-badge-body">
-                    <strong>20.000đ/h</strong> · 1.2 km · <a href="#gis-section">{t("gis.view_detail")}</a>
-                  </div>
-                </div>
-
-                <div className="map-pin-badge pin-3 offline-pin" style={{ top: "52%", left: "62%" }}>
-                  <div className="pin-badge-header">
-                    <span className="badge-status-dot red" /> {t("gis.pin3_name")}
-                    <span className="badge-tag-red">{t("gis.pin3_tag")}</span>
-                  </div>
-                  <div className="pin-badge-body">
-                    {lang === "en" ? (
-                      <><strong>100% Load</strong> · Suspended · <span>15 slots holding</span></>
-                    ) : (
-                      <><strong>100% Tải trọng</strong> · Tạm ngừng nhận · <span>15 chỗ trống chờ xe</span></>
-                    )}
-                  </div>
-                </div>
-
-                <div className="map-pin-user" style={{ top: "72%", left: "24%" }}>
-                  <div className="user-pin-bubble">
-                    <Navigation size={14} className="text-white fill-current" /> {t("gis.user_pos")}
-                  </div>
-                </div>
-
-                {/* Slot popup integration (API Data) */}
-                <div className="gis-popup-card-light">
-                  <div className="popup-card-title">
-                    <MapPin size={13} className="text-cyan-600" /> {slots[0]?.parkingLotName || "BÃI ĐỖ XE"}
-                    <span className={`api-live-tag ${apiState}`}>
-                      {apiState === "online" ? "API" : apiState === "loading" ? "..." : "OFF"}
-                    </span>
-                  </div>
-                  {apiState === "online" && slots.length > 0 ? (
-                    <div className="popup-slots-mini">
-                      {slots.slice(0, 4).map((slot) => {
-                        const st = slotStatus(slot.status, lang);
-                        return (
-                          <div className="slot-mini-row" key={slot.slotId}>
-                            <span className={`slot-dot ${st.className}`} />
-                            <span className="slot-code">{slot.slotId}</span>
-                            <span className="slot-loc">
-                              {lang === "en" ? `Floor ${slot.floor} - ${slot.zone}` : `Tầng ${slot.floor} - ${slot.zone}`}
-                            </span>
-                            <span className={`slot-st-text ${st.className}`}>{st.label}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="popup-empty-state">
-                      {apiState === "loading" ? t("gis.api_syncing") : t("gis.api_empty")}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Map Legend Footer */}
-              <div className="gis-legend-bar">
-                <span className="legend-label">{t("gis.legend")}</span>
-                <div className="legend-items">
-                  <span className="legend-item">
-                    <span className="dot green" /> {t("gis.legend_green")}
-                  </span>
-                  <span className="legend-item">
-                    <span className="dot yellow" /> {t("gis.legend_yellow")}
-                  </span>
-                  <span className="legend-item">
-                    <span className="dot red" /> {t("gis.legend_red")}
-                  </span>
-                  <span className="legend-item">
-                    <span className="dot cyan" /> {t("gis.legend_cyan")}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ── 6. Solutions Section ── */}
-        <section className="solutions-light-section" id="solutions">
-          <div className="page-width">
-            <div className="text-center max-w-2xl mx-auto mb-12">
-              <span className="section-pill-tag">{t("sol.tag")}</span>
-              <h2 className="section-title-light mt-2">{t("sol.title")}</h2>
-              <p className="section-sub-light mt-2">
-                {t("sol.desc")}
-              </p>
-            </div>
-
-            <div className="solutions-cards-grid">
-              {SOLUTIONS.map((s, i) => (
-                <div className="solution-card-white" key={i}>
-                  <div className="solution-icon-wrap">{s.icon}</div>
-                  <h3 className="solution-card-title">{t(`sol.s${i + 1}_title`)}</h3>
-                  <p className="solution-card-desc">{t(`sol.s${i + 1}_desc`)}</p>
-                  <div className="solution-card-footer">
-                    <span className="tag-pill">{t(`sol.s${i + 1}_tag`)}</span>
-                    <ArrowRight size={14} className="text-cyan-600 hover-arrow" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ── 7. Photo Showcase Section ── */}
-        <section className="photos-light-section" id="about">
-          <div className="page-width">
-            <div className="photos-grid-3">
-              {parkingPhotos.map((photo, i) => (
-                <div className="photo-card" key={i}>
-                  <img src={photo.src} alt={photo.alt} loading="lazy" />
-                  <div className="photo-card-overlay">
-                    <span className="photo-tag">{photo.tag}</span>
-                    <h3 className="photo-title">{photo.title}</h3>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ── 8. Dark CTA Banner ── */}
-        <section className="cta-dark-section">
-          <div className="page-width">
-            <div className="cta-dark-card">
-              <div className="cta-card-content">
-                <div className="cta-badge">
-                  <span className="live-dot-green" /> {t("cta.badge")}
-                </div>
-                <h2 className="cta-dark-title">
-                  {t("cta.title")}
-                </h2>
-                <p className="cta-dark-desc">
-                  {t("cta.desc")}
-                </p>
-
-                <div className="cta-metrics-row">
-                  <span>
-                    <span className="dot-green" /> {t("cta.metric_latency")} <strong>28.4ms</strong>
-                  </span>
-                  <span className="sep">•</span>
-                  <span>
-                    <span className="dot-green" /> {t("cta.metric_uptime")} <strong>99.98% / 30d</strong>
-                  </span>
-                  <span className="sep">•</span>
-                  <span>
-                    <span className="dot-green" /> {t("cta.metric_interval")} <strong>1.2s</strong>
-                  </span>
-                </div>
-              </div>
-
-              <div className="cta-card-actions">
-                <Link className="button button-cyan-solid" to="/register">
-                  {t("cta.btn_book")}
-                </Link>
-                <a className="button button-glass-outline" href="#gis-section">
-                  {t("cta.btn_gis")}
-                </a>
-              </div>
-            </div>
-          </div>
-        </section>
+        <section className="lp-container lp-bottom-cta"><div><p className="lp-eyebrow">{text("SẴN SÀNG CHO ĐIỂM ĐẾN TIẾP THEO", "READY FOR YOUR NEXT STOP")}</p><h2>{text("Chọn điểm đến. Để ParkMatrix lo chỗ đỗ.", "Pick your destination. Find your space with ParkMatrix.")}</h2></div><Link className="lp-button lp-primary" to="/booking">{text("Tìm và đặt chỗ", "Find & book parking")}<ArrowRight size={18} /></Link></section>
       </main>
-
-
-      {/* Logout Modal */}
-      {showLogout && (
-        <div
-          className="modal-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setShowLogout(false);
-          }}
-        >
-          <section
-            className="confirm-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="logout-title"
-          >
-            <button
-              className="modal-close"
-              aria-label={lang === "en" ? "Close" : "Đóng"}
-              onClick={() => setShowLogout(false)}
-            >
-              <X size={18} />
-            </button>
-            <span className="modal-icon">
-              <LogOut size={20} />
-            </span>
-            <h2 id="logout-title">
-              {lang === "en" ? "Log out of your account?" : "Đăng xuất khỏi tài khoản?"}
-            </h2>
-            <p>
-              {lang === "en"
-                ? "Your active session on this device will be terminated."
-                : "Phiên đăng nhập trên thiết bị này sẽ được kết thúc."}
-            </p>
-            <div className="modal-actions">
-              <button className="button button-light" onClick={() => setShowLogout(false)}>
-                {lang === "en" ? "Stay" : "Ở lại"}
-              </button>
-              <button className="button button-dark" onClick={handleLogout}>
-                <Check size={16} /> {lang === "en" ? "Log Out" : "Đăng xuất"}
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
     </CustomerLayout>
   );
 }

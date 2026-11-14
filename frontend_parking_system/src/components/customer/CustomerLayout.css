@@ -11,6 +11,12 @@
   font-family: "Be Vietnam Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
+.customer-public-shell .brand-pill-text { flex-direction: column; align-items: flex-start; gap: 3px; }
+.customer-public-shell .brand-pill-title { font-family: inherit; font-size: 17px; color: #072d59; }
+.customer-public-shell .brand-pill-caption { font-size: 8px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #0d4685; }
+.customer-public-shell .brand-pill-logo { border-radius: 10px; border-color: #072d59; background: #072d59; color: #fff; }
+.customer-public-shell .brand-pill:hover .brand-pill-logo { transform: none; }
+
 .customer-public-shell h1,
 .customer-public-shell h2,
 .customer-public-shell h3,
@@ -122,13 +128,25 @@
   grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr));
 }
 
-@media (max-width: 768px) {
+.customer-public-shell .customer-notification-trigger { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 7px 9px; color: #072d59; background: #edf7fd; border: 1px solid rgba(7,45,89,.13); border-radius: 10px; cursor: pointer; font-size: 11px; }
+.customer-public-shell .customer-notification-count { font-size: 10px; font-weight: 700; }
+.customer-public-shell .customer-notification-panel { width: min(320px,calc(100vw - 40px)); }
+.customer-public-shell .customer-notification-panel button { padding: 6px 8px; border: 1px solid rgba(255,255,255,.2); border-radius: 6px; color: white; background: transparent; font-size: 12px; cursor: pointer; }
+.customer-public-shell .user-info-pill { max-width: 130px; }
+.customer-public-shell .user-name-pill { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 1250px) {
+  .customer-public-shell .customer-account-shortcut { display: none; }
+}
+@media (max-width: 1120px) {
+  .customer-public-shell .main-nav-pill { display: none; }
+  .customer-public-shell .customer-notification-label { display: none; }
   .customer-public-shell .header-actions-pill {
     margin-left: auto;
     gap: 8px;
   }
 
   .customer-public-shell .header-actions-pill > .icon-btn-pill,
+  .customer-public-shell .header-actions-pill > .customer-account-shortcut,
   .customer-public-shell .header-actions-pill > .auth-btns-pill,
   .customer-public-shell .header-actions-pill > .user-profile-pill {
     display: none;
@@ -234,6 +252,10 @@
 }
 
 @media (max-width: 520px) {
+  .customer-public-shell .header-actions-pill { gap: 5px; }
+  .customer-public-shell .customer-notification-trigger { width: 32px; padding: 5px; }
+  .customer-public-shell .customer-notification-panel { right: -45px !important; }
+  .customer-public-shell .customer-notification-count { position: absolute; right: -3px; top: -5px; border-radius: 10px; padding: 1px 4px; background: #072d59; color: #fff; }
   .customer-public-shell .site-header-pill {
     gap: 8px;
     padding: 6px 8px 6px 12px;
@@ -303,6 +325,17 @@
     text-align: center;
     overflow-wrap: anywhere;
   }
+}
+
+@media (max-width: 360px) {
+  .customer-public-shell .site-header-pill { padding: 6px; gap: 5px; }
+  .customer-public-shell .brand-pill { gap: 6px; }
+  .customer-public-shell .brand-pill-logo { width: 28px; height: 28px; }
+  .customer-public-shell .brand-pill-title { font-size: 14px; }
+  .customer-public-shell .brand-pill-caption { font-size: 6px; }
+  .customer-public-shell .header-actions-pill { gap: 4px; }
+  .customer-public-shell .lang-btn-pill { padding-inline: 4px; font-size: 9px; }
+  .customer-public-shell .customer-mobile-menu-toggle { width: 32px; height: 36px; }
 }
 
 @media (max-width: 320px) {

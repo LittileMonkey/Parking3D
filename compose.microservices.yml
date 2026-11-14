@@ -155,7 +155,7 @@ services:
       VNPay__TmnCode: ${VNPAY_TMN_CODE:-}
       VNPay__HashSecret: ${VNPAY_HASH_SECRET:-}
       VNPay__BaseUrl: ${VNPAY_BASE_URL:-https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
-      Frontend__BaseUrl: http://localhost:3000
+      Frontend__BaseUrl: ${FRONTEND_BASE_URL:-http://localhost:5173}
       VNPay__ReturnUrl: ${VNPAY_RETURN_URL:-http://localhost:8080/api/v1/payments/vnpay/return}
     depends_on:
       payment-db:

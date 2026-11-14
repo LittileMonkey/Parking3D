@@ -8,7 +8,7 @@ import {
   Mail,
   AlertCircle
 } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError } from "../services/api";
 import { useAuth, getRedirectPathForUser } from "../context/AuthContext";
 import AuthShowcase from "../components/auth/AuthShowcase";
@@ -17,6 +17,11 @@ import "./Auth.css";
 export default function Login() {
   const { login, user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedReturn = searchParams.get("returnTo");
+  // Only local booking/payment routes are accepted, including after VNPay returns.
+  const returnTo = requestedReturn && /^\/(?:booking(?:\/[^/?#\\]+)?|bookings\/[^/?#\\]+|payment-return)(?:\?[^#\\]*)?$/.test(requestedReturn)
+    ? requestedReturn : null;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -32,12 +37,13 @@ export default function Login() {
   // Nếu tài khoản đã có phiên hợp lệ, tự động điều hướng vào dashboard
   useEffect(() => {
     if (user) {
-      const targetPath = getRedirectPathForUser(user);
+      const rolePath = getRedirectPathForUser(user);
+      const targetPath = rolePath === "/" ? returnTo ?? rolePath : rolePath;
       if (targetPath !== "/") {
         navigate(targetPath, { replace: true });
       }
     }
-  }, [user, navigate]);
+  }, [user, navigate, returnTo]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -53,7 +59,8 @@ export default function Login() {
       );
 
       // Điều hướng chính xác theo vai trò
-      const targetPath = getRedirectPathForUser(authUser);
+      const rolePath = getRedirectPathForUser(authUser);
+      const targetPath = rolePath === "/" ? returnTo ?? rolePath : rolePath;
       navigate(targetPath, { replace: true });
     } catch (cause) {
       if (cause instanceof ApiError && (cause.errorCode === "MFA_REQUIRED" || cause.message.startsWith("MFA_REQUIRED:"))) {

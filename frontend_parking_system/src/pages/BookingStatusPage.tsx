@@ -1,289 +1,176 @@
+import { useEffect, useRef, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, Clock3, CreditCard, RefreshCw, ShieldCheck, TriangleAlert } from "lucide-react";
 import BookingRefunds from "../components/customer/BookingRefunds";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { QRCodeSVG } from "qrcode.react";
-import { ApiError, api, type BookingDetail, type Payment } from "../services/api";
+import BookingQrTicket from "../components/customer/BookingQrTicket";
+import BookingSteps from "../components/customer/BookingSteps";
+import CustomerLayout from "../components/customer/CustomerLayout";
+import { api, type Payment, type VnPayReturnResult } from "../services/api";
+import { rememberPaymentReturn } from "../services/paymentReturnContext";
 import { remainingHoldSeconds } from "../services/bookingHold";
 import { useAuth } from "../context/AuthContext";
-import CustomerLayout from "../components/customer/CustomerLayout";
 import { useIdempotencyKey } from "../hooks/useIdempotencyKey";
+import { bookingError, useBookingConfirmation } from "../hooks/useBookingConfirmation";
+import type { ConfirmationPreview } from "./bookingPreview";
+import "./Booking.css";
 
-function statusText(status: string) {
-  const labels: Record<string, string> = {
-    PENDING_PAYMENT: "Đang chờ thanh toán/xác nhận",
-    CONFIRMED: "Đã xác nhận bởi hệ thống",
-    CHECKED_IN: "Đã check-in",
-    COMPLETED: "Hoàn tất",
-    CANCELLED: "Đã hủy",
-    EXPIRED: "Đã hết hạn",
-    NO_SHOW: "Không đến",
-  };
-  return labels[status.toUpperCase()] ?? status;
-}
+const statusLabels: Record<string, string> = {
+  PENDING_PAYMENT: "Chờ thanh toán", CONFIRMED: "Đã xác nhận", CHECKED_IN: "Xe đã vào bãi",
+  COMPLETED: "Đã hoàn tất", CANCELLED: "Đã hủy", EXPIRED: "Đã hết hạn", NO_SHOW: "Quá hạn đến bãi",
+};
+const money = (amount: number, currency = "VND") => new Intl.NumberFormat("vi-VN", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
+const date = (value: string) => new Date(value).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+const methodLabel = (method: string) => method.toUpperCase() === "CASH" ? "Tiền mặt tại bãi" : method.toUpperCase() === "VNPAY" ? "VNPay" : method;
 
-function formatMoney(amount: number, currency: string) {
-  return new Intl.NumberFormat("vi-VN", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
-}
-
-function errorMessage(error: unknown) {
-  if (error instanceof ApiError) {
-    if (error.status === 401) return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
-    if (error.status === 403) return "Bạn không có quyền xem booking này. Chỉ chủ booking hoặc nhân viên được phân công mới có quyền truy cập.";
-    if (error.status === 404) return "Không tìm thấy booking.";
-    if (error.status === 409) return "Booking vừa thay đổi. Hãy tải lại trạng thái mới nhất.";
-    if (error.status === 503) return "Dịch vụ booking/thanh toán chưa sẵn sàng. Hãy thử lại sau.";
-    if (error.status === 0) return "Không kết nối được Gateway.";
-    return error.message;
-  }
-  return error instanceof Error ? error.message : "Không thể tải trạng thái booking.";
-}
-
-function holdTimeText(expiresAt: string | null | undefined, now: number) {
-  const remainingSeconds = remainingHoldSeconds(expiresAt, now);
-  if (remainingSeconds === null) return "Không có thời gian giữ chỗ.";
-  if (remainingSeconds === 0) return "Đã qua thời hạn giữ chỗ; đang chờ trạng thái mới nhất từ máy chủ.";
-  const minutes = Math.floor(remainingSeconds / 60);
-  const seconds = remainingSeconds % 60;
-  return `Thời gian giữ chỗ còn ${minutes}:${String(seconds).padStart(2, "0")}`;
-}
-
-export default function BookingStatusPage() {
-  const { bookingId = "" } = useParams();
+export default function BookingStatusPage({ bookingIdOverride, returnResult, returnError }: {
+  bookingIdOverride?: string;
+  returnResult?: VnPayReturnResult;
+  returnError?: string;
+}) {
+  const { bookingId: routeId = "" } = useParams();
+  const [params] = useSearchParams();
+  const previewKind = import.meta.env.DEV && routeId === "preview" && ["success", "cash", "processing", "failed", "expired"].includes(params.get("preview") ?? "") ? params.get("preview") : null;
+  const preview = Boolean(previewKind);
+  const [previewData, setPreviewData] = useState<ConfirmationPreview | null>(null);
+  useEffect(() => {
+    let active = true;
+    setPreviewData(null);
+    if (previewKind) void import("./bookingPreview").then(module => { if (active) setPreviewData(module.getPreviewConfirmation(previewKind, params)); });
+    return () => { active = false; };
+  }, [previewKind, params]);
+  const bookingId = bookingIdOverride ?? routeId;
   const { isAuthenticated } = useAuth();
-  const { key: paymentKey } = useIdempotencyKey(`pay-${bookingId}`);
-  const [booking, setBooking] = useState<BookingDetail | null>(null);
-  const [payment, setPayment] = useState<Payment | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [paymentLoading, setPaymentLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [issuedQr, setIssuedQr] = useState<{ bookingId: string; payload: string; expiresAt: string } | null>(null);
-  const [qrLoading, setQrLoading] = useState(false);
-  const [qrError, setQrError] = useState("");
-
-  const [cancelling, setCancelling] = useState(false);
-  const [cancelReason, setCancelReason] = useState("");
-  const [cancellation, setCancellation] = useState<{ refund_eligible: boolean; refund_status: string } | null>(null);
-  const [cancelError, setCancelError] = useState("");
+  const live = useBookingConfirmation(bookingId, isAuthenticated && !preview);
+  const booking = preview ? previewData?.booking ?? null : live.booking;
+  const payment = preview ? previewData?.payment ?? null : live.payment;
+  const receivedReceipt = preview ? previewData?.receipt ?? null : live.receipt;
+  const receipt = receivedReceipt?.paymentId === payment?.paymentId ? receivedReceipt : null;
+  const { error, paymentError: statusError, refreshing, refresh, retry } = live;
+  const loading = preview ? !previewData : live.loading;
+  const { key: paymentKey, renewKey: renewPaymentKey } = useIdempotencyKey(`pay-${bookingId}`);
+  const [creating, setCreating] = useState<"CASH" | "VNPAY" | null>(null);
+  const paymentInFlight = useRef(false);
+  const [createdPayment, setCreatedPayment] = useState<Payment | null>(null);
   const [paymentError, setPaymentError] = useState("");
+  const failedPaymentRef = useRef("");
   const [now, setNow] = useState(Date.now());
-
-  const loadBooking = useCallback(async (initial = false) => {
-    if (!bookingId || !isAuthenticated) return;
-    if (initial) setLoading(true);
-    else setRefreshing(true);
-    try {
-      const current = await api.getBooking(bookingId);
-      setBooking(current);
-      setError("");
-    } catch (cause) {
-      setError(errorMessage(cause));
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [bookingId, isAuthenticated]);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState("");
+  const [cancellation, setCancellation] = useState<{ refund_eligible: boolean; refund_status: string } | null>(null);
 
   useEffect(() => {
-    let current = true;
-    setCancellation(null);
-    if (booking?.status.toUpperCase() === "CANCELLED") {
-      api.getBookingCancellation(bookingId).then(value => { if (current) { setCancellation(value); setCancelError(""); } })
-        .catch(cause => { if (current) setCancelError(errorMessage(cause)); });
-    }
-    return () => { current = false; };
-  }, [bookingId, booking?.status]);
-  const cancelBooking = async () => {
-    setCancelling(true); setCancelError("");
-    try {
-      const result = await api.cancelBooking(bookingId, cancelReason);
-      setCancellation(result); setIssuedQr(null); await loadBooking();
-    } catch (cause) { setCancelError(errorMessage(cause)); }
-    finally { setCancelling(false); }
-  };
-
-  const pending = booking?.status.toUpperCase() === "PENDING_PAYMENT";
-  const holdExpired = pending && remainingHoldSeconds(booking?.holdExpiresAt, now) === 0;
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      setLoading(false);
-      return;
-    }
-    void loadBooking(true);
-  }, [isAuthenticated, loadBooking]);
+    window.scrollTo(0, 0);
+    setCreatedPayment(null); setPaymentError(""); setCancellation(null); setCancelError(""); setCancelReason("");
+    failedPaymentRef.current = "";
+  }, [bookingId]);
+  const status = booking?.status.toUpperCase() ?? "";
+  const paymentStatus = payment?.paymentStatus.toUpperCase() ?? "";
+  const pending = status === "PENDING_PAYMENT";
+  const confirmed = status === "CONFIRMED";
+  const paid = paymentStatus === "SUCCESS";
+  const reconciling = pending && (paid || returnResult?.isSuccess === true);
+  const paymentFailed = ["FAILED", "CANCELLED"].includes(paymentStatus) || (returnResult?.isSuccess === false && returnResult.responseCode !== "97");
+  const terminal = ["EXPIRED", "CANCELLED", "NO_SHOW"].includes(status);
+  const remaining = remainingHoldSeconds(booking?.holdExpiresAt, now);
+  const holdExpired = pending && remaining === 0;
+  const awaitingPayment = paymentStatus === "PENDING" || createdPayment?.status.toUpperCase() === "PENDING";
 
   useEffect(() => {
     if (!pending) return;
-    const refreshTimer = window.setInterval(() => void loadBooking(false), 10_000);
-    return () => window.clearInterval(refreshTimer);
-  }, [pending, loadBooking]);
-
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [pending]);
   useEffect(() => {
-    if (!pending || !booking?.holdExpiresAt) return;
-    const clockTimer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(clockTimer);
-  }, [pending, booking?.holdExpiresAt]);
-
-  const beginCashPayment = async () => {
-    setPaymentError("");
-    setPaymentLoading(true);
-    try {
-      const result = await api.createCashPayment(bookingId, paymentKey);
-      setPayment(result);
-      void loadBooking(false);
-    } catch (cause) {
-      setPaymentError(errorMessage(cause));
-      if (cause instanceof ApiError && cause.status === 409) void loadBooking(false);
-    } finally {
-      setPaymentLoading(false);
+    if (!payment || !["FAILED", "CANCELLED"].includes(paymentStatus) || failedPaymentRef.current === payment.paymentId) return;
+    failedPaymentRef.current = payment.paymentId;
+    renewPaymentKey(); setCreatedPayment(null);
+  }, [payment, paymentStatus, renewPaymentKey]);
+  useEffect(() => {
+    let active = true;
+    if (!preview && status === "CANCELLED") {
+      api.getBookingCancellation(bookingId).then(value => { if (active) setCancellation(value); })
+        .catch(cause => { if (active) setCancelError(bookingError(cause)); });
     }
-  };
+    return () => { active = false; };
+  }, [bookingId, status, preview]);
 
-  const beginVnPay = async () => {
-    setPaymentError('');setPaymentLoading(true);
-    try {const result=await api.createVnPayPayment(bookingId,paymentKey+'-vnpay');setPayment(result);
-      if(!result.paymentUrl)throw new Error('Không có liên kết VNPay hợp lệ. Kiểm tra trạng thái thanh toán trước khi thử lại.');
-      const url=new URL(result.paymentUrl);if(url.protocol!=='https:')throw new Error('Liên kết thanh toán không an toàn.');window.location.assign(url.href);
-    }catch(e){setPaymentError(errorMessage(e));}finally{setPaymentLoading(false);}
-  };
-
-  const issueQr = async () => {
-    setQrError("");
-    setQrLoading(true);
+  async function beginPayment(method: "CASH" | "VNPAY") {
+    if (preview || paymentInFlight.current || !pending || holdExpired || paid || awaitingPayment || refreshing || statusError) return;
+    paymentInFlight.current = true; setCreating(method); setPaymentError("");
     try {
-      const result = await api.issueBookingQr(bookingId);
-      if (!result.qrPayload || !result.expiresAt) throw new Error("Máy chủ chưa trả mã QR hợp lệ.");
-      setIssuedQr({ bookingId, payload: result.qrPayload, expiresAt: result.expiresAt });
+      const result = method === "CASH" ? await api.createCashPayment(bookingId, paymentKey) : await api.createVnPayPayment(bookingId, `${paymentKey}-vnpay`);
+      if (method === "VNPAY") {
+        if (!result.paymentUrl) throw new Error("Chưa có liên kết thanh toán. Kiểm tra trạng thái trước khi thử lại.");
+        // VNPay's transaction reference is an attempt ID, not a booking ID.
+        // Retain only short-lived identifiers to reopen the correct owner-scoped ticket.
+        rememberPaymentReturn(result.paymentUrl, bookingId, result.id, sessionStorage);
+        setCreatedPayment(result);
+        window.location.assign(new URL(result.paymentUrl).href);
+      } else { setCreatedPayment(result); await refresh(); }
     } catch (cause) {
-      setQrError(cause instanceof Error ? cause.message : "Không cấp được mã QR.");
-    } finally {
-      setQrLoading(false);
-    }
-  };
-
-  const safeStatus = useMemo(() => booking?.status.toUpperCase() ?? "", [booking?.status]);
-
-  if (!isAuthenticated) {
-    return (
-      <CustomerLayout>
-        <main className="customer-page">
-          <div className="customer-panel customer-auth-needed">
-            <h1>Đăng nhập để xem booking</h1>
-            <p>Chi tiết booking chỉ hiển thị cho chủ booking hoặc nhân viên có quyền.</p>
-            <Link className="customer-button primary" to="/login">Đăng nhập</Link>
-          </div>
-        </main>
-      </CustomerLayout>
-    );
+      setPaymentError(bookingError(cause));
+      // A lost response can still mean a payment was created. Re-read before
+      // permitting another click; retries retain the same idempotency key.
+      await refresh();
+    } finally { paymentInFlight.current = false; setCreating(null); }
+  }
+  async function cancelBooking() {
+    if (preview || cancelling || !cancelReason.trim()) return;
+    setCancelling(true); setCancelError("");
+    try { setCancellation(await api.cancelBooking(bookingId, cancelReason.trim())); await refresh(); }
+    catch (cause) { setCancelError(bookingError(cause)); }
+    finally { setCancelling(false); }
   }
 
-  return (
-    <CustomerLayout>
-      <main className="customer-page booking-status-page">
-      <div className="customer-page-heading">
-        <p className="customer-eyebrow">BOOKING CỦA BẠN</p>
-        <h1>Trạng thái đặt chỗ</h1>
-      </div>
+  const loginTo = `/login?${new URLSearchParams({ returnTo: `/bookings/${encodeURIComponent(bookingId)}` })}`;
+  if (!isAuthenticated && !preview) return <CustomerLayout booking><main className="customer-page booking-flow-page"><section className="customer-panel booking-auth-needed"><ShieldCheck size={36} /><h1>Đăng nhập để xem vé của bạn</h1><p>Thông tin đặt chỗ, biên lai và mã QR chỉ hiển thị cho tài khoản có quyền.</p><Link className="customer-button primary" to={loginTo}>Đăng nhập & xem vé<ArrowRight size={16} /></Link></section></main></CustomerLayout>;
 
-      {loading && <div className="customer-panel customer-empty" role="status">Đang tải booking từ máy chủ...</div>}
-      {error && (
-        <div className="customer-alert error" role="alert">
-          {error} {error.includes("đăng nhập") && <Link to="/login">Đăng nhập lại</Link>}
-          <button type="button" onClick={() => void loadBooking(false)}>Thử lại</button>
-        </div>
-      )}
+  const amount = receipt?.totalAmount ?? payment?.totalAmount;
+  const currency = receipt?.currency ?? payment?.currency ?? "VND";
+  const paymentMethod = receipt?.paymentMethod ?? payment?.paymentMethod ?? createdPayment?.method;
 
-      {booking && (
+  return <CustomerLayout booking preview={preview}><main className="customer-page booking-flow-page booking-status-page">
+    {preview && <><div className="booking-preview-banner" role="note"><div><strong>Xem thử kết quả thanh toán</strong><p>Thông tin, thanh toán và QR đều là minh họa. QR này không sử dụng tại cổng và không tạo giao dịch thật.</p></div><Link className="booking-preview-exit" to="/booking?preview=1">Quay về chọn bãi mẫu</Link></div><nav className="booking-preview-scenarios" aria-label="Trạng thái xem thử">{[["success", "Thành công"], ["cash", "Tiền mặt đã xác nhận"], ["processing", "Đang đồng bộ"], ["failed", "Thất bại"], ["expired", "Hết hạn"]].map(([value, label]) => { const query = new URLSearchParams(params); query.set("preview", value); return <Link key={value} aria-current={previewKind === value ? "page" : undefined} to={`/bookings/preview?${query}`}>{label}</Link>; })}</nav></>}
+    <Link className="booking-back-link" to="/account"><ArrowLeft size={16} />Xe & đặt chỗ của tôi</Link>
+    <BookingSteps current={3} />
+    {loading && <div className="customer-panel customer-empty" role="status">Đang kiểm tra đặt chỗ và thanh toán…</div>}
+    {error && <div className="customer-alert error" role="alert">{error}<button className="customer-button secondary" onClick={retry}>Thử lại</button>{error.includes("đăng nhập") && <Link to={loginTo}>Đăng nhập lại</Link>}</div>}
+    {booking && <>
+      {confirmed ? <section className="booking-success-panel" aria-live="polite"><span className="booking-outcome-icon"><CheckCircle2 size={34} /></span><div><p className="customer-eyebrow">HẸN GẶP BẠN TẠI BÃI ĐỖ</p><h1>{paid ? "Thanh toán thành công!" : "Đặt chỗ đã được xác nhận"}</h1><p>Chỗ đỗ của bạn đã được xác nhận. Kiểm tra thông tin và xuất trình mã QR khi đến bãi.</p></div></section>
+        : reconciling ? <section className="booking-reconciling-panel" role="status"><Clock3 size={30} /><div><h1>Đang xác nhận đặt chỗ</h1><p>{paid ? "Đã nhận thanh toán." : "VNPay đã phản hồi giao dịch thành công."} Chúng tôi đang đồng bộ chỗ đỗ và sẽ hiển thị QR sau khi hoàn tất. Vui lòng không thanh toán lại.</p></div></section>
+        : terminal ? <section className="booking-terminal-panel" role="status"><TriangleAlert size={30} /><div><h1>{statusLabels[status]}</h1><p>{paid ? "Giao dịch đã được ghi nhận nhưng đặt chỗ không còn hiệu lực. Kiểm tra biên lai và điều kiện hoàn tiền bên dưới." : "Đặt chỗ này không thể dùng để vào bãi. Bạn có thể chọn khung giờ hoặc bãi đỗ khác."}</p><Link to="/booking">Tìm chỗ đỗ khác<ArrowRight size={15} /></Link></div></section>
+        : <header className="customer-page-heading"><p className="customer-eyebrow">{pending ? "HOÀN TẤT ĐẶT CHỖ" : "VÉ ĐỖ XE CỦA BẠN"}</p><h1>{pending ? "Thanh toán đặt chỗ" : statusLabels[status] ?? "Thông tin đặt chỗ"}</h1><p>{pending ? "Chỗ đang được giữ tạm. Hoàn tất thanh toán trước thời hạn để nhận mã QR vào bãi." : "Thông tin được cập nhật theo trạng thái lượt đỗ xe."}</p></header>}
+      {returnError && <div className="customer-alert warning" role="alert">{returnError} Thông tin bên dưới được kiểm tra lại theo đặt chỗ của bạn.</div>}
+      {returnResult?.isSuccess === false && !paid && <div className="customer-alert error" role="alert">{returnResult.message}</div>}
+      <div className={`booking-confirmation-layout${confirmed ? " has-qr" : ""}`}>
         <section className="customer-panel booking-ticket">
-          <div className="booking-status-heading">
-            <div><p className="customer-eyebrow">{booking.bookingCode}</p><h2>{booking.lotName}</h2></div>
-            <span className={`booking-status-badge ${safeStatus.toLowerCase()}`}>{statusText(booking.status)}</span>
-          </div>
+          <div className="booking-status-heading"><div><p className="customer-eyebrow">MÃ ĐẶT CHỖ · {booking.bookingCode}</p><h2>{booking.lotName}</h2></div><span className={`booking-status-badge ${status.toLowerCase()}`}>{statusLabels[status] ?? status}</span></div>
           <dl className="booking-facts">
-            <div><dt>ID đặt chỗ</dt><dd>{booking.bookingId}</dd></div>
-            <div><dt>Ô đỗ</dt><dd>{booking.slotCode || "Chờ hệ thống xác nhận"}</dd></div>
-            <div><dt>Loại xe</dt><dd>{booking.vehicleType}</dd></div>
-            <div><dt>Bắt đầu</dt><dd>{new Date(booking.startsAt).toLocaleString("vi-VN")}</dd></div>
-            <div><dt>Kết thúc</dt><dd>{new Date(booking.endsAt).toLocaleString("vi-VN")}</dd></div>
-            <div><dt>Giá ước tính từ máy chủ</dt><dd>
-              {typeof booking.estimatedAmount === "number" && Number.isFinite(booking.estimatedAmount)
-                ? formatMoney(booking.estimatedAmount, "VND")
-                : "Chưa có giá"}
-            </dd></div>
+            <div><dt>Ô đỗ</dt><dd>{booking.slotCode || "Đang xác nhận vị trí"}</dd></div><div><dt>Phương tiện</dt><dd>{booking.vehicleType.toUpperCase() === "CAR" ? "Ô tô" : booking.vehicleType.toUpperCase() === "MOTORBIKE" ? "Xe máy" : booking.vehicleType}{booking.plateSnapshot && <small>{booking.plateSnapshot}</small>}</dd></div>
+            <div><dt>Vào bãi</dt><dd>{date(booking.startsAt)}</dd></div><div><dt>Rời bãi dự kiến</dt><dd>{date(booking.endsAt)}</dd></div>
+            <div><dt>Thời lượng dự kiến</dt><dd>{Math.round((Date.parse(booking.endsAt) - Date.parse(booking.startsAt)) / 60000)} phút</dd></div><div><dt>Hạn đến check-in</dt><dd>{booking.arrivalDeadline ? date(booking.arrivalDeadline) : "Theo quy định của bãi"}</dd></div>
           </dl>
-
-          {pending && (
-            <div className="booking-hold-note" role="status">
-              {holdTimeText(booking.holdExpiresAt, now)}
-              <span>Đồng hồ chỉ hiển thị thời hạn; máy chủ mới quyết định booking còn hiệu lực hay đã hết hạn.</span>
-            </div>
-          )}
-
-          {pending && (
-            <section className="cash-payment-panel">
-              <div>
-                <h3>Thanh toán đặt chỗ</h3>
-                <p>Tạo yêu cầu thanh toán và thanh toán với nhân viên tại bãi. Nhân viên mới có quyền xác nhận đã thu tiền.</p>
-              </div>
-              <button className="customer-button primary" type="button" onClick={() => void beginCashPayment()}
-                disabled={paymentLoading || holdExpired || payment?.status.toUpperCase() === "PENDING"}>
-                {paymentLoading ? "Đang gửi yêu cầu..." : holdExpired ? "Thời gian giữ chỗ đã hết" : payment?.method === "CASH" ? "Đã gửi yêu cầu CASH" : "Chọn thanh toán CASH"}
-              </button>
-              <button className="customer-button secondary" disabled={paymentLoading || holdExpired || (payment?.method === "CASH" && payment.status === "PENDING")} onClick={() => void beginVnPay()}>Thanh toán VNPay</button>
-              {payment && (
-                <div className="cash-payment-result" role="status">
-                  Yêu cầu thanh toán: {payment.status} · {
-                    typeof payment.amount === "number" && Number.isFinite(payment.amount)
-                      ? formatMoney(payment.amount, payment.currency)
-                      : "Chưa có giá"
-                  }. Trạng thái booking vẫn được đọc từ máy chủ.
-                </div>
-              )}
-              {paymentError && (
-                <div className="customer-alert error" role="alert">
-                  {paymentError} {paymentError.includes("đăng nhập") && <Link to="/login">Đăng nhập lại</Link>}
-                </div>
-              )}
-            </section>
-          )}
-
-          {safeStatus === "CONFIRMED" && (
-            <section className="booking-qr">
-              <h3>Mã QR booking</h3>
-              {issuedQr?.bookingId === bookingId ? (
-                <>
-                  <QRCodeSVG value={issuedQr.payload} size={192} level="M" title={booking.bookingCode} />
-                  <p>Hạn dùng đến {new Date(issuedQr.expiresAt).toLocaleString("vi-VN")}.</p>
-                  <details>
-                    <summary>Mã để nhập tại cổng demo</summary>
-                    <textarea readOnly value={issuedQr.payload} aria-label="Token QR check-in" />
-                  </details>
-                </>
-              ) : (
-                <button type="button" className="customer-button primary" onClick={() => void issueQr()} disabled={qrLoading}>
-                  {qrLoading ? "Đang cấp mã…" : "Lấy mã QR check-in"}
-                </button>
-              )}
-              {qrError && <p role="alert">{qrError}</p>}
-            </section>
-          )}
-          {(pending || booking.status.toUpperCase() === "CONFIRMED") && <section className="cash-payment-panel">
-            <h3>Hủy đặt chỗ</h3>
-            <p>Hủy trước mốc quy định của bãi mới đủ điều kiện hoàn tiền. Hủy không đồng nghĩa đã nhận tiền hoàn.</p>
-            <label>Lý do hủy<textarea maxLength={2000} value={cancelReason} onChange={e => setCancelReason(e.target.value)} disabled={cancelling} /></label>
-            <button className="customer-button secondary" disabled={cancelling || !cancelReason.trim()} onClick={() => void cancelBooking()}>{cancelling ? "Đang hủy…" : "Xác nhận hủy đặt chỗ"}</button>
+          <section className={`booking-payment-summary${paid ? " is-paid" : ""}`}>
+            <div><span>{paid ? "Số tiền đã thanh toán" : "Tổng phí ước tính"}</span><strong className={paid ? "booking-paid-amount" : ""}>{paid ? typeof amount === "number" && Number.isFinite(amount) ? money(amount, currency) : "Đang cập nhật" : typeof booking.estimatedAmount === "number" ? money(booking.estimatedAmount) : "Chưa có giá"}</strong></div>
+            {paid && <span className="booking-paid-badge"><Check size={14} />Đã thanh toán</span>}
+          </section>
+          {(payment || receipt) && <dl className="booking-transaction-facts"><div><dt>Phương thức</dt><dd>{paymentMethod ? methodLabel(paymentMethod) : "Đang cập nhật"}</dd></div>{receipt && <><div><dt>Mã biên lai</dt><dd>{receipt.receiptNumber}</dd></div><div><dt>Thanh toán lúc</dt><dd>{date(receipt.paidAt)}</dd></div></>}{(receipt?.bankTransactionNo || (returnResult?.isSuccess && returnResult.transactionNo)) && <div><dt>Mã giao dịch ngân hàng</dt><dd>{receipt?.bankTransactionNo || returnResult?.transactionNo}</dd></div>}</dl>}
+          {statusError && <p className="customer-help-text" role="status">Chưa tải được đầy đủ thông tin thanh toán/biên lai. {statusError}</p>}
+          {pending && !paid && <div className="booking-hold-note" role="status"><Clock3 size={18} /><div>{remaining === null ? "Đang kiểm tra thời hạn giữ chỗ" : remaining === 0 ? "Đã qua thời hạn giữ chỗ" : `Giữ chỗ còn ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`}<span>{remaining === 0 ? "Đang kiểm tra trạng thái cuối cùng. Vui lòng không thanh toán lại." : "Hoàn tất thanh toán trong thời gian này để nhận vé vào bãi."}</span></div></div>}
+          {pending && !reconciling && !holdExpired && <section className="booking-payment-options">
+            <h3>{paymentFailed ? "Thanh toán chưa hoàn tất" : "Chọn cách thanh toán"}</h3>
+            {awaitingPayment ? <p role="status">{(payment?.paymentMethod ?? createdPayment?.method) === "CASH" ? "Đã gửi yêu cầu thu tiền. Nhân viên tại bãi cần xác nhận đã nhận thanh toán; vé và QR sẽ tự cập nhật sau đó." : "Giao dịch VNPay đang chờ xác nhận. Đừng tạo giao dịch khác khi kết quả chưa rõ."}</p> : <><p>{paymentFailed ? "Giao dịch trước chưa thành công. Bạn có thể chọn phương thức và thử lại trong thời hạn giữ chỗ." : "Thanh toán trực tuyến bằng VNPay hoặc thanh toán với nhân viên tại bãi."}</p><button className="customer-button primary" disabled={preview || creating !== null || refreshing || Boolean(statusError)} onClick={() => void beginPayment("VNPAY")}><CreditCard size={17} />{creating === "VNPAY" ? "Đang mở VNPay…" : "Thanh toán qua VNPay"}<ArrowRight size={16} /></button><button className="customer-button secondary" disabled={preview || creating !== null || refreshing || Boolean(statusError)} onClick={() => void beginPayment("CASH")}>{creating === "CASH" ? "Đang gửi yêu cầu…" : "Thanh toán với nhân viên"}</button></>}
           </section>}
-          {cancellation && <p role="status">{cancellation.refund_eligible ? "Đủ điều kiện xét hoàn tiền. Xem và gửi yêu cầu trong phần hoàn tiền bên dưới." : "Hủy trong khoảng không được hoàn tiền theo chính sách bãi."}</p>}
-          {["CANCELLED","EXPIRED"].includes(booking.status.toUpperCase()) && <BookingRefunds key={bookingId} bookingId={bookingId} />}
+          {paymentError && <div className="customer-alert error" role="alert">{paymentError}</div>}
+          {(pending || confirmed) && <details className="booking-cancel-section"><summary>Hủy đặt chỗ</summary><p>Điều kiện hoàn tiền phụ thuộc chính sách bãi và thời điểm hủy. Hủy đặt chỗ không đồng nghĩa đã nhận tiền hoàn.</p><label>Lý do hủy<textarea value={cancelReason} maxLength={2000} onChange={event => setCancelReason(event.target.value)} disabled={preview || cancelling} /></label><button className="customer-button secondary" disabled={preview || cancelling || !cancelReason.trim()} onClick={() => void cancelBooking()}>{cancelling ? "Đang hủy…" : "Xác nhận hủy đặt chỗ"}</button></details>}
+          {cancellation && <p role="status">{cancellation.refund_eligible ? "Đủ điều kiện xét hoàn tiền. Gửi yêu cầu trong phần hoàn tiền bên dưới." : "Đặt chỗ không đủ điều kiện hoàn tiền theo chính sách hiện tại."}</p>}
+          {!preview && ["CANCELLED", "EXPIRED"].includes(status) && <BookingRefunds key={bookingId} bookingId={bookingId} />}
           {cancelError && <p role="alert">{cancelError}</p>}
-          {refreshing && <p className="customer-help-text" role="status">Đang đồng bộ trạng thái với máy chủ...</p>}
-          <button className="customer-button secondary" type="button" onClick={() => void loadBooking(false)} disabled={refreshing}>
-            Làm mới trạng thái
-          </button>
+          <div className="booking-ticket-actions"><button className="customer-button secondary booking-refresh-button" disabled={refreshing} onClick={() => void refresh()}><RefreshCw size={15} />{refreshing ? "Đang cập nhật…" : "Kiểm tra trạng thái"}</button><Link to="/account">Xem lịch sử đặt chỗ<ArrowRight size={15} /></Link></div>
         </section>
-      )}
-      </main>
-    </CustomerLayout>
-  );
+        {confirmed && <BookingQrTicket key={bookingId} bookingId={bookingId} bookingCode={booking.bookingCode} enabled={!error} sample={preview ? previewData?.qr : undefined} />}
+      </div>
+    </>}
+  </main></CustomerLayout>;
 }

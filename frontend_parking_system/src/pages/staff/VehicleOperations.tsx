@@ -26,11 +26,11 @@ import {
   type StaffSessionRow,
 } from "../../services/api";
 import { staffApi } from "../../services/staff/staffApi";
-import { useIdempotencyKey } from "../../hooks/useIdempotencyKey";
 import type {
   CheckInResult,
   VehicleType,
   PlateRecognitionResult,
+  CheckInPayload,
 } from "../../types/staff";
 
 export default function VehicleOperations() {
@@ -96,7 +96,9 @@ export default function VehicleOperations() {
   const [checkInLoading, setCheckInLoading] = useState(false);
   const [checkInSuccess, setCheckInSuccess] = useState<CheckInResult | null>(null);
   const [checkInError, setCheckInError] = useState("");
-  const { key: checkInKey, renewKey: renewCheckInKey } = useIdempotencyKey("checkin");
+  const checkInAttemptRef = React.useRef<{ signature: string; payload: CheckInPayload; expiresAt: number } | null>(null);
+  const checkInInFlight = React.useRef(false);
+  const renewCheckInKey = () => { checkInAttemptRef.current = null; };
   const [allowMismatchOverride, setAllowMismatchOverride] = useState(false);
   const [overrideReason, setOverrideReason] = useState("");
   const [evidenceKind, setEvidenceKind] = useState("CAMERA_SNAPSHOT");
@@ -361,6 +363,7 @@ export default function VehicleOperations() {
   // Check-In Submit
   const handleCheckIn = async (e?: React.FormEvent, forceOverride?: boolean) => {
     e?.preventDefault();
+    if (checkInInFlight.current || evidenceUploading) return;
     setCheckInError("");
     setCheckInSuccess(null);
     const isOverride = forceOverride ?? allowMismatchOverride;
@@ -377,9 +380,10 @@ export default function VehicleOperations() {
       }
     }
 
+    checkInInFlight.current = true;
     setCheckInLoading(true);
     try {
-      const res = await staffApi.checkInVehicle({
+      const draft: CheckInPayload = {
         licensePlate: checkInPlate.trim(),
         qrToken: checkInBooking.trim() || undefined,
         lotId: entryGates.find(gate => gate.id === checkInGate)?.lotId,
@@ -388,10 +392,27 @@ export default function VehicleOperations() {
         allowMismatchOverride: isOverride,
         overrideReason: isOverride ? overrideReason.trim() : undefined,
         evidence: isOverride
-          ? [{ kind: evidenceKind, reference: evidenceReference.trim(), capturedAt: new Date().toISOString() }]
+          ? [{ kind: evidenceKind, reference: evidenceReference.trim() }]
           : undefined,
-        idempotencyKey: checkInKey,
-      });
+      };
+      const signature = JSON.stringify(draft);
+      let attempt = checkInAttemptRef.current;
+      if (!attempt || attempt.signature !== signature) {
+        attempt = {
+          signature,
+          expiresAt: Date.now() + 30 * 60_000,
+          payload: {
+            ...draft,
+            evidence: draft.evidence?.map(item => ({ ...item, capturedAt: new Date().toISOString() })),
+            idempotencyKey: `checkin-${crypto.randomUUID()}`,
+          },
+        };
+        checkInAttemptRef.current = attempt;
+      }
+      if (attempt.expiresAt <= Date.now()) throw new Error("Yêu cầu check-in trước đã quá thời gian thử lại. Kiểm tra danh sách phiên và bắt đầu lại thao tác sau khi đối chiếu.");
+      // Preserve the complete request on a retry, including evidence time. A
+      // changed camera plate/type is detected here even without an input event.
+      const res = await staffApi.checkInVehicle(attempt.payload);
       setCheckInSuccess(res);
       setCheckInPlate("");
       setCheckInBooking("");
@@ -405,7 +426,7 @@ export default function VehicleOperations() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Không thể check-in phương tiện.";
       const lower = msg.toLowerCase();
-      if (err instanceof ApiError && err.status === 409 && (err.errorCode === "PLATE_MISMATCH" || lower.includes("mismatch") || lower.includes("booked") || lower.includes("override") || lower.includes("biển"))) {
+      if (err instanceof ApiError && err.status === 409 && (err.errorCode === "PLATE_MISMATCH" || (!err.errorCode && /plate.*(?:does not match|mismatch)|biển số.*(?:không khớp|sai lệch)/i.test(msg)))) {
         setAllowMismatchOverride(true);
         setShowOverrideModal(true);
         renewCheckInKey();
@@ -418,6 +439,7 @@ export default function VehicleOperations() {
         setCheckInError(msg);
       }
     } finally {
+      checkInInFlight.current = false;
       setCheckInLoading(false);
     }
   };

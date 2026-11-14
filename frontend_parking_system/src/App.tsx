@@ -56,6 +56,7 @@ export default function App() {
       {/* Customer / Public Routes */}
       <Route path="/" element={<Home />} />
       <Route path="/booking" element={<Suspense fallback={<p role="status">Đang tải tìm kiếm và đặt chỗ…</p>}><Booking /></Suspense>} />
+      <Route path="/booking/:lotId" element={<Suspense fallback={<p role="status">Đang tải sơ đồ bãi đỗ…</p>}><Booking selection /></Suspense>} />
       <Route path="/login" element={<Login />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/register" element={<Register />} />

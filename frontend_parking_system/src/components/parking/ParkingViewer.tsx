@@ -266,7 +266,7 @@ export default function ParkingViewer({ levels, mapObjects = [], selectedLevelCo
       if (!slot) return;
       instance.slot = slot;
       const target = new THREE.Color(slot.slotId === selectedId
-        ? 0xef4444
+        ? 0x072d59
         : slotColors[slot.status.toUpperCase()] ?? 0x64748b);
       const current = new THREE.Color();
       instance.mesh.getColorAt(instance.instanceId, current);
