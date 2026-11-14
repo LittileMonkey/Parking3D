@@ -15,11 +15,15 @@ for s in ['identity','parking','payment','ai']:
         f'      ConnectionStrings__Service: "Host={s}-db;Database=parking_{s};Username={s};Password=${{{s.upper()}_DB_PASSWORD}}"',
         '      Services__IdentityGrpc: http://identity:8081','      Services__ParkingGrpc: http://parking:8081','      Services__AIGrpc: http://ai:8081']
     if s=='identity':lines+=['      Bootstrap__Email: ${BOOTSTRAP_EMAIL:?Set administrator email}','      Bootstrap__Password: ${BOOTSTRAP_PASSWORD:?Run New-DevelopmentEnv.ps1}']
+    if s=='identity':lines += ['      Email__Sender: ${SMTP_SENDER:-}', '      Email__AppPassword: ${SMTP_PASSWORD:-}',
+        '      Email__SmtpServer: ${SMTP_HOST:-}', '      Email__Port: ${SMTP_PORT:-587}', '      Google__ClientId: ${GOOGLE_CLIENT_ID:-}']
     if s=='ai':lines+=['      AI__OcrEndpoint: ${OCR_ENDPOINT:-}','      AI__OcrApiKey: ${OCR_API_KEY:-}']
     lines+=['    depends_on:',f'      {s}-db:','        condition: service_healthy','    restart: unless-stopped']
 lines+=['  gateway:','    build:','      context: .','      dockerfile: deploy/docker/Dockerfile','      args:',
         '        PROJECT: src/Gateway/Parking.Gateway/Parking.Gateway.csproj','        APP_DLL: Parking.Gateway.dll',
         '    environment:','      ASPNETCORE_ENVIRONMENT: Development','      ASPNETCORE_HTTP_PORTS: 8080',
+        *[f'      Services__{service}Http: http://{service}:8080' for service in ['identity','parking','payment','ai']],
+        *[f'      ReverseProxy__Clusters__{service}__Destinations__main__Address: http://{service}:8080/' for service in ['identity','parking','payment','ai']],
         '    ports:','      - "127.0.0.1:8080:8080"','    depends_on:']
 for s in ['identity','parking','payment','ai']:lines+=[f'      {s}:','        condition: service_healthy']
 lines+=['    restart: unless-stopped','volumes:','  identity-data:','  parking-data:','  payment-data:','  ai-data:']

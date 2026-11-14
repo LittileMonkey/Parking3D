@@ -293,7 +293,21 @@ public sealed partial class ParkingWorkflowTests
     {
         var request=await PrepareAuthorizedCheckOut();
         var clock=UseHoldTestClock();
-        var expected=new DateTimeOffset((DateTime)(await Scalar("SELECT expected_exit_at FROM parking_sessions"))!);
+        // Check-in uses the database clock. After creating the authorized session,
+        // anchor the checkout fixture to noon in the lot timezone so this test only
+        // exercises a fee-block boundary, independently of when the suite runs.
+        var expected = new DateTimeOffset(2026, 11, 14, 12, 0, 0, TimeSpan.FromHours(7)).ToUniversalTime();
+        await Sql("""
+            BEGIN;
+            CREATE TEMP TABLE checkout_reservations ON COMMIT DROP AS SELECT * FROM slot_reservations;
+            DELETE FROM slot_reservations;
+            UPDATE bookings SET starts_at=@start, ends_at=@end;
+            UPDATE checkout_reservations SET starts_at=@start, ends_at=@end;
+            INSERT INTO slot_reservations SELECT * FROM checkout_reservations;
+            UPDATE parking_sessions SET entry_at=@start, expected_exit_at=@end;
+            UPDATE session_slot_assignments SET occupied_from=@start;
+            COMMIT;
+            """, ("start", expected.AddHours(-1)), ("end", expected));
         clock.UtcNow=expected.AddSeconds(899);
         var quote=await repository.GetCheckOutQuoteAsync(Lot,request.GateId,"51A12345",null,Ct,request.SessionId);
         Assert.Equal(7500m,quote.TotalAmountDue);
@@ -303,6 +317,7 @@ public sealed partial class ParkingWorkflowTests
         var evidence=new CheckOutPaymentEvidence(Guid.NewGuid(),request.SessionId,Lot,7500,"VND","CASH");
         var error=await Assert.ThrowsAsync<ServiceException>(()=>repository.CompleteCheckOutAsync(Staff,request,"block-boundary",Ct,new(proof,evidence)));
         Assert.Equal(409,error.StatusCode);
+        Assert.Contains("Checkout fee changed", error.Message);
         await AssertCheckOutNotWritten();
     }
 

@@ -497,10 +497,11 @@ public sealed partial class ParkingRepository
                 throw new ServiceException(409, "Vehicle already has an active parking session.");
         }
 
-        // 7. Thuật toán AUTO_SLOT: Tìm và khóa ô đỗ tối ưu nhất (FOR UPDATE OF s SKIP LOCKED trên map PUBLISHED)
-        Guid slotId;
-        string slotCode;
-        string levelName;
+        // 7. Rank AUTO_SLOT candidates using the published map, then lock in order.
+        Guid slotId = Guid.Empty;
+        string slotCode = string.Empty;
+        string levelName = string.Empty;
+        var candidates = new List<(Guid Id, string Code, string Level)>();
         await using (var slotSearch = Command("""
             WITH published_map AS (
                 SELECT id
@@ -538,26 +539,46 @@ public sealed partial class ParkingRepository
             ORDER BY
               COALESCE(SQRT(POWER(mo_slot.x - mo_gate.x, 2) + POWER(mo_slot.y - mo_gate.y, 2) + POWER(mo_slot.z - mo_gate.z, 2)), 99999) ASC,
               lvl.display_order ASC,
-              s.code ASC
-            LIMIT 1
-            FOR UPDATE OF s SKIP LOCKED;
+              s.code ASC;
             """))
         {
             slotSearch.Parameters.AddWithValue("entry", entryAt.UtcDateTime);
             slotSearch.Parameters.AddWithValue("end", endsAt.UtcDateTime);
             await using var reader = await slotSearch.ExecuteReaderAsync(ct);
-            if (!await reader.ReadAsync(ct))
-                throw new ServiceException(409, "No available slots for this vehicle type at this parking lot.");
-            slotId = reader.GetGuid(0);
-            slotCode = reader.GetString(1);
-            levelName = reader.GetString(2);
+            while (await reader.ReadAsync(ct))
+                candidates.Add((reader.GetGuid(0), reader.GetString(1), reader.GetString(2)));
         }
 
-        await using (var slotLock = Command("SELECT lock_parking_resource('SLOT', @slot)"))
+        // Match booking/operations: VEHICLE -> SLOT advisory -> row lock.
+        // Never wait on a candidate. Roll back its savepoint to release any lock
+        // acquired for a rejected candidate before trying the next nearest slot.
+        foreach (var candidate in candidates)
         {
-            slotLock.Parameters.AddWithValue("slot", slotId);
-            await slotLock.ExecuteNonQueryAsync(ct);
+            await transaction.SaveAsync("auto_slot_candidate", ct);
+            await using var slotLock = Command(
+                "SELECT pg_try_advisory_xact_lock(hashtextextended('SLOT:' || @slot::text, 0))");
+            slotLock.Parameters.AddWithValue("slot", candidate.Id);
+            if ((bool)(await slotLock.ExecuteScalarAsync(ct))!)
+            {
+                await using var rowLock = Command("""
+                    SELECT id FROM parking_slots
+                    WHERE id=@slot AND lot_id=@lot AND operational_status='ACTIVE'
+                    FOR UPDATE SKIP LOCKED
+                    """);
+                rowLock.Parameters.AddWithValue("slot", candidate.Id);
+                if (await rowLock.ExecuteScalarAsync(ct) is Guid)
+                {
+                    (slotId, slotCode, levelName) = candidate;
+                    await transaction.ReleaseAsync("auto_slot_candidate", ct);
+                    break;
+                }
+            }
+            await transaction.RollbackAsync("auto_slot_candidate", ct);
+            await transaction.ReleaseAsync("auto_slot_candidate", ct);
         }
+
+        if (slotId == Guid.Empty)
+            throw new ServiceException(409, "No available slots for this vehicle type at this parking lot.");
 
         // Xác nhận lại dưới khóa SLOT rằng chưa có session/reservation nào vừa chen vào trước khi lock SLOT.
         await using (var slotDoubleCheck = Command("""

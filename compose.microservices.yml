@@ -92,6 +92,7 @@ services:
       Email__AppPassword: ${SMTP_PASSWORD:-}
       Email__SmtpServer: ${SMTP_HOST:-}
       Email__Port: ${SMTP_PORT:-587}
+      Google__ClientId: ${GOOGLE_CLIENT_ID:-}
       Mfa__EncryptionKey: ${MFA_ENCRYPTION_KEY:?Run New-DevelopmentEnv.ps1 -Ensure}
       SeedAdmin__Email: ${BOOTSTRAP_EMAIL:?Set administrator email}
       SeedAdmin__Password: ${BOOTSTRAP_PASSWORD:?Run New-DevelopmentEnv.ps1}
@@ -242,6 +243,15 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_HTTP_PORTS: 8080
       RateLimit__PermitLimit: 600
+      # Development JSON uses host loopback; containers must resolve service DNS.
+      Services__identityHttp: http://identity:8080
+      Services__parkingHttp: http://parking:8080
+      Services__paymentHttp: http://payment:8080
+      Services__aiHttp: http://ai:8080
+      ReverseProxy__Clusters__identity__Destinations__main__Address: http://identity:8080/
+      ReverseProxy__Clusters__parking__Destinations__main__Address: http://parking:8080/
+      ReverseProxy__Clusters__payment__Destinations__main__Address: http://payment:8080/
+      ReverseProxy__Clusters__ai__Destinations__main__Address: http://ai:8080/
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:

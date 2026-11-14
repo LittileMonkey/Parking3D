@@ -1,6 +1,8 @@
 # TÀI LIỆU TỔNG HỢP KIẾN TRÚC & MÃ NGUỒN TÍNH NĂNG TÌM KIẾM BÃI ĐỖ XE (S2-03)
 ## Search Nearest / Cheapest Parking Lots with Clean Architecture, CQRS & PostgreSQL
 
+> Cập nhật 14/11/2026: `EstimatedPriceService` hiện chọn biểu giá trực tiếp từ repository theo thời điểm bắt đầu của từng yêu cầu. Cache `pricing_rule:{lotId}:{vehicleType}` trong ví dụ lịch sử bên dưới không còn áp dụng: nó có thể trả nhầm biểu giá khi có lịch đổi giá trong ngày hoặc phiên bản vừa được publish. Đổi lại, hiện có một truy vấn biểu giá cho mỗi bãi được xét. Nếu tối ưu tiếp, cần cache danh mục phiên bản/khoảng hiệu lực kèm invalidation khi publish, không cache một biểu giá duy nhất cho cả bãi/loại xe. Cache layout không thay đổi.
+
 ---
 
 ## 1. Bức Tranh Tổng Quan & Vòng Đời Của Một Request (Request Lifecycle)
