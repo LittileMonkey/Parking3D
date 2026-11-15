@@ -14,11 +14,7 @@ The Vite development server proxies `/api`, `/health` and SignalR WebSocket requ
 
 ## Customer routes
 
-To review the booking UI without a backend, run `npm run dev` and open `http://localhost:5173/booking?preview=1`. This explicit, development-only preview loads three sample lots with different floor counts, sample prices and selectable slots. The banner identifies every value as illustrative. Search, availability and realtime make no backend calls, and booking/payment actions are disabled. Selection, reload and Back retain preview mode; “Thoát xem thử” returns to the real API flow. Production builds do not enable this mode, and API failures never substitute sample data automatically.
-
-Payment outcome previews are available at `/bookings/preview?preview=success` (also `cash`, `processing`, `failed`, `expired`). They display explicit sample banners and a non-entry QR only for the confirmed examples; no payment, QR, refund or booking APIs are called. The slot preview links to this result screen while preserving the selected lot/time/slot.
-
-- `/` — customer landing page and parking search preview.
+- `/` — customer landing page and parking search.
 - `/login`, `/register`, `/forgot-password` — authentication UI.
 - `/booking` — NEAREST/CHEAPEST search and estimated total prices for the requested parking duration.
 - `/booking/:lotId` — dedicated floor/slot selection and booking summary, account vehicle selection, ExactSlot/AutoSlot hold and payment handoff. “Chọn bãi” opens this route, rather than expanding the search page.
@@ -38,6 +34,16 @@ The booking flow shares the navy/ice palette and shows three steps: search, choo
 The customer landing page, booking search, booking status and FAQ use the shared `CustomerLayout` for the public header and footer. It keeps the customer theme light, provides a keyboard-operable mobile navigation menu and displays the learning-only notice: “Đây là sản phẩm phục vụ học tập, không dùng cho hoạt động thực tế.”
 
 ## Integration boundaries
+
+### Authentication configuration
+
+Set `VITE_GOOGLE_CLIENT_ID` in `.env.local` to the same public OAuth Web Client ID as Identity's `Google:ClientId`, then restart Vite. Add the exact FE origin (for local development, `http://localhost:5173`) to the client's Authorized JavaScript origins in Google Cloud. Never put a Google client secret into a `VITE_` variable. Google sign-in/sign-up use the official GIS button and POST its ID token to `/api/v1/auth/google`; accounts with MFA complete the existing server challenge. See [Google's button integration guide](https://developers.google.com/identity/gsi/web/guides/display-button).
+
+Remember me keeps the existing bearer/refresh-token session in browser storage for at most seven days; unchecked sign-in keeps it in the current tab only. Passwords and Google ID tokens are never persisted. Expired access tokens use the existing refresh endpoint, while logout and security changes clear the remembered session. The backend remains responsible for token validity and revocation.
+
+Recovery requests an email code first, then submits the code and new password together to `/api/v1/auth/reset-password`. Code validity and expiry are checked by Identity; the UI only shows success after the server succeeds.
+
+Run `npm run test:auth` for remembered-session storage checks. Google consent/origin configuration and actual email delivery require an integration check with the configured services.
 
 - API requests use the Gateway and the shared `result` / `isSuccess` / `statusCode` / `message` response envelope.
 - Search results and pricing come from the Parking Search API; availability, slot IDs and statuses come from the selected lot's Availability API. Missing estimates display as “Chưa có giá”, not zero.

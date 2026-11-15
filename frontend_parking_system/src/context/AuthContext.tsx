@@ -1,13 +1,15 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
-import { api, type AuthTokens, type AuthUser } from "../services/api";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { authStorage, beginSession, clearSession, restoreSession } from "../services/authStorage";
+import { tryRefreshAccessToken, api, type AuthTokens, type AuthUser } from "../services/api";
 
 export interface AuthContextValue {
   user: AuthUser | null;
   isAuthenticated: boolean;
-  guestLogin: (email: string, code: string, mfaCode?: string) => Promise<AuthUser>;
-  login: (userName: string, password: string, mfaCode?: string) => Promise<AuthUser>;
-  loginWithGoogle: (idToken: string, mfaCode?: string) => Promise<AuthUser>;
+  guestLogin: (email: string, code: string, mfaCode?: string, remember?: boolean) => Promise<AuthUser>;
+  login: (userName: string, password: string, mfaCode?: string, remember?: boolean) => Promise<AuthUser>;
+  loginWithGoogle: (idToken: string, mfaCode?: string, remember?: boolean) => Promise<AuthUser>;
   logout: () => Promise<void>;
+  updateProfile: (profile: { fullName: string; email?: string | null }) => void;
   getRedirectPath: (targetUser?: AuthUser | null) => string;
 }
 
@@ -116,17 +118,18 @@ export function getRedirectPathForUser(targetUser?: AuthUser | null): string {
 }
 
 function getSavedUser(): AuthUser | null {
-  const savedUser = sessionStorage.getItem("parking.user");
-  const token = sessionStorage.getItem("parking.accessToken");
+  restoreSession();
+  const savedUser = authStorage.getItem("parking.user");
+  const token = authStorage.getItem("parking.accessToken");
   const claims = token ? parseJwtPayload(token) : null;
-  if (!claims || typeof claims.exp !== "number" || claims.exp * 1000 <= Date.now()) return null;
+  if (!claims || typeof claims.exp !== "number" || (claims.exp * 1000 <= Date.now() && !authStorage.getItem("parking.refreshToken"))) return null;
 
   let parsed: AuthUser | null = null;
   if (savedUser) {
     try {
       parsed = JSON.parse(savedUser) as AuthUser;
     } catch {
-      sessionStorage.removeItem("parking.user");
+      authStorage.removeItem("parking.user");
     }
   }
 
@@ -143,7 +146,7 @@ function getSavedUser(): AuthUser | null {
         role: parsed?.role ?? fromToken.role,
         roles: Array.from(new Set([...(parsed?.roles ?? []), ...fromToken.roles])),
       };
-      sessionStorage.setItem("parking.user", JSON.stringify(parsed));
+      authStorage.setItem("parking.user", JSON.stringify(parsed));
     }
   }
 
@@ -176,25 +179,41 @@ function normalizeUser(tokens: AuthTokens, userName: string): AuthUser {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(getSavedUser);
+  useEffect(() => {
+    let active = true;
+    const token = authStorage.getItem("parking.accessToken");
+    const claims = token ? parseJwtPayload(token) : null;
+    if (claims && Number(claims.exp) * 1000 <= Date.now()) {
+      void tryRefreshAccessToken().then(next => {
+        if (!active || (authStorage.getItem("parking.accessToken") !== token && !next)) return;
+        if (next) setUser(getSavedUser());
+        else { clearSession(); setUser(null); }
+      });
+    }
+    const onStorage = (e: StorageEvent) => { if (e.key === "parking.remembered" && !e.newValue && !localStorage.getItem("parking.remembered")) { clearSession(); setUser(null); } };
+    window.addEventListener("storage", onStorage);
+    return () => { active = false; window.removeEventListener("storage", onStorage); };
+  }, []);
 
-  const login = async (userName: string, password: string, mfaCode?: string): Promise<AuthUser> => {
+  const login = async (userName: string, password: string, mfaCode?: string, remember = false): Promise<AuthUser> => {
     const response = await api.login(userName, password, mfaCode);
-    return acceptLogin(response,userName);
+    return acceptLogin(response,userName,remember);
   };
-  const loginWithGoogle = async (idToken: string, mfaCode?: string): Promise<AuthUser> => {
+  const loginWithGoogle = async (idToken: string, mfaCode?: string, remember = false): Promise<AuthUser> => {
     const response = await api.loginWithGoogle(idToken, mfaCode);
-    return acceptLogin(response, response.email ?? "");
+    return acceptLogin(response, response.email ?? "",remember);
   };
   const guestLogin = async (email: string, code: string, mfaCode?: string): Promise<AuthUser> => acceptLogin(await api.guestLogin(email,code,mfaCode),email);
-  const acceptLogin = async (response: AuthTokens, userName: string): Promise<AuthUser> => {
+  const acceptLogin = async (response: AuthTokens, userName: string, remember = false): Promise<AuthUser> => {
     const accessToken = response.accessToken ?? response.token;
     if (!accessToken) {
       throw new Error("Máy chủ không trả access token. Vui lòng kiểm tra cấu hình API đăng nhập.");
     }
 
-    sessionStorage.setItem("parking.accessToken", accessToken);
+    beginSession(remember);
+    authStorage.setItem("parking.accessToken", accessToken);
     if (response.refreshToken) {
-      sessionStorage.setItem("parking.refreshToken", response.refreshToken);
+      authStorage.setItem("parking.refreshToken", response.refreshToken);
     }
 
     let authenticatedUser = normalizeUser(response, userName);
@@ -220,22 +239,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Nếu API profile chưa phản hồi kịp, thông tin đã được trích xuất đầy đủ từ JWT claims
     }
 
-    sessionStorage.setItem("parking.user", JSON.stringify(authenticatedUser));
+    authStorage.setItem("parking.user", JSON.stringify(authenticatedUser));
     setUser(authenticatedUser);
     return authenticatedUser;
   };
 
   const logout = async () => {
     try {
-      if (sessionStorage.getItem("parking.accessToken")) await api.logout();
+      if (authStorage.getItem("parking.accessToken")) await api.logout();
     } catch {
       // Clear the local session even while the backend logout endpoint is unavailable.
     } finally {
-      sessionStorage.removeItem("parking.accessToken");
-      sessionStorage.removeItem("parking.refreshToken");
-      sessionStorage.removeItem("parking.user");
+      clearSession();
       setUser(null);
     }
+  };
+
+  const updateProfile = (profile: { fullName: string; email?: string | null }) => {
+    if (!user || !authStorage.getItem("parking.accessToken") || getSavedUser()?.userId !== user.userId) return;
+    const updated = { ...user, fullName: profile.fullName, email: profile.email ?? user.email };
+    authStorage.setItem("parking.user", JSON.stringify(updated));
+    setUser(updated);
   };
 
   const getRedirectPath = (targetUser?: AuthUser | null) => {
@@ -251,6 +275,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginWithGoogle,
         guestLogin,
         logout,
+        updateProfile,
         getRedirectPath,
       }}
     >

@@ -15,7 +15,7 @@ import { api } from "../services/api";
 import AuthShowcase from "../components/auth/AuthShowcase";
 import "./Auth.css";
 
-type Step = "email" | "otp" | "password" | "success";
+type Step = "email" | "password" | "success";
 
 export default function ForgotPassword() {
   const [step, setStep] = useState<Step>("email");
@@ -24,6 +24,7 @@ export default function ForgotPassword() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -37,10 +38,10 @@ export default function ForgotPassword() {
       const normalized = email.trim().toLowerCase();
       setBusy(true);
       try {
-        const res = await api.forgetPassword(normalized);
+        await api.forgetPassword(normalized);
         setEmail(normalized);
-        setNotice(res?.message || "Đã gửi mã PIN khôi phục qua email. Vui lòng kiểm tra hộp thư.");
-        setStep("otp");
+        setNotice("Nếu email đã được đăng ký, mã xác thực sẽ được gửi đến hộp thư. Mã có hiệu lực trong 5 phút.");
+        setStep("password");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Không gửi được mã OTP khôi phục.");
       } finally {
@@ -49,14 +50,7 @@ export default function ForgotPassword() {
       return;
     }
 
-    if (step === "otp") {
-      if (!/^\d{6}$/.test(otp)) {
-        setError("Mã OTP phải gồm đúng 6 chữ số.");
-        return;
-      }
-      setStep("password");
-      return;
-    }
+    if (!/^\d{6}$/.test(otp)) { setError("Mã xác thực phải gồm đúng 6 chữ số."); return; }
 
     if (password.length < 8) {
       setError("Mật khẩu mới cần có ít nhất 8 ký tự.");
@@ -70,9 +64,14 @@ export default function ForgotPassword() {
     setBusy(true);
     try {
       await api.resetPassword(email, otp, password);
+      setOtp(""); setPassword(""); setConfirmPassword("");
       setStep("success");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Không đặt lại được mật khẩu. Vui lòng thử lại.");
+      const message = err instanceof Error ? err.message : "";
+      setError(/expired|no active verification/i.test(message) ? "Mã xác thực đã hết hạn. Vui lòng yêu cầu mã mới."
+        : /maximum verification|locked/i.test(message) ? "Bạn đã thử quá nhiều lần. Vui lòng chờ rồi yêu cầu mã mới."
+        : /verification code is incorrect|otp.*invalid/i.test(message) ? "Mã xác thực chưa đúng. Vui lòng kiểm tra email."
+        : "Không đặt lại được mật khẩu. Vui lòng kiểm tra mã xác thực và thử lại.");
     } finally {
       setBusy(false);
     }
@@ -81,7 +80,7 @@ export default function ForgotPassword() {
   const goBack = () => {
     setError("");
     setNotice("");
-    setStep(step === "password" ? "otp" : "email");
+    setOtp(""); setPassword(""); setConfirmPassword(""); setStep("email");
   };
 
   return (
@@ -119,13 +118,11 @@ export default function ForgotPassword() {
               <header className="auth-card-header">
                 <h2 id="forgot-heading" className="auth-card-title">
                   {step === "email" && "Quên mật khẩu?"}
-                  {step === "otp" && "Xác thực mã OTP"}
                   {step === "password" && "Tạo mật khẩu mới"}
                 </h2>
                 <p className="auth-card-subtitle">
-                  {step === "email" && "Nhập email đã đăng ký để nhận mã PIN khôi phục."}
-                  {step === "otp" && <>Nhập mã 6 chữ số đã gửi tới <strong>{email}</strong>.</>}
-                  {step === "password" && "Thiết lập mật khẩu mới có ít nhất 8 ký tự."}
+                  {step === "email" && "Nhập email đã đăng ký để nhận mã xác thực."}
+                  {step === "password" && <>Nhập mã gửi tới <strong>{email}</strong> và mật khẩu mới.</>}
                 </p>
               </header>
 
@@ -165,7 +162,7 @@ export default function ForgotPassword() {
                   </div>
                 )}
 
-                {step === "otp" && (
+                {step === "password" && (
                   <div className="auth-form-field">
                     <label htmlFor="forgot-otp" className="auth-form-label">
                       <KeyRound size={14} /> Mã xác thực (OTP 6 số)
@@ -229,7 +226,7 @@ export default function ForgotPassword() {
                         <ShieldCheck size={17} className="auth-input-icon" />
                         <input
                           id="forgot-confirm"
-                          type={showPassword ? "text" : "password"}
+                          type={showConfirmPassword ? "text" : "password"}
                           autoComplete="new-password"
                           minLength={8}
                           value={confirmPassword}
@@ -239,6 +236,9 @@ export default function ForgotPassword() {
                           required
                           disabled={busy}
                         />
+                        <button type="button" className="auth-password-toggle" aria-label={showConfirmPassword ? "Ẩn mật khẩu xác nhận" : "Hiện mật khẩu xác nhận"} onClick={() => setShowConfirmPassword(!showConfirmPassword)} disabled={busy}>
+                          {showConfirmPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                        </button>
                       </div>
                     </div>
                   </>
@@ -249,18 +249,17 @@ export default function ForgotPassword() {
                   {busy
                     ? "Đang xử lý..."
                     : step === "email"
-                    ? "Gửi mã PIN khôi phục"
-                    : step === "otp"
-                    ? "Xác thực mã OTP"
+                    ? "Gửi mã khôi phục"
                     : "Đổi mật khẩu"}
                 </button>
               </form>
 
-              {(step === "otp" || step === "password") && (
+              {step === "password" && (
                 <div style={{ marginTop: "16px", textAlign: "center" }}>
                   <button
                     type="button"
                     onClick={goBack}
+                    disabled={busy}
                     style={{
                       background: "none",
                       border: "none",
@@ -274,7 +273,7 @@ export default function ForgotPassword() {
                     }}
                   >
                     <ArrowLeft size={14} />
-                    {step === "otp" ? "Quay lại nhập email" : "Quay lại nhập OTP"}
+                    Gửi lại mã / đổi email
                   </button>
                 </div>
               )}

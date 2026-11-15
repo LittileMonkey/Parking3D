@@ -16,6 +16,29 @@ public sealed partial class ParkingWorkflowTests
 {
     [PostgresFact]
     [Trait("Ticket", "SCRUM-110")]
+    public async Task AutoSlotSkipsAdvisoryLockedSlotWithoutTakingItsRowLock()
+    {
+        var alternative = await AddVerificationSlot();
+        await using var connection = await data.OpenConnectionAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await using var advisory = new NpgsqlCommand(
+            "SELECT lock_parking_resource('SLOT', @slot)", connection, transaction);
+        advisory.Parameters.AddWithValue("slot", Slot);
+        await advisory.ExecuteNonQueryAsync();
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var result = await repository.CheckInWalkInAsync(Staff,
+            new CheckInRequestDto(Lot, Gate, null, "51B12345"), "skip-advisory", timeout.Token);
+
+        Assert.Equal(alternative, result.SlotId);
+        await using var row = new NpgsqlCommand(
+            "SELECT id FROM parking_slots WHERE id=@slot FOR UPDATE NOWAIT", connection, transaction);
+        row.Parameters.AddWithValue("slot", Slot);
+        Assert.Equal(Slot, await row.ExecuteScalarAsync());
+    }
+
+    [PostgresFact]
+    [Trait("Ticket", "SCRUM-110")]
     public async Task AutoSlotRegistersNewVehicleAndCreatesPhysicalOccupancy()
     {
         var result = await repository.CheckInWalkInAsync(

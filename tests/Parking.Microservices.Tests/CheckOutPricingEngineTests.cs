@@ -14,6 +14,18 @@ namespace Parking.Microservices.Tests;
 /// </summary>
 public class CheckOutPricingEngineTests
 {
+    [Theory]
+    [InlineData(12, 0, 7500)]
+    [InlineData(23, 50, 15000)]
+    public void FlatBlockOvertimeSplitsAtLocalMidnight(int hour, int minute, decimal expectedFee)
+    {
+        var expectedExit = new DateTimeOffset(2026, 11, 14, hour, minute, 0, TimeSpan.FromHours(7));
+        const string rules = """{"blockMinutes":15,"rateVnd":7500,"dailyCapVnd":120000,"multiplier":1}""";
+        var fee = CheckOutFee.Calculate(true, expectedExit.AddHours(-1), expectedExit,
+            expectedExit.AddSeconds(899), rules, "Asia/Ho_Chi_Minh", expectedExit.AddHours(-1));
+        Assert.Equal(expectedFee, fee);
+    }
+
     private static readonly TimeZoneInfo VnTz = TimeZoneInfo.TryFindSystemTimeZoneById("Asia/Ho_Chi_Minh", out var tz)
         ? tz
         : (TimeZoneInfo.TryFindSystemTimeZoneById("SE Asia Standard Time", out var winTz) ? winTz : TimeZoneInfo.Utc);

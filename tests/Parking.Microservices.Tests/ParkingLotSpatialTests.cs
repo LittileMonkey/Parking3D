@@ -287,13 +287,12 @@ public class ParkingLotSpatialTests
     }
 
     [Fact]
-    public async Task EstimatedPriceService_ShouldCachePricingRule_ViaDistributedCache_AndSkipNullRule()
+    public async Task EstimatedPriceService_SelectsCurrentRuleAndExcludesLotsWithoutPricing()
     {
         var lotId = Guid.NewGuid();
-        var (_, cacheService) = CreateDistributedCacheService();
         var repo = new FakeParkingLotRepository(
             ("Asia/Ho_Chi_Minh", "{\"blockMinutes\":15,\"rateVnd\":5000,\"dailyCapVnd\":120000,\"multiplier\":1.0}"));
-        var priceService = new EstimatedPriceService(repo, cacheService);
+        var priceService = new EstimatedPriceService(repo);
 
         var start = new DateTime(2026, 11, 1, 8, 0, 0, DateTimeKind.Utc);
         var first = await priceService.CalculateEstimatedFeeAsync(lotId, "car", start, 30);
@@ -302,10 +301,10 @@ public class ParkingLotSpatialTests
         Assert.Equal(10_000, first.TotalFee);
         Assert.True(first.HasPricing);
         Assert.Equal(first.TotalFee, second.TotalFee);
-        Assert.Equal(1, repo.Calls);
+        Assert.Equal(2, repo.Calls);
 
         var emptyRepo = new FakeParkingLotRepository(null);
-        var emptyPriceService = new EstimatedPriceService(emptyRepo, cacheService);
+        var emptyPriceService = new EstimatedPriceService(emptyRepo);
         var missingLotId = Guid.NewGuid();
         var missing1 = await emptyPriceService.CalculateEstimatedFeeAsync(missingLotId, "CAR", start, 30);
         var missing2 = await emptyPriceService.CalculateEstimatedFeeAsync(missingLotId, "CAR", start, 30);
@@ -389,11 +388,30 @@ public class ParkingLotSpatialTests
         public Task SetAsync(string key, byte[] value, DistributedCacheEntryOptions options, CancellationToken token = default) => throw new TimeoutException("Redis down");
     }
 
+    [Fact]
+    public async Task EstimatedPriceUsesEffectiveTimeAndSeesPublishedChanges()
+    {
+        var boundary = new DateTime(2026, 11, 14, 8, 30, 0, DateTimeKind.Utc);
+        var rate = 2000;
+        var repo = new FakeParkingLotRepository(null)
+        {
+            RuleAt = start => ("Asia/Ho_Chi_Minh",
+                $"{{\"blockMinutes\":15,\"rateVnd\":{(start < boundary ? 1000 : rate)},\"dailyCapVnd\":120000,\"multiplier\":1}}")
+        };
+        var service = new EstimatedPriceService(repo);
+        var lot = Guid.NewGuid();
+        Assert.Equal(1000, (await service.CalculateEstimatedFeeAsync(lot, "CAR", boundary.AddSeconds(-1), 15)).TotalFee);
+        Assert.Equal(2000, (await service.CalculateEstimatedFeeAsync(lot, "CAR", boundary, 15)).TotalFee);
+        rate = 3000;
+        Assert.Equal(3000, (await service.CalculateEstimatedFeeAsync(lot, "CAR", boundary, 15)).TotalFee);
+    }
+
     private sealed class FakeParkingLotRepository(
         (string Timezone, string ParametersJson)? config,
         List<ParkingLot>? lots = null) : IParkingLotRepository
     {
         public int Calls { get; private set; }
+        public Func<DateTime, (string Timezone, string ParametersJson)?>? RuleAt { get; init; }
 
         public Task<List<ParkingLot>> GetAvailableLotsAsync(string vehicleType, CancellationToken cancellationToken = default)
             => Task.FromResult(lots ?? new List<ParkingLot>());
@@ -405,7 +423,7 @@ public class ParkingLotSpatialTests
             CancellationToken cancellationToken = default)
         {
             Calls++;
-            return Task.FromResult(config);
+            return Task.FromResult(RuleAt is null ? config : RuleAt(startTime));
         }
     }
 }

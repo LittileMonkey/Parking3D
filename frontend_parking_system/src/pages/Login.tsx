@@ -1,3 +1,4 @@
+import GoogleSignIn from "../components/auth/GoogleSignIn";
 import { useState, useEffect, type FormEvent } from "react";
 import {
   ArrowLeft,
@@ -20,7 +21,7 @@ export default function Login() {
   const [searchParams] = useSearchParams();
   const requestedReturn = searchParams.get("returnTo");
   // Only local booking/payment routes are accepted, including after VNPay returns.
-  const returnTo = requestedReturn && /^\/(?:booking(?:\/[^/?#\\]+)?|bookings\/[^/?#\\]+|payment-return)(?:\?[^#\\]*)?$/.test(requestedReturn)
+  const returnTo = requestedReturn && /^\/(?:booking(?:\/[^/?#\\]+)?|bookings\/[^/?#\\]+|payment-return|account|security)(?:\?[^#\\]*)?$/.test(requestedReturn)
     ? requestedReturn : null;
 
   const [email, setEmail] = useState("");
@@ -31,7 +32,6 @@ export default function Login() {
   const [rememberMe, setRememberMe] = useState(true);
 
   const [error, setError] = useState("");
-  const [googleNotice, setGoogleNotice] = useState("");
   const [loading, setLoading] = useState(false);
 
   // Nếu tài khoản đã có phiên hợp lệ, tự động điều hướng vào dashboard
@@ -48,14 +48,14 @@ export default function Login() {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
-    setGoogleNotice("");
     setLoading(true);
 
     try {
       const authUser = await login(
         email.trim().toLowerCase(),
         password,
-        mfaCode.trim() || undefined
+        mfaCode.trim() || undefined,
+        rememberMe
       );
 
       // Điều hướng chính xác theo vai trò
@@ -65,7 +65,7 @@ export default function Login() {
     } catch (cause) {
       if (cause instanceof ApiError && (cause.errorCode === "MFA_REQUIRED" || cause.message.startsWith("MFA_REQUIRED:"))) {
         setShowMfa(true);
-        setError("Nh?p m? 6 s? t? ?ng d?ng x?c th?c ?? ti?p t?c ??ng nh?p.");
+        setError("Nhập mã 6 số từ ứng dụng xác thực để tiếp tục đăng nhập.");
       } else if (cause instanceof ApiError && (cause.status === 404 || cause.status === 405)) {
         setError("Backend hiện chưa có API đăng nhập. Màn hình sẵn sàng tại POST /api/v1/auth/login.");
       } else {
@@ -100,16 +100,11 @@ export default function Login() {
             </p>
           </header>
 
+          {["password", "mfa"].includes(searchParams.get("updated") || "") && <div className="auth-alert auth-alert-notice" role="status">{searchParams.get("updated") === "password" ? "Mật khẩu đã được cập nhật. Hãy đăng nhập lại bằng mật khẩu mới." : "Cài đặt xác thực hai bước đã được cập nhật. Hãy đăng nhập lại."}</div>}
           {error && (
             <div className="auth-alert auth-alert-error" role="alert">
               <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 2 }} />
               <div>{error}</div>
-            </div>
-          )}
-
-          {googleNotice && (
-            <div className="auth-alert auth-alert-notice" role="status">
-              <div>{googleNotice}</div>
             </div>
           )}
 
@@ -175,7 +170,7 @@ export default function Login() {
             {showMfa && (
               <div className="auth-form-field">
                 <label htmlFor="login-mfa" className="auth-form-label">
-                  <KeyRound size={14} /> M? x?c th?c
+                  <KeyRound size={14} /> Mã xác thực
                 </label>
                 <div className="auth-input-wrapper">
                   <KeyRound size={17} className="auth-input-icon" />
@@ -188,7 +183,7 @@ export default function Login() {
                     maxLength={6}
                     value={mfaCode}
                     onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
-                    placeholder="M? 6 s? t? ?ng d?ng x?c th?c"
+                    placeholder="Mã 6 số từ ứng dụng xác thực"
                     className="auth-input"
                     required
                     disabled={loading}
@@ -223,19 +218,7 @@ export default function Login() {
           </div>
 
           {/* Google Login Button with official Google SVG Icon */}
-          <button
-            type="button"
-            className="auth-google-btn"
-            onClick={() => setGoogleNotice("Tính năng đăng nhập Google đang chờ kết nối OAuth từ máy chủ backend.")}
-          >
-            <svg className="auth-google-icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.2-2.27H12v4.51h6.44a5.5 5.5 0 0 1-2.39 3.61v3h3.87c2.26-2.08 3.57-5.14 3.57-8.85Z" />
-              <path fill="#34A853" d="M12 24c3.24 0 5.96-1.08 7.95-2.92l-3.87-3c-1.08.72-2.46 1.15-4.08 1.15-3.14 0-5.8-2.12-6.75-4.97H1.25v3.09A12 12 0 0 0 12 24Z" />
-              <path fill="#FBBC05" d="M5.25 14.26a7.2 7.2 0 0 1 0-4.52V6.65h-4A12 12 0 0 0 0 12c0 1.94.46 3.77 1.25 5.35l4-3.09Z" />
-              <path fill="#EA4335" d="M12 4.77c1.77 0 3.36.61 4.61 1.8l3.45-3.45C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.25 6.65l4 3.09c.95-2.85 3.61-4.97 6.75-4.97Z" />
-            </svg>
-            Đăng nhập bằng Google
-          </button>
+          <GoogleSignIn remember={rememberMe} returnTo={returnTo ?? "/"} />
 
           {/* Footer to Register */}
           <p className="auth-switch-text">

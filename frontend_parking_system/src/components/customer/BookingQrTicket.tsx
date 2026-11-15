@@ -4,11 +4,10 @@ import { QRCodeSVG } from "qrcode.react";
 import { api, type BookingQrResponse } from "../../services/api";
 import { bookingError } from "../../hooks/useBookingConfirmation";
 
-export default function BookingQrTicket({ bookingId, bookingCode, enabled, sample }: {
+export default function BookingQrTicket({ bookingId, bookingCode, enabled }: {
   bookingId: string;
   bookingCode: string;
   enabled: boolean;
-  sample?: BookingQrResponse;
 }) {
   const [qr, setQr] = useState<(BookingQrResponse & { qrPayload: string; expiresAt: string }) | null>(null);
   const [loading, setLoading] = useState(false);
@@ -25,7 +24,7 @@ export default function BookingQrTicket({ bookingId, bookingCode, enabled, sampl
     const key = `${bookingId}:${revision}`;
     setLoading(true);
     if (requestRef.current?.key !== key) {
-      requestRef.current = { key, promise: import.meta.env.DEV && sample ? Promise.resolve(sample) : api.issueBookingQr(bookingId) };
+      requestRef.current = { key, promise: api.issueBookingQr(bookingId) };
     }
     requestRef.current.promise.then(result => {
       if (!active) return;
@@ -36,7 +35,7 @@ export default function BookingQrTicket({ bookingId, bookingCode, enabled, sampl
     }).catch(cause => { if (active) setError(bookingError(cause)); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [bookingId, enabled, revision, sample]);
+  }, [bookingId, enabled, revision]);
 
   useEffect(() => {
     if (!qr) return;
@@ -64,7 +63,6 @@ export default function BookingQrTicket({ bookingId, bookingCode, enabled, sampl
       <p>Hiệu lực đến {new Date(qr.expiresAt).toLocaleString("vi-VN")}.</p>
       <button className="customer-button secondary" onClick={downloadQr}><Download size={16} />Tải mã QR</button>
       <p className="booking-qr-help">Xuất trình mã tại cổng vào đúng bãi và đúng phương tiện. Mã chỉ dùng một lần.</p>
-      {import.meta.env.DEV && sample && <p className="booking-preview-qr-note">QR minh họa · Không sử dụng tại cổng</p>}
     </>}
     {expired && <p role="status">QR đã hết hạn. Vui lòng kiểm tra lại trạng thái đặt chỗ hoặc liên hệ nhân viên tại bãi.</p>}
     {error && <div role="alert"><p>{error}</p><button className="customer-button secondary" onClick={() => setRevision(value => value + 1)}><RefreshCw size={15} />Thử cấp lại QR</button></div>}

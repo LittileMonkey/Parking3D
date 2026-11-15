@@ -3,7 +3,7 @@
 
 export type SlotStatus = "Available" | "Occupied" | "Reserved" | "Maintenance" | "Disabled";
 export type VehicleType = "Car" | "Motorcycle" | "Truck" | "EV" | "Bicycle";
-export type IncidentStatus = "Open" | "InProgress" | "Resolved" | "Escalated";
+export type IncidentStatus = "Open" | "InProgress" | "Resolved" | "Escalated" | "Cancelled";
 export type IncidentSeverity = "Low" | "Medium" | "High" | "Critical";
 export type PaymentStatus = "Unpaid" | "Paid" | "Pending" | "Waived";
 export type SessionStatus = "Active" | "Completed" | "Expired" | "Cancelled";

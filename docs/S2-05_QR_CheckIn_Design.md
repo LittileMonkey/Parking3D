@@ -2,6 +2,10 @@
 
 Owner: Hàn. Runtime: .NET 9 / C# 13, microservices, Npgsql, Parking Persistence.
 
+### Bổ sung AUTO_SLOT — 14/11/2026 (SCRUM-110)
+
+Walk-in xếp hạng ứng viên theo map đã publish, sau đó lấy khóa theo thứ tự VEHICLE → SLOT advisory → row. SLOT dùng `pg_try_advisory_xact_lock` với cùng khóa hash như `lock_parking_resource`; row dùng `FOR UPDATE SKIP LOCKED`. Ô đang bận khóa được bỏ qua. Savepoint giải phóng khóa của ứng viên bị loại; ô được chọn vẫn giữ khóa đến hết transaction và được kiểm tra lại session/reservation. Cách này tránh vòng chờ với booking/đổi trạng thái vận hành vốn lấy advisory trước row. Không còn ứng viên trả 409; không thay đổi API hoặc quy tắc chống trùng chỗ.
+
 ## Cơ sở yêu cầu
 
 Đối chiếu Baseline V4, `02-BUSINESS-RULES.md`, `04-DATABASE.md`, `06-CODING-STANDARDS.md`,

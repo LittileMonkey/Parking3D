@@ -1,3 +1,4 @@
+import GoogleSignIn from "../components/auth/GoogleSignIn";
 import { useState, useMemo, type FormEvent } from "react";
 import {
   ArrowLeft,
@@ -7,6 +8,7 @@ import {
   EyeOff,
   Lock,
   Mail,
+  Phone,
   ShieldCheck,
   User,
   AlertCircle
@@ -19,6 +21,7 @@ import "./Auth.css";
 export default function Register() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -26,7 +29,6 @@ export default function Register() {
   const [agreedTerms, setAgreedTerms] = useState(true);
 
   const [error, setError] = useState("");
-  const [googleNotice, setGoogleNotice] = useState("");
   const [complete, setComplete] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -55,7 +57,6 @@ export default function Register() {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
-    setGoogleNotice("");
 
     if (password.length < 8) {
       setError("Mật khẩu cần có ít nhất 8 ký tự.");
@@ -75,6 +76,7 @@ export default function Register() {
       await api.register({
         email: email.trim().toLowerCase(),
         fullName: fullName.trim(),
+        phoneE164: phone,
         password,
       });
       setComplete(true);
@@ -137,12 +139,6 @@ export default function Register() {
                 </div>
               )}
 
-              {googleNotice && (
-                <div className="auth-alert auth-alert-notice" role="status">
-                  <div>{googleNotice}</div>
-                </div>
-              )}
-
               <form className="auth-form auth-register-form" onSubmit={submit}>
                 {/* Full Name Field */}
                 <div className="auth-form-field">
@@ -155,6 +151,7 @@ export default function Register() {
                       id="register-name"
                       type="text"
                       autoComplete="name"
+                      maxLength={100}
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       placeholder="Nguyễn Văn An"
@@ -176,9 +173,31 @@ export default function Register() {
                       id="register-email"
                       type="email"
                       autoComplete="email"
+                      maxLength={255}
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="name@example.com"
+                      className="auth-input"
+                      required
+                      disabled={loading}
+                    />
+                  </div>
+                </div>
+
+                <div className="auth-form-field">
+                  <label htmlFor="register-phone" className="auth-form-label">
+                    <Phone size={14} /> Số điện thoại
+                  </label>
+                  <div className="auth-input-wrapper">
+                    <Phone size={17} className="auth-input-icon" />
+                    <input
+                      id="register-phone"
+                      type="tel"
+                      autoComplete="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="0912 345 678 hoặc +84…"
+                      maxLength={24}
                       className="auth-input"
                       required
                       disabled={loading}
@@ -309,19 +328,7 @@ export default function Register() {
               </div>
 
               {/* Google Signup Button */}
-              <button
-                type="button"
-                className="auth-google-btn"
-                onClick={() => setGoogleNotice("Tính năng đăng ký qua Google đang chờ kết nối OAuth từ máy chủ backend.")}
-              >
-                <svg className="auth-google-icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.2-2.27H12v4.51h6.44a5.5 5.5 0 0 1-2.39 3.61v3h3.87c2.26-2.08 3.57-5.14 3.57-8.85Z" />
-                  <path fill="#34A853" d="M12 24c3.24 0 5.96-1.08 7.95-2.92l-3.87-3c-1.08.72-2.46 1.15-4.08 1.15-3.14 0-5.8-2.12-6.75-4.97H1.25v3.09A12 12 0 0 0 12 24Z" />
-                  <path fill="#FBBC05" d="M5.25 14.26a7.2 7.2 0 0 1 0-4.52V6.65h-4A12 12 0 0 0 0 12c0 1.94.46 3.77 1.25 5.35l4-3.09Z" />
-                  <path fill="#EA4335" d="M12 4.77c1.77 0 3.36.61 4.61 1.8l3.45-3.45C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.25 6.65l4 3.09c.95-2.85 3.61-4.97 6.75-4.97Z" />
-                </svg>
-                Đăng ký với Google
-              </button>
+              <GoogleSignIn signup disabled={!agreedTerms || loading} />
 
               {/* Footer Switch */}
               <p className="auth-switch-text">

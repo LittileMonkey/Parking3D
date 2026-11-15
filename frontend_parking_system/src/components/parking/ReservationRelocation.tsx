@@ -57,7 +57,7 @@ export default function ReservationRelocation({ lotId, onMoved }: { lotId: strin
   }
 
   return (
-    <section className="pm-card" style={{ marginBottom: 20 }}>
+    <section className="pm-card staff-relocation" style={{ marginBottom: 20 }}>
       <div className="pm-card-header">
         <div className="pm-card-title-group">
           <div className="pm-card-icon" style={{ background: "#edf7fd", color: "#0d4685" }}>
@@ -69,6 +69,8 @@ export default function ReservationRelocation({ lotId, onMoved }: { lotId: strin
               Chuyển từng đặt chỗ trước khi khóa ô để bảo trì. Hệ thống kiểm tra ô tương đương và trống trong toàn bộ khung giờ.
             </span>
           </div>
+        </div>
+      </div>
         </div>
       </div>
 

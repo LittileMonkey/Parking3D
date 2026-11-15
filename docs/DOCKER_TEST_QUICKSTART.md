@@ -25,6 +25,14 @@ npm run dev
 
 Frontend: http://localhost:5173. Gateway readiness: http://localhost:8080/health/ready. FE proxy /api,/health,/hubs về Gateway 8080.
 
+Gateway chạy trong Docker phải gọi `identity:8080`, `parking:8080`, `payment:8080`, `ai:8080` qua DNS nội bộ. Compose đặt cả `Services__*Http` (readiness) và `ReverseProxy__Clusters__*__Destinations__main__Address` để ghi đè địa chỉ loopback trong `appsettings.Development.json` dùng cho chạy native. Nếu các service healthy nhưng Gateway báo `Upstream service unavailable`, áp dụng lại cấu hình bằng `docker compose -f compose.microservices.yml up -d --no-deps --wait gateway`, rồi kiểm tra `/health/ready`.
+
+Đăng ký Customer cần họ tên, email, số điện thoại và mật khẩu. FE gửi `emailNormalized`, `phoneE164`, `fullName`, `password` theo contract Identity; số Việt Nam dạng `0912345678` được đổi thành `+84912345678`. Đăng ký hiện tạo tài khoản hoạt động, không có bước OTP email trong handler này. Vai trò Staff/Manager do quản trị phân quyền; đăng ký công khai không cấp các quyền đó.
+
+Identity nhận cấu hình nhà cung cấp từ file `.env` bị Git bỏ qua: `SMTP_HOST`, `SMTP_PORT`, `SMTP_SENDER`, `SMTP_PASSWORD`, `GOOGLE_CLIENT_ID`. Các giá trị SMTP rỗng trong Compose sẽ ghi đè cấu hình có trong appsettings, vì vậy cần điền `.env` rồi áp dụng lại bằng `docker compose -f compose.microservices.yml up -d --no-deps --wait identity`. Không đưa mật khẩu SMTP vào FE hoặc Git. `GOOGLE_CLIENT_ID` là Web Client ID công khai và phải trùng `VITE_GOOGLE_CLIENT_ID` trong `frontend_parking_system/.env.local`; khởi động lại Vite sau khi đổi file này.
+
+Nếu Google báo `The given origin is not allowed for the given client ID`, chủ OAuth client cần vào Google Cloud → Google Auth Platform → Clients → Web client đang dùng → Authorized JavaScript origins, thêm chính xác `http://localhost:5173` rồi Save. Chỉ thêm origin, không thay Client ID, không tạo client secret mới. Khi triển khai, thêm origin HTTPS thực tế của FE. Thay đổi ở mã nguồn không tự cấp được origin trên tài khoản Google Cloud.
+
 Lần đầu tải model/dependencies vision có thể lâu. Nếu thất bại:
 
 ```powershell

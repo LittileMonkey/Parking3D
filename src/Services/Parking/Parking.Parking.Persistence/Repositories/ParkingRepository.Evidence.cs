@@ -38,7 +38,7 @@ public sealed partial class ParkingRepository : IIncidentEvidenceRepository
         var sha256 = Convert.ToHexStringLower(SHA256.HashData(bytes));
         await using var connection = await db.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
-        var (replayed, outcome, requestId, fingerprint) = await TryReplayScrum99InboxAsync<IncidentEvidenceImageDto>(
+        var (replayed, outcome, requestId, fingerprint) = await TryReplayRequestAsync<IncidentEvidenceImageDto>(
             connection, transaction, $"UploadIncidentEvidence:{lotId}:{actorId}", "UploadIncidentEvidence",
             new { ContentType = contentType, Sha256 = sha256 }, key, ct);
         if (replayed) return outcome!;
@@ -68,10 +68,10 @@ public sealed partial class ParkingRepository : IIncidentEvidenceRepository
         }
 
         var result = new IncidentEvidenceImageDto(id, lotId, contentType!, EvidenceReferencePrefix + id, sha256, bytes.Length, createdAt);
-        await AppendScrum99AuditLogAsync(connection, transaction, lotId, actorId, "UPLOAD_INCIDENT_EVIDENCE",
+        await AppendAuditLogAsync(connection, transaction, lotId, actorId, "UPLOAD_INCIDENT_EVIDENCE",
             "INCIDENT_EVIDENCE_IMAGE", id.ToString(), null, requestId?.ToString(), null,
             new { contentType, sha256, sizeBytes = bytes.Length }, createdAt, ct);
-        await SaveScrum99InboxAsync(connection, transaction, requestId, "UploadIncidentEvidence", fingerprint, result, createdAt, ct);
+        await SaveRequestOutcomeAsync(connection, transaction, requestId, "UploadIncidentEvidence", fingerprint, result, createdAt, ct);
         await transaction.CommitAsync(ct);
         return result;
     }
