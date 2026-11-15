@@ -34,6 +34,7 @@ export default function ManagerLayout() {
   const [period, setPeriod] = useState<ReportingPeriod>("today");
   const [refreshKey, setRefreshKey] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
 
   // Load facility list
   useEffect(() => {
@@ -248,7 +249,7 @@ export default function ManagerLayout() {
               <span>Xuất Báo Cáo</span>
             </button>
 
-            <NotificationBell />
+            <NotificationBell open={isNotificationOpen} onOpenChange={setIsNotificationOpen} />
           </div>
         </header>
 

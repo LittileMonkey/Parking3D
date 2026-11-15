@@ -71,8 +71,6 @@ export default function ReservationRelocation({ lotId, onMoved }: { lotId: strin
           </div>
         </div>
       </div>
-        </div>
-      </div>
 
       <div
         style={{
