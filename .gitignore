@@ -67,6 +67,7 @@ database-backups/
 
 # Microservices local outputs
 artifacts/microservices/
+artifacts/local-stack/
 .nuget/
 **/TestResults/
 
