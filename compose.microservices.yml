@@ -153,8 +153,8 @@ services:
       VNPay__RefundsEnabled: ${VNPAY_REFUNDS_ENABLED:-false}
       VNPay__ApiUrl: ${VNPAY_API_URL:-https://sandbox.vnpayment.vn/merchant_webapi/api/transaction}
       VNPay__RefundIpAddress: ${VNPAY_REFUND_IP:-}
-      VNPay__TmnCode: ${VNPAY_TMN_CODE:-}
-      VNPay__HashSecret: ${VNPAY_HASH_SECRET:-}
+      VNPay__TmnCode: ${VNPAY_TMN_CODE:-LDWHY5M9}
+      VNPay__HashSecret: ${VNPAY_HASH_SECRET:-PYEVKNILPGUCJDOFNSHCLCXIUDYHMPVU}
       VNPay__BaseUrl: ${VNPAY_BASE_URL:-https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
       Frontend__BaseUrl: ${FRONTEND_BASE_URL:-http://localhost:5173}
       VNPay__ReturnUrl: ${VNPAY_RETURN_URL:-http://localhost:8080/api/v1/payments/vnpay/return}

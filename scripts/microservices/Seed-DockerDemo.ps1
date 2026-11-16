@@ -1,11 +1,23 @@
 ﻿$ErrorActionPreference='Stop'
 $OutputEncoding=[System.Text.UTF8Encoding]::new($false)
 Set-Location (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
-foreach($migration in @('009_handover_integrity.sql','010_incident_evidence.sql')){
+& "$PSScriptRoot/New-DevelopmentEnv.ps1" -Ensure
+foreach($migration in @('002_hold_default_5_minutes.sql','003_scrum99_incidents_shift_handover.sql','004_staff_shifts.sql','005_booking_cancellations.sql','006_reservation_realtime.sql','007_notifications.sql','008_daily_grace.sql','009_handover_integrity.sql','010_incident_evidence.sql')){
     Get-Content -Raw -Encoding UTF8 (Join-Path 'database/services/parking/migrations' $migration) |
         docker compose -f compose.microservices.yml exec -T parking-db psql -X -v ON_ERROR_STOP=1 -U parking -d parking_parking
     if($LASTEXITCODE -ne 0){throw "Parking migration failed: $migration"}
 }
+foreach($paymentMigration in @('002_schema.sql','003_refund_workflow.sql')){
+    Get-Content -Raw -Encoding UTF8 (Join-Path 'database/services/payment' $paymentMigration) |
+        docker compose -f compose.microservices.yml exec -T payment-db psql -X -v ON_ERROR_STOP=1 -U payment -d parking_payment
+    if($LASTEXITCODE -ne 0){throw "Payment migration failed: $paymentMigration"}
+}
+foreach($identityMigration in @('002_mfa.sql','003_guest_otp.sql')){
+    Get-Content -Raw -Encoding UTF8 (Join-Path 'database/services/identity' $identityMigration) |
+        docker compose -f compose.microservices.yml exec -T identity-db psql -X -v ON_ERROR_STOP=1 -U identity -d parking_identity
+    if($LASTEXITCODE -ne 0){throw "Identity migration failed: $identityMigration"}
+}
+docker compose -f compose.microservices.yml up -d payment | Out-Null
 $settings=@{}
 foreach($line in Get-Content -Encoding UTF8 '.env'){if($line -match '^([A-Z0-9_]+)=(.*)$'){$settings[$Matches[1]]=$Matches[2].Trim().Trim('"').Trim("'")}}
 function Invoke-Api([string]$Path,[string]$Method='GET',$Body=$null,[string]$Token=''){
