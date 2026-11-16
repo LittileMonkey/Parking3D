@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Check, Clock3, LocateFixed, MapPin, ParkingCircle, Search, ShieldCheck } from "lucide-react";
-import { ApiError, api, type LotAvailability, type LotLayout3DDto, type ParkingSearchItem, type ParkingLevelAvailability, type UserVehicle } from "../services/api";
+import { ArrowLeft, ArrowRight, Check, Clock3, LocateFixed, MapPin, ParkingCircle, Search, ShieldCheck, Sparkles, Calculator, HelpCircle, ChevronDown, ChevronUp, QrCode } from "lucide-react";
+import { ApiError, api, type LotAvailability, type LotLayout3DDto, type ParkingSearchItem, type ParkingLevelAvailability, type UserVehicle, type AiParkingRecommendation, type CalculateFeeResponse, type ApprovedFaqResponse, type ParkingLot } from "../services/api";
 import ParkingViewer, { type ModelLevel } from "../components/parking/ParkingViewer";
 import { applySlotStatusChanges, type SlotStatusChange } from "../components/parking/parkingRealtime";
 import { useParkingHub } from "../components/parking/useParkingHub";
@@ -187,6 +187,98 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [resumeNotice, setResumeNotice] = useState("");
   useEffect(() => { window.scrollTo(0, 0); }, []);
+
+  // Search Mode & Extra Tool States
+  const [searchMode, setSearchMode] = useState<"STANDARD" | "SMART_AI" | "CALCULATOR">(() => searchParams.get("mode") === "ai" ? "SMART_AI" : "STANDARD");
+
+  // 1. AI Smart Search State (POST /api/v1/ai/parking/smart-search)
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiSearching, setAiSearching] = useState(false);
+  const [aiResult, setAiResult] = useState<AiParkingRecommendation | null>(null);
+  const [aiError, setAiError] = useState("");
+
+  // 2. Fee Calculator State (POST /api/v1/payments/calculate-fee)
+  const [allLots, setAllLots] = useState<ParkingLot[]>([]);
+  const [calcLotId, setCalcLotId] = useState("");
+  const [calcEntryTime, setCalcEntryTime] = useState(() => new Date(Date.now() + 15 * 60_000).toISOString().slice(0, 16));
+  const [calcExitTime, setCalcExitTime] = useState(() => new Date(Date.now() + 135 * 60_000).toISOString().slice(0, 16));
+  const [calcVehicleType, setCalcVehicleType] = useState("Car");
+  const [calcIsGoldStar, setCalcIsGoldStar] = useState(false);
+  const [calcResult, setCalcResult] = useState<CalculateFeeResponse | null>(null);
+  const [calcLoading, setCalcLoading] = useState(false);
+  const [calcError, setCalcError] = useState("");
+
+  // 3. Lot FAQ Document Retrieval State (POST /api/v1/parking-lots/{lotId}/assistant)
+  const [faqQuery, setFaqQuery] = useState("");
+  const [faqResult, setFaqResult] = useState<ApprovedFaqResponse | null>(null);
+  const [faqLoading, setFaqLoading] = useState(false);
+  const [faqError, setFaqError] = useState("");
+  const [faqOpen, setFaqOpen] = useState(false);
+
+  useEffect(() => {
+    api.getParkingLots().then(list => {
+      setAllLots(list);
+      if (list[0]) setCalcLotId(list[0].id);
+    }).catch(() => {});
+  }, []);
+
+  const handleSmartAiSearch = async (promptToSearch?: string) => {
+    const q = (promptToSearch ?? aiPrompt).trim();
+    if (!q) return;
+    setAiSearching(true);
+    setAiError("");
+    try {
+      const rec = await api.smartSearchParking({
+        naturalLanguagePrompt: q,
+        userCurrentLatitude: searchPosition?.latitude,
+        userCurrentLongitude: searchPosition?.longitude,
+      });
+      setAiResult(rec);
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : (isEn ? "Failed to run AI search" : "Không thể thực hiện tìm kiếm AI."));
+    } finally {
+      setAiSearching(false);
+    }
+  };
+
+  const handleCalculateFee = async (e?: FormEvent) => {
+    e?.preventDefault();
+    if (!calcLotId) {
+      setCalcError(isEn ? "Please select a parking facility" : "Vui lòng chọn cơ sở bãi đỗ");
+      return;
+    }
+    setCalcLoading(true);
+    setCalcError("");
+    try {
+      const res = await api.calculateFee({
+        parkingLotId: calcLotId,
+        entryTime: new Date(calcEntryTime).toISOString(),
+        exitTime: new Date(calcExitTime).toISOString(),
+        vehicleType: calcVehicleType,
+        isGoldStarMember: calcIsGoldStar,
+      });
+      setCalcResult(res);
+    } catch (err) {
+      setCalcError(err instanceof Error ? err.message : (isEn ? "Unable to calculate fee." : "Không thể tính phí lúc này."));
+    } finally {
+      setCalcLoading(false);
+    }
+  };
+
+  const handleAskFaq = async (e?: FormEvent) => {
+    e?.preventDefault();
+    if (!selectedLot?.parkingLotId || !faqQuery.trim()) return;
+    setFaqLoading(true);
+    setFaqError("");
+    try {
+      const res = await api.askApprovedFaq(selectedLot.parkingLotId, faqQuery.trim());
+      setFaqResult(res);
+    } catch (err) {
+      setFaqError(err instanceof Error ? err.message : (isEn ? "Failed to query FAQ." : "Không tìm thấy tài liệu quy chế phù hợp."));
+    } finally {
+      setFaqLoading(false);
+    }
+  };
 
   const manualLocationEntered = manualLatitude.trim() !== "" || manualLongitude.trim() !== "";
   const parsedLatitude = Number(manualLatitude);
@@ -462,6 +554,39 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
   const [bookingMode, setBookingMode] = useState<"EXACT_SLOT" | "AUTO_SLOT">(searchParams.get("mode") === "AUTO_SLOT" ? "AUTO_SLOT" : "EXACT_SLOT");
   const effectiveBookingMode: "EXACT_SLOT" | "AUTO_SLOT" = isMotorbike ? "AUTO_SLOT" : bookingMode;
 
+  // Active Pending Booking Notice & Reopen Handler
+  const [pendingBookingNotice, setPendingBookingNotice] = useState<{
+    id: string;
+    code: string;
+    lotId: string;
+    lotName?: string;
+    slotId?: string;
+    slotCode?: string;
+    expiresAt: string;
+  } | null>(() => {
+    try {
+      const raw = sessionStorage.getItem("last_pending_booking");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (new Date(parsed.expiresAt).getTime() > Date.now()) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return null;
+  });
+
+  useEffect(() => {
+    if (!pendingBookingNotice) return;
+    const timer = setInterval(() => {
+      if (new Date(pendingBookingNotice.expiresAt).getTime() <= Date.now()) {
+        setPendingBookingNotice(null);
+        try { sessionStorage.removeItem("last_pending_booking"); } catch {}
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [pendingBookingNotice]);
+
   const createBooking = async () => {
     setBookingError("");
     if (!isAuthenticated) {
@@ -493,6 +618,20 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
         endsAt: new Date(start.getTime() + duration * 60_000).toISOString(),
       };
       const booking = await api.createBooking(payload, bookingKey);
+      try {
+        sessionStorage.setItem(
+          "last_pending_booking",
+          JSON.stringify({
+            id: booking.id,
+            code: booking.code || (booking as unknown as { bookingCode?: string }).bookingCode || "BK-ORD",
+            lotId: selectedLot.parkingLotId,
+            lotName: selectedLot.name,
+            slotId: selectedSlotId,
+            slotCode: selectedSlot?.slotCode,
+            expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+          })
+        );
+      } catch {}
       navigate(`/bookings/${encodeURIComponent(booking.id)}`);
     } catch (cause) {
       setBookingError(getErrorMessage(cause, isEn));
@@ -729,6 +868,274 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
         </header>
 
         {!selection && <>
+          {/* Search Mode Switcher Tabs */}
+          <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className={`customer-button ${searchMode === "STANDARD" ? "primary" : "secondary"}`}
+              style={{ fontSize: "13px", padding: "8px 16px" }}
+              onClick={() => setSearchMode("STANDARD")}
+            >
+              <Search size={15} /> {isEn ? "Standard Search" : "Tìm kiếm tiêu chuẩn"}
+            </button>
+            <button
+              type="button"
+              className={`customer-button ${searchMode === "SMART_AI" ? "primary" : "secondary"}`}
+              style={{
+                fontSize: "13px",
+                padding: "8px 16px",
+                background: searchMode === "SMART_AI" ? "linear-gradient(135deg, #7c3aed, #4f46e5)" : undefined,
+                color: searchMode === "SMART_AI" ? "#fff" : undefined,
+              }}
+              onClick={() => setSearchMode("SMART_AI")}
+            >
+              <Sparkles size={15} /> {isEn ? "AI Smart Search" : "Tìm kiếm thông minh AI"}
+            </button>
+            <button
+              type="button"
+              className={`customer-button ${searchMode === "CALCULATOR" ? "primary" : "secondary"}`}
+              style={{ fontSize: "13px", padding: "8px 16px" }}
+              onClick={() => setSearchMode("CALCULATOR")}
+            >
+              <Calculator size={15} /> {isEn ? "Fee Calculator" : "Dự tính cước phí"}
+            </button>
+          </div>
+
+          {searchMode === "SMART_AI" && (
+            <div className="customer-panel search-panel" style={{ border: "1.5px solid #a78bfa", background: "#fdfcff", marginBottom: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+                <Sparkles size={20} color="#7c3aed" />
+                <h3 style={{ margin: 0, color: "#5b21b6", fontSize: "1.1rem" }}>
+                  {isEn ? "AI Smart Parking Search (Natural Language)" : "Tìm kiếm bãi đỗ bằng ngôn ngữ tự nhiên (AI NLP)"}
+                </h3>
+              </div>
+              <p style={{ margin: "0 0 12px", color: "var(--color-navy-muted)", fontSize: "0.88rem" }}>
+                {isEn
+                  ? "Describe your parking needs in natural Vietnamese or English. Our Gemini AI will understand your preferences, budget, and recommend the best lots."
+                  : "Mô tả nhu cầu gửi xe bằng câu nói tự nhiên. Trí tuệ nhân tạo sẽ tự động bóc tách vị trí, loại xe, bán kính và ngân sách tối ưu."}
+              </p>
+
+              {/* Quick Prompt Chips */}
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "12px" }}>
+                {[
+                  "Tìm bãi ô tô gần Quận 7 giá rẻ nhất",
+                  "Bãi xe máy Quận 1 có sạc điện",
+                  "Gửi ô tô 7 chỗ qua đêm giá rẻ",
+                  "Bãi đỗ xe gần vị trí của tôi",
+                ].map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    style={{
+                      border: "1px solid #ddd6fe",
+                      background: "#ede9fe",
+                      color: "#6d28d9",
+                      borderRadius: "16px",
+                      padding: "4px 10px",
+                      fontSize: "12px",
+                      cursor: "pointer",
+                    }}
+                    onClick={() => {
+                      setAiPrompt(chip);
+                      void handleSmartAiSearch(chip);
+                    }}
+                  >
+                    ✨ {chip}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                <input
+                  type="text"
+                  placeholder={isEn ? "e.g. Find cheapest car lot near District 7 for 2 hours..." : "Ví dụ: Tìm bãi ô tô gần Quận 7 giá dưới 25k, còn chỗ trống..."}
+                  value={aiPrompt}
+                  onChange={(e) => setAiPrompt(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") void handleSmartAiSearch(); }}
+                  style={{
+                    flex: 1,
+                    minWidth: "260px",
+                    padding: "10px 14px",
+                    borderRadius: "8px",
+                    border: "1px solid #c4b5fd",
+                    fontSize: "14px",
+                  }}
+                  disabled={aiSearching}
+                />
+                <button
+                  type="button"
+                  className="customer-button primary"
+                  style={{ background: "#7c3aed" }}
+                  disabled={aiSearching || !aiPrompt.trim()}
+                  onClick={() => void handleSmartAiSearch()}
+                >
+                  <Sparkles size={16} /> {aiSearching ? (isEn ? "AI Analyzing…" : "AI đang phân tích…") : (isEn ? "Search with AI" : "Tìm bằng AI")}
+                </button>
+              </div>
+
+              {aiError && <div className="customer-alert error" style={{ marginTop: 12 }}>{aiError}</div>}
+
+              {aiResult && (
+                <div style={{ marginTop: 16, borderTop: "1px solid #ede9fe", paddingTop: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                    <span style={{ background: "#d1fae5", color: "#065f46", padding: "3px 8px", borderRadius: 6, fontSize: 12, fontWeight: 700 }}>
+                      ✓ Phân tích thành công ({aiResult.processingTimeMs || 120}ms)
+                    </span>
+                    {aiResult.summaryExplanation && (
+                      <span style={{ fontSize: 13, color: "#5b21b6" }}>{aiResult.summaryExplanation}</span>
+                    )}
+                  </div>
+
+                  {aiResult.recommendedLots && aiResult.recommendedLots.length > 0 ? (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+                      {aiResult.recommendedLots.map((rec) => (
+                        <div
+                          key={rec.parkingLotId}
+                          style={{
+                            border: "1px solid #ddd6fe",
+                            borderRadius: 10,
+                            padding: 14,
+                            background: "#fff",
+                            display: "flex",
+                            flexDirection: "column",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <div>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                              <h4 style={{ margin: 0, fontSize: "1rem", color: "var(--color-navy)" }}>{rec.lotName}</h4>
+                              <span style={{ background: "#fef3c7", color: "#92400e", padding: "2px 6px", borderRadius: 4, fontSize: 11, fontWeight: 700 }}>
+                                Điểm: {Math.round(rec.matchScore)}%
+                              </span>
+                            </div>
+                            <p style={{ margin: "4px 0", fontSize: "12px", color: "var(--color-navy-muted)" }}>
+                              <MapPin size={12} style={{ display: "inline", verticalAlign: "middle" }} /> {rec.address}
+                            </p>
+                            <p style={{ margin: "6px 0", fontSize: "12px", color: "#6d28d9", fontStyle: "italic" }}>
+                              💡 {rec.recommendationReason}
+                            </p>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, borderTop: "1px dashed #f1f5f9", paddingTop: 8 }}>
+                            <div>
+                              <strong style={{ fontSize: "1.05rem", color: "#0d4685" }}>
+                                {Number(rec.pricePerHour || rec.estimatedTotalPrice).toLocaleString("vi-VN")} ₫
+                              </strong>
+                              <small style={{ display: "block", color: "var(--color-navy-muted)", fontSize: 11 }}>
+                                Còn {rec.availableSlots} chỗ
+                              </small>
+                            </div>
+                            <button
+                              type="button"
+                              className="customer-button primary"
+                              style={{ padding: "6px 12px", fontSize: 12 }}
+                              onClick={() => {
+                                const matched = results.find((r) => r.parkingLotId === rec.parkingLotId) || ({
+                                  parkingLotId: rec.parkingLotId,
+                                  name: rec.lotName,
+                                  address: rec.address,
+                                  code: "LOT",
+                                  availableSlots: rec.availableSlots,
+                                  totalSlots: rec.totalCapacity,
+                                  operatingStatus: "ACTIVE",
+                                  vehicleType: "Car",
+                                } as unknown as ParkingSearchItem);
+                                setSelectedLot(matched);
+                              }}
+                            >
+                              Chọn bãi này →
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ color: "var(--color-navy-muted)", fontSize: 13 }}>
+                      Không có bãi đỗ nào khớp hoàn toàn với yêu cầu. Thử mở rộng bán kính hoặc chọn loại xe khác.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {searchMode === "CALCULATOR" && (
+            <div className="customer-panel search-panel" style={{ border: "1.5px solid #38bdf8", background: "#f8fafc", marginBottom: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+                <Calculator size={20} color="#0284c7" />
+                <h3 style={{ margin: 0, color: "#0369a1", fontSize: "1.1rem" }}>
+                  {isEn ? "Independent Fee Calculator (Block 15m & Multipliers)" : "Công cụ Ước tính Cước Phí Độc Lập (Block 15 Phút & Giờ Cao Điểm)"}
+                </h3>
+              </div>
+              <p style={{ margin: "0 0 14px", color: "var(--color-navy-muted)", fontSize: "0.88rem" }}>
+                {isEn
+                  ? "Test dynamic fee calculation powered by Payment Service API: 15-minute billing blocks, 1.2x peak multiplier, daily cap, and Gold Star member discounts."
+                  : "Thử nghiệm tính toán cước phí từ API Payment Service: tính theo block 15 phút, hệ số giờ cao điểm 1.2x, trần ngày và chiết khấu thành viên."}
+              </p>
+
+              <form onSubmit={handleCalculateFee}>
+                <div className="customer-form-grid">
+                  <label className="customer-field">
+                    <span>{isEn ? "Select facility" : "Chọn bãi đỗ xe"}</span>
+                    <select value={calcLotId} onChange={(e) => setCalcLotId(e.target.value)} required>
+                      {allLots.map((l) => (
+                        <option key={l.id} value={l.id}>{l.name} ({l.code})</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="customer-field">
+                    <span>{isEn ? "Vehicle type" : "Loại phương tiện"}</span>
+                    <select value={calcVehicleType} onChange={(e) => setCalcVehicleType(e.target.value)}>
+                      <option value="Car">Ô tô tiêu chuẩn</option>
+                      <option value="Motorbike">Xe máy</option>
+                      <option value="EV">Ô tô điện (EV)</option>
+                    </select>
+                  </label>
+
+                  <label className="customer-field">
+                    <span>{isEn ? "Entry time" : "Thời gian vào dự kiến"}</span>
+                    <input type="datetime-local" value={calcEntryTime} onChange={(e) => setCalcEntryTime(e.target.value)} required />
+                  </label>
+
+                  <label className="customer-field">
+                    <span>{isEn ? "Exit time" : "Thời gian ra dự kiến"}</span>
+                    <input type="datetime-local" value={calcExitTime} onChange={(e) => setCalcExitTime(e.target.value)} required />
+                  </label>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
+                    <input type="checkbox" checked={calcIsGoldStar} onChange={(e) => setCalcIsGoldStar(e.target.checked)} />
+                    Áp dụng quyền lợi Thành viên VIP (Gold Star Member)
+                  </label>
+                  <button type="submit" className="customer-button primary" disabled={calcLoading} style={{ marginLeft: "auto" }}>
+                    <Calculator size={15} /> {calcLoading ? "Đang tính..." : "Tính toán cước phí ngay"}
+                  </button>
+                </div>
+              </form>
+
+              {calcError && <div className="customer-alert error" style={{ marginTop: 12 }}>{calcError}</div>}
+
+              {calcResult && (
+                <div style={{ marginTop: 16, background: "#fff", border: "1px solid #bae6fd", borderRadius: 10, padding: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <span style={{ fontSize: 13, color: "#0284c7", fontWeight: 700 }}>KẾT QUẢ TÍNH CƯỚC TỪ API :8084</span>
+                    <span style={{ fontSize: 18, fontWeight: 800, color: "#065f46" }}>
+                      {(calcResult.subtotalAfterDailyCapVnd || calcResult.totalGrossAmountVnd || 0).toLocaleString("vi-VN")} ₫
+                    </span>
+                  </div>
+                  <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, margin: 0, fontSize: 12 }}>
+                    <div><dt style={{ color: "#64748b" }}>Thời lượng đỗ:</dt><dd style={{ fontWeight: 600 }}>{calcResult.totalMinutes} phút ({calcResult.totalBillableBlocks} blocks)</dd></div>
+                    <div><dt style={{ color: "#64748b" }}>Cước thô chưa giảm:</dt><dd style={{ fontWeight: 600 }}>{(calcResult.totalGrossAmountVnd || 0).toLocaleString("vi-VN")} ₫</dd></div>
+                    <div><dt style={{ color: "#64748b" }}>Giảm trừ trần ngày:</dt><dd style={{ fontWeight: 600, color: "#d97706" }}>-{(calcResult.totalDailyCapDiscountVnd || 0).toLocaleString("vi-VN")} ₫</dd></div>
+                    <div><dt style={{ color: "#64748b" }}>Ưu đãi Gold Star:</dt><dd style={{ fontWeight: 600, color: "#16a34a" }}>-{(calcResult.goldStarDiscountAmountVnd || 0).toLocaleString("vi-VN")} ₫</dd></div>
+                  </dl>
+                </div>
+              )}
+            </div>
+          )}
+
+          {searchMode === "STANDARD" && (
           <form className="customer-panel search-panel" id="search-form" onSubmit={submitSearch}>
             <div className="customer-form-grid">
               <label className="customer-field"><span>{isEn ? "Vehicle type" : "Loại phương tiện"}</span>
@@ -769,6 +1176,7 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
             </div>
             {searchError && <div className="customer-alert error" role="alert">{searchError}</div>}
           </form>
+          )}
 
           <section className="customer-results" aria-busy={isSearching}>
             <div className="customer-section-heading"><div><h2>{hasSearched ? (isEn ? "Parking lots for you" : "Bãi đỗ dành cho bạn") : (isEn ? "Start finding a parking spot" : "Bắt đầu tìm chỗ đỗ")}</h2><p role="status">{isSearching ? (isEn ? "Searching for matching parking lots…" : "Đang tìm bãi phù hợp…") : hasSearched ? (isEn ? `${totalCount} parking lots match your schedule` : `${totalCount} bãi phù hợp với thời gian gửi xe`) : (isEn ? "Results and estimated fees will appear here." : "Kết quả và tổng phí dự kiến sẽ hiển thị tại đây.")}</p></div></div>
@@ -912,12 +1320,135 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
 
                 {isAuthenticated && <label className="customer-field booking-vehicle-picker"><span>{isEn ? "Your vehicle" : "Phương tiện của bạn"}</span><select value={selectedVehicle?.id ?? ""} onChange={event => setVehicleId(event.target.value)} disabled={isLoadingVehicles || compatibleVehicles.length === 0}><option value="">{isLoadingVehicles ? (isEn ? "Loading vehicles…" : "Đang tải phương tiện…") : (isEn ? "Select vehicle" : "Chọn phương tiện")}</option>{compatibleVehicles.map(vehicle => <option value={vehicle.id} key={vehicle.id}>{vehicle.isDefault ? (isEn ? "Default · " : "Mặc định · ") : ""}{maskPlate(vehicle.licensePlate)}</option>)}</select></label>}
                 {vehicleError && <div className="customer-alert error" role="alert">{vehicleError} <Link to={loginTo}>{isEn ? "Log in again" : "Đăng nhập lại"}</Link></div>}
-                {isAuthenticated && !isLoadingVehicles && !vehicleError && compatibleVehicles.length === 0 && <p className="booking-vehicle-note">{isEn ? "You have no compatible vehicle registered." : "Bạn chưa có phương tiện phù hợp."} <Link to="/account">{isEn ? "Add a vehicle in your account" : "Thêm phương tiện trong tài khoản"}</Link> {isEn ? "then return to book." : "rồi quay lại đặt chỗ."}</p>}
+                {isAuthenticated && !isLoadingVehicles && !vehicleError && compatibleVehicles.length === 0 && <p className="booking-vehicle-note">{isEn ? "You have no compatible vehicle registered." : "Bạn chưa có phương tiện phù hợp."} <Link to="/account?tab=vehicles">{isEn ? "Add a vehicle in your account" : "Thêm phương tiện trong tài khoản"}</Link> {isEn ? "then return to book." : "rồi quay lại đặt chỗ."}</p>}
                 <div className="booking-summary-price"><span>{isEn ? "Estimated total fee" : "Tổng phí ước tính"}</span><strong>{estimatedPrice}</strong></div>
                 <details className="booking-price-details"><summary>{isEn ? "How fee is calculated" : "Cách tính phí"}</summary><p>{selectedLot.estimatedPricing?.billingDetails || (isEn ? "Fee is estimated based on duration. Final fee follows the lot's pricing policy and actual parking time." : "Phí được ước tính theo thời lượng gửi xe. Mức phí cuối cùng theo chính sách của bãi và thời gian gửi thực tế.")}</p></details>
+
+                {/* FAQ Document Retrieval Section (POST /api/v1/parking-lots/{lotId}/assistant) */}
+                <div style={{ marginTop: 14, border: "1px solid #e2e8f0", borderRadius: 10, overflow: "hidden" }}>
+                  <button
+                    type="button"
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      background: "#f8fafc",
+                      border: "none",
+                      cursor: "pointer",
+                      fontWeight: 600,
+                      fontSize: 13,
+                      color: "var(--color-navy)",
+                    }}
+                    onClick={() => setFaqOpen(!faqOpen)}
+                  >
+                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <HelpCircle size={15} color="#0284c7" /> Tra cứu quy chế & FAQ bãi xe (AI FAQ)
+                    </span>
+                    {faqOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </button>
+
+                  {faqOpen && (
+                    <div style={{ padding: 12, background: "#fff", borderTop: "1px solid #e2e8f0" }}>
+                      <form onSubmit={handleAskFaq} style={{ display: "flex", gap: 8 }}>
+                        <input
+                          type="text"
+                          placeholder="Ví dụ: Phí gửi qua đêm, sạc điện, mất vé xe..."
+                          value={faqQuery}
+                          onChange={(e) => setFaqQuery(e.target.value)}
+                          style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 13 }}
+                        />
+                        <button type="submit" className="customer-button secondary" disabled={faqLoading || !faqQuery.trim()} style={{ fontSize: 12, padding: "6px 12px" }}>
+                          {faqLoading ? "..." : "Tra cứu"}
+                        </button>
+                      </form>
+                      {faqError && <p style={{ color: "#ef4444", fontSize: 12, margin: "6px 0 0" }}>{faqError}</p>}
+                      {faqResult && (
+                        <div style={{ marginTop: 10, background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 8, padding: 10 }}>
+                          <p style={{ margin: "0 0 4px", fontWeight: 700, color: "#0369a1", fontSize: 12 }}>
+                            {faqResult.message || "Tài liệu quy chế đối soát được duyệt:"}
+                          </p>
+                          {faqResult.answers && faqResult.answers.length > 0 ? (
+                            faqResult.answers.map((ans, idx) => (
+                              <div key={idx} style={{ margin: "4px 0", fontSize: 12, color: "#1e293b", lineHeight: 1.4 }}>
+                                • <strong>{ans.title}:</strong> {ans.content}
+                              </div>
+                            ))
+                          ) : (
+                            <p style={{ margin: 0, fontSize: 12, color: "#64748b" }}>Chưa có câu trả lời văn bản phù hợp cho từ khóa này.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {pendingBookingNotice && (
+                  <div style={{ background: "#fffbeb", border: "1.5px solid #f59e0b", borderRadius: 12, padding: "12px 14px", margin: "10px 0 14px", display: "grid", gap: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#b45309", fontWeight: 700, fontSize: 13 }}>
+                      <Clock3 size={16} />
+                      <span>{isEn ? "Held booking awaiting payment!" : "Bạn đang có đơn giữ chỗ chờ thanh toán!"}</span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: 12, color: "#92400e", lineHeight: 1.4 }}>
+                      {isEn
+                        ? `Booking: ${pendingBookingNotice.code}. Held spot expires in 5 minutes.`
+                        : `Mã đặt: ${pendingBookingNotice.code}. Ô đỗ đang được tạm giữ trong 5 phút.`}
+                    </p>
+                    <Link
+                      to={`/bookings/${encodeURIComponent(pendingBookingNotice.id)}`}
+                      className="customer-button primary"
+                      style={{
+                        background: "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)",
+                        color: "#fff",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                        textDecoration: "none",
+                        fontSize: 13,
+                        padding: "8px 12px",
+                        fontWeight: 700,
+                      }}
+                    >
+                      <QrCode size={16} />
+                      {isEn ? "View QR & Complete Payment" : "Xem mã QR & Thanh toán ngay"}
+                      <ArrowRight size={15} />
+                    </Link>
+                  </div>
+                )}
                 {!isAuthenticated && <p className="booking-vehicle-note">{isEn ? "Log in to select your vehicle and continue. Your selected lot, time, and spot will be preserved." : "Đăng nhập để chọn phương tiện và tiếp tục. Bãi, thời gian và ô đang chọn sẽ được giữ lại trong lựa chọn của bạn."}</p>}
                 {bookingError && <div className="customer-alert error" role="alert">{bookingError}{(bookingError.includes("đăng nhập") || bookingError.toLowerCase().includes("log in")) && <Link to={loginTo}>{isEn ? "Log in again" : "Đăng nhập lại"}</Link>}</div>}
-                {isAuthenticated ? <button className="customer-button primary" type="button" onClick={() => void createBooking()} disabled={!canBook}>{isCreatingBooking ? (isEn ? "Reserving…" : "Đang giữ chỗ…") : (isEn ? "Hold spot & pay" : "Giữ chỗ & thanh toán")}<ArrowRight size={17} /></button> : <Link className="customer-button primary" to={loginTo}>{isEn ? "Log in to continue" : "Đăng nhập để tiếp tục"}<ArrowRight size={17} /></Link>}
+                {isAuthenticated ? (
+                  pendingBookingNotice && (pendingBookingNotice.slotId === selectedSlotId || !canBook) ? (
+                    <Link
+                      to={`/bookings/${encodeURIComponent(pendingBookingNotice.id)}`}
+                      className="customer-button primary"
+                      style={{
+                        background: "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)",
+                        color: "#fff",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                        textDecoration: "none",
+                      }}
+                    >
+                      <QrCode size={17} />
+                      {isEn ? "View QR code & Pay for this spot" : "Xem lại mã QR & Thanh toán ô này"}
+                      <ArrowRight size={17} />
+                    </Link>
+                  ) : (
+                    <button className="customer-button primary" type="button" onClick={() => void createBooking()} disabled={!canBook}>
+                      {isCreatingBooking ? (isEn ? "Reserving…" : "Đang giữ chỗ…") : (isEn ? "Hold spot & pay" : "Giữ chỗ & thanh toán")}
+                      <ArrowRight size={17} />
+                    </button>
+                  )
+                ) : (
+                  <Link className="customer-button primary" to={loginTo}>
+                    {isEn ? "Log in to continue" : "Đăng nhập để tiếp tục"}
+                    <ArrowRight size={17} />
+                  </Link>
+                )}
                 <p className="booking-check-note"><ShieldCheck size={16} />{isEn ? "Selecting a spot does not hold it yet. Availability is verified when you confirm." : "Chọn ô chưa tạo giữ chỗ. Tình trạng chỗ được kiểm tra lại khi bạn xác nhận."}</p>
               </aside>
             </div>

@@ -56,7 +56,7 @@ export default function PaymentReturn() {
       {!checking && <>
         {!context && <p className="booking-return-help">{isEn ? "Booking session was not found in this window. Open your booking history to check the ticket; QR code will be issued once confirmed." : "Chưa tìm thấy liên kết đặt chỗ trong cửa sổ này. Mở lịch sử để kiểm tra đúng vé; QR sẽ được cấp khi đặt chỗ được xác nhận."}</p>}
         <p className="booking-return-help">{isEn ? "Please do not submit another payment while the previous transaction is being reconciled." : "Vui lòng không thanh toán lại khi giao dịch trước vẫn đang được đối soát."}</p>
-        <div className="booking-return-actions"><Link className="customer-button primary" to={isAuthenticated ? "/account" : loginTo}>{isAuthenticated ? (isEn ? "Open booking history" : "Mở lịch sử đặt chỗ") : (isEn ? "Log in & view ticket" : "Đăng nhập & xem vé")}<ArrowRight size={16} /></Link><button className="customer-button secondary" onClick={() => setRevision(value => value + 1)}><RefreshCw size={15} />{isEn ? "Check again" : "Kiểm tra lại"}</button></div>
+        <div className="booking-return-actions"><Link className="customer-button primary" to={isAuthenticated ? "/account?tab=bookings" : loginTo}>{isAuthenticated ? (isEn ? "Open booking history" : "Mở lịch sử đặt chỗ") : (isEn ? "Log in & view ticket" : "Đăng nhập & xem vé")}<ArrowRight size={16} /></Link><button className="customer-button secondary" onClick={() => setRevision(value => value + 1)}><RefreshCw size={15} />{isEn ? "Check again" : "Kiểm tra lại"}</button></div>
       </>}
     </section>
   </main></CustomerLayout>;

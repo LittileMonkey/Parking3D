@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { useOutletContext } from "react-router-dom";
 import {
   Server,
@@ -11,7 +11,12 @@ import {
   Radio,
   Eye,
   Activity,
+  BookOpen,
+  Plus,
+  Send,
+  Check,
 } from "lucide-react";
+import { api, type AiDocumentRequest } from "../../services/api";
 
 interface AdminOutletContext {
   refreshKey: number;
@@ -68,6 +73,69 @@ export default function AdminServicesPage() {
     parking: false,
     payment: false,
     ai: false,
+  };
+
+  // AI Knowledge Management State (POST /api/v1/ai/documents & publish)
+  const [docModalOpen, setDocModalOpen] = useState(false);
+  const [docTitle, setDocTitle] = useState("");
+  const [docKey, setDocKey] = useState("");
+  const [docContent, setDocContent] = useState("");
+  const [docSource, setDocSource] = useState("Internal Facility Regulations");
+  const [docLoading, setDocLoading] = useState(false);
+  const [docMsg, setDocMsg] = useState("");
+  const [docList, setDocList] = useState<Array<{ id: string; key: string; title: string; version: number; status: string }>>([
+    { id: "doc-v4-01", key: "RULE_BLOCK_15M", title: "Quy tắc tính cước Block 15 phút & Giờ cao điểm", version: 1, status: "PUBLISHED" },
+    { id: "doc-v4-02", key: "POLICY_OVERNIGHT", title: "Chính sách gửi xe qua đêm & bảo hộ tài sản", version: 1, status: "PUBLISHED" },
+    { id: "doc-v4-03", key: "EV_CHARGING_GUIDE", title: "Hướng dẫn sử dụng trụ sạc ô tô điện tự động", version: 1, status: "DRAFT" },
+  ]);
+
+  const handleCreateDocument = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!docTitle.trim() || !docKey.trim() || !docContent.trim()) return;
+    setDocLoading(true);
+    setDocMsg("");
+    try {
+      const payload: AiDocumentRequest = {
+        documentKey: docKey.trim().toUpperCase(),
+        revision: 1,
+        title: docTitle.trim(),
+        sourceReference: docSource.trim(),
+        effectiveFrom: new Date().toISOString(),
+        content: docContent.trim(),
+      };
+      const res = await api.createAiDocument(payload);
+      const newDoc = {
+        id: res.id || `doc-${Date.now()}`,
+        key: payload.documentKey,
+        title: payload.title,
+        version: 1,
+        status: "DRAFT",
+      };
+      setDocList((prev) => [newDoc, ...prev]);
+      setDocMsg("Đã tạo tài liệu tri thức ở trạng thái DRAFT thành công.");
+      setDocTitle("");
+      setDocKey("");
+      setDocContent("");
+      setDocModalOpen(false);
+    } catch (err) {
+      setDocMsg(err instanceof Error ? err.message : "Không thể tạo tài liệu.");
+    } finally {
+      setDocLoading(false);
+    }
+  };
+
+  const handlePublishDocument = async (id: string, version: number) => {
+    setDocLoading(true);
+    setDocMsg("");
+    try {
+      await api.publishAiDocument(id, version, true);
+      setDocList((prev) => prev.map((d) => (d.id === id ? { ...d, status: "PUBLISHED" } : d)));
+      setDocMsg(`Tài liệu #${id.slice(0, 8)} đã được xuất bản (PUBLISHED) cho Trợ lý AI.`);
+    } catch (err) {
+      setDocMsg(err instanceof Error ? err.message : "Không thể xuất bản tài liệu.");
+    } finally {
+      setDocLoading(false);
+    }
   };
 
   const servicesList = [
@@ -293,6 +361,196 @@ export default function AdminServicesPage() {
           </div>
         </div>
       </div>
+
+      {/* ── AI Knowledge Base Management Section (POST /api/v1/ai/documents & publish) ── */}
+      <div className="adm-card" style={{ padding: "16px 20px", background: "#ffffff", borderLeft: "4px solid #7c3aed" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px", flexWrap: "wrap", gap: "10px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{ padding: "8px", borderRadius: "8px", background: "#ede9fe", color: "#7c3aed" }}>
+              <BookOpen size={18} />
+            </div>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <h3 style={{ margin: 0, fontSize: "1rem", color: "var(--adm-navy)", fontWeight: 700 }}>
+                  Quản Lý Tri Thức Trợ Lý AI (AI Knowledge Management)
+                </h3>
+                <span style={{ fontSize: "0.72rem", background: "#ede9fe", color: "#6d28d9", padding: "2px 8px", borderRadius: "6px", fontWeight: 700 }}>
+                  POST /api/v1/ai/documents & publish
+                </span>
+              </div>
+              <p style={{ margin: "2px 0 0", fontSize: "0.78rem", color: "var(--adm-muted)" }}>
+                Soạn thảo quy chế, hướng dẫn bãi xe cho AI Trợ lý học tập và trả lời tự động cho khách hàng.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="adm-btn adm-btn-primary"
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "0.82rem", background: "#7c3aed" }}
+            onClick={() => setDocModalOpen(true)}
+          >
+            <Plus size={14} /> Thêm tài liệu tri thức mới
+          </button>
+        </div>
+
+        {docMsg && (
+          <div style={{ padding: "8px 12px", background: "#f0fdf4", border: "1px solid #bbf7d0", color: "#166534", borderRadius: "8px", fontSize: "0.82rem", marginBottom: "12px" }}>
+            {docMsg}
+          </div>
+        )}
+
+        <div style={{ overflowX: "auto" }}>
+          <table className="adm-table" style={{ width: "100%", fontSize: "0.82rem" }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: "left" }}>Khóa tài liệu (Key)</th>
+                <th style={{ textAlign: "left" }}>Tiêu đề tài liệu</th>
+                <th style={{ textAlign: "center" }}>Phiên bản</th>
+                <th style={{ textAlign: "center" }}>Trạng thái</th>
+                <th style={{ textAlign: "right" }}>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {docList.map((doc) => (
+                <tr key={doc.id}>
+                  <td><code style={{ color: "#7c3aed", fontWeight: 700 }}>{doc.key}</code></td>
+                  <td><strong>{doc.title}</strong></td>
+                  <td style={{ textAlign: "center" }}>v{doc.version}</td>
+                  <td style={{ textAlign: "center" }}>
+                    <span
+                      style={{
+                        padding: "2px 8px",
+                        borderRadius: "999px",
+                        fontSize: "0.72rem",
+                        fontWeight: 700,
+                        background: doc.status === "PUBLISHED" ? "#dcfce7" : "#fef3c7",
+                        color: doc.status === "PUBLISHED" ? "#166534" : "#92400e",
+                      }}
+                    >
+                      {doc.status}
+                    </span>
+                  </td>
+                  <td style={{ textAlign: "right" }}>
+                    {doc.status === "DRAFT" ? (
+                      <button
+                        type="button"
+                        className="adm-btn adm-btn-outline"
+                        style={{ fontSize: "0.75rem", padding: "4px 10px", color: "#16a34a", borderColor: "#86efac" }}
+                        disabled={docLoading}
+                        onClick={() => handlePublishDocument(doc.id, doc.version)}
+                      >
+                        <Send size={12} style={{ display: "inline", marginRight: 4 }} /> Duyệt & Xuất bản
+                      </button>
+                    ) : (
+                      <span style={{ fontSize: "0.75rem", color: "#15803d", fontWeight: 600 }}>
+                        <Check size={14} style={{ display: "inline", verticalAlign: "middle" }} /> Đang hoạt động
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Modal Thêm Tài Liệu DRAFT */}
+      {docModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: 16,
+          }}
+        >
+          <div style={{ background: "#fff", borderRadius: 12, width: "100%", maxWidth: 540, padding: 24, boxShadow: "0 20px 25px -5px rgba(0,0,0,0.2)" }}>
+            <h3 style={{ margin: "0 0 14px", color: "var(--adm-navy)", fontSize: "1.15rem" }}>
+              Tạo Tài Liệu Tri Thức Mới (AI DRAFT Mode)
+            </h3>
+            <form onSubmit={handleCreateDocument} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--adm-muted)", marginBottom: 4 }}>
+                  Mã tài liệu (Document Key)
+                </label>
+                <input
+                  type="text"
+                  placeholder="VD: POLICY_FIRE_SAFETY"
+                  value={docKey}
+                  onChange={(e) => setDocKey(e.target.value)}
+                  required
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--adm-muted)", marginBottom: 4 }}>
+                  Tiêu đề tài liệu
+                </label>
+                <input
+                  type="text"
+                  placeholder="VD: Quy định an toàn cháy nổ và xử lý sự cố xe điện"
+                  value={docTitle}
+                  onChange={(e) => setDocTitle(e.target.value)}
+                  required
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--adm-muted)", marginBottom: 4 }}>
+                  Nguồn tài liệu (Source)
+                </label>
+                <input
+                  type="text"
+                  placeholder="VD: Quy chuẩn nội bộ bãi xe"
+                  value={docSource}
+                  onChange={(e) => setDocSource(e.target.value)}
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--adm-muted)", marginBottom: 4 }}>
+                  Nội dung tài liệu (cho AI trích xuất và trả lời)
+                </label>
+                <textarea
+                  rows={5}
+                  placeholder="Nhập nội dung quy chế chi tiết..."
+                  value={docContent}
+                  onChange={(e) => setDocContent(e.target.value)}
+                  required
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 13 }}
+                />
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 }}>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-outline"
+                  onClick={() => setDocModalOpen(false)}
+                  disabled={docLoading}
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="adm-btn adm-btn-primary"
+                  style={{ background: "#7c3aed" }}
+                  disabled={docLoading}
+                >
+                  {docLoading ? "Đang lưu DRAFT..." : "Lưu ở chế độ DRAFT"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

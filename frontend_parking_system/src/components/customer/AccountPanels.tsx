@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { UserRound, Mail, Phone, Car, Bike, Zap, Plus, Pencil, Trash2, Star, Ticket, ArrowUpRight, MapPin, Clock3, RefreshCw } from "lucide-react";
+import { UserRound, Mail, Phone, Car, Bike, Zap, Plus, Pencil, Trash2, Star, Ticket, ArrowUpRight, MapPin, Clock3, RefreshCw, Info } from "lucide-react";
 import { api, ApiError, type MembershipDto, type UserVehicle } from "../../services/api";
 import { normalizePhoneNumber } from "../../services/registration";
 import { useAuth } from "../../context/AuthContext";
@@ -69,6 +69,7 @@ export function AccountVehicles() {
     const [vehicles, setVehicles] = useState<UserVehicle[]>([]), [loading, setLoading] = useState(true), [loaded, setLoaded] = useState(false), [revision, setRevision] = useState(0);
     const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
     const [editing, setEditing] = useState<UserVehicle | null>(null), [adding, setAdding] = useState(false), [deleting, setDeleting] = useState<UserVehicle | null>(null);
+    const [viewing, setViewing] = useState<UserVehicle | null>(null), [viewingLoading, setViewingLoading] = useState(false);
     const [form, setForm] = useState({ licensePlate: "", vehicleType: "Car", isDefault: false });
     useEffect(() => { let active = true; setLoading(true); setError(""); api.getUserVehicles().then(rows => { if (active) {
         setVehicles(rows);
@@ -77,6 +78,18 @@ export function AccountVehicles() {
         setError(e.message); }).finally(() => { if (active)
         setLoading(false); }); return () => { active = false; }; }, [revision]);
     function open(vehicle?: UserVehicle) { setError(""); setNotice(""); setEditing(vehicle || null); setAdding(!vehicle); setForm(vehicle ? { licensePlate: vehicle.licensePlate, vehicleType: vehicle.vehicleType, isDefault: vehicle.isDefault } : { licensePlate: "", vehicleType: "Car", isDefault: !vehicles.length }); }
+    async function viewDetail(v: UserVehicle) {
+        setViewingLoading(true);
+        setError("");
+        try {
+            const detail = await api.getUserVehicleById(v.id);
+            setViewing(detail);
+        } catch {
+            setViewing(v);
+        } finally {
+            setViewingLoading(false);
+        }
+    }
     async function save(event: FormEvent) {
         event.preventDefault();
         if (busy || !form.licensePlate.trim())
@@ -137,13 +150,87 @@ export function AccountVehicles() {
             setBusy(false);
         }
     }
-    const dialogOpen = adding || Boolean(editing) || Boolean(deleting);
+    const dialogOpen = adding || Boolean(editing) || Boolean(deleting) || Boolean(viewing);
     return <section className="account-panel"><div className="account-row between"><div className="account-panel-heading"><span className="account-section-icon"><Car size={22}/></span><div><h2>Phương tiện của tôi</h2><p>Lưu xe thường dùng để chọn nhanh khi đặt chỗ.</p></div></div><button className="account-primary" disabled={busy || !loaded} onClick={() => open()}><Plus size={17}/>Thêm phương tiện</button></div>
     {!dialogOpen && <AccountAlert error={error} notice={notice}/>}
     {loading && !loaded ? <div className="account-empty" role="status">Đang tải phương tiện…</div> : !loaded ? <button className="account-button" onClick={() => setRevision(n => n + 1)}>Tải lại phương tiện</button> : !vehicles.length ? <div className="account-empty"><Car size={36}/><h3>Thêm chiếc xe đầu tiên của bạn</h3><p>Phương tiện đã lưu sẽ xuất hiện khi bạn chọn chỗ đỗ.</p><button className="account-button" onClick={() => open()}>Thêm phương tiện</button></div> : <div className="account-vehicle-grid">{vehicles.map(vehicle => {
                 const kind = vehicle.vehicleType.toUpperCase(), Icon = kind === "BIKE" || kind === "MOTORBIKE" ? Bike : kind === "EV" ? Zap : Car;
-                return <article key={vehicle.id} className={`account-vehicle-card ${vehicle.isDefault ? "is-default" : ""}`}><div className="account-row between"><span className="account-vehicle-icon"><Icon size={27}/></span>{vehicle.isDefault && <span className="account-default-badge"><Star size={12}/>Mặc định</span>}</div><h3>{vehicle.licensePlate}</h3><p>{vehicleNames[kind] || vehicle.vehicleType}</p>{vehicle.isDefault && vehicles.length === 1 && <p className="account-footnote">Thêm phương tiện khác trước khi xóa xe mặc định duy nhất.</p>}<div className="account-vehicle-actions"><button className="account-button" disabled={busy} onClick={() => open(vehicle)}><Pencil size={14}/>Chỉnh sửa</button>{!vehicle.isDefault && <button className="account-text-button" disabled={busy} onClick={() => void makeDefault(vehicle)}>Đặt mặc định</button>}<button className="account-icon-button danger" disabled={busy || (vehicle.isDefault && vehicles.length === 1)} title={vehicle.isDefault && vehicles.length === 1 ? "Thêm phương tiện khác trước khi xóa xe mặc định duy nhất." : "Xóa phương tiện"} aria-label={`Xóa xe ${vehicle.licensePlate}`} onClick={() => { setError(""); setDeleting(vehicle); }}><Trash2 size={16}/></button></div></article>;
+                return <article key={vehicle.id} className={`account-vehicle-card ${vehicle.isDefault ? "is-default" : ""}`}><div className="account-row between"><span className="account-vehicle-icon"><Icon size={27}/></span>{vehicle.isDefault && <span className="account-default-badge"><Star size={12}/>Mặc định</span>}</div><h3>{vehicle.licensePlate}</h3><p>{vehicleNames[kind] || vehicle.vehicleType}</p>{vehicle.isDefault && vehicles.length === 1 && <p className="account-footnote">Thêm phương tiện khác trước khi xóa xe mặc định duy nhất.</p>}<div className="account-vehicle-actions"><button className="account-button" disabled={busy} onClick={() => open(vehicle)}><Pencil size={14}/> Chỉnh sửa</button><button className="account-button" disabled={busy || viewingLoading} onClick={() => void viewDetail(vehicle)}><Info size={14}/> Chi tiết</button>{!vehicle.isDefault && <button className="account-text-button" disabled={busy} onClick={() => void makeDefault(vehicle)}>Đặt mặc định</button>}<button className="account-icon-button danger" disabled={busy || (vehicle.isDefault && vehicles.length === 1)} title={vehicle.isDefault && vehicles.length === 1 ? "Thêm phương tiện khác trước khi xóa xe mặc định duy nhất." : "Xóa phương tiện"} aria-label={`Xóa xe ${vehicle.licensePlate}`} onClick={() => { setError(""); setDeleting(vehicle); }}><Trash2 size={16}/></button></div></article>;
             })}</div>}
+    {viewing && <AccountDialog title="Hồ sơ chi tiết phương tiện" onClose={() => setViewing(null)}>
+        <div className="account-stack" style={{ gap: 16 }}>
+            <div style={{ background: "#f8fafc", border: "1.5px solid #cbd5e1", borderRadius: 12, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    <div style={{ width: 44, height: 44, borderRadius: 10, background: "#e0f2fe", color: "#0284c7", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {viewing.vehicleType.toUpperCase() === "BIKE" || viewing.vehicleType.toUpperCase() === "MOTORBIKE" ? (
+                            <Bike size={24} />
+                        ) : viewing.vehicleType.toUpperCase() === "EV" ? (
+                            <Zap size={24} />
+                        ) : (
+                            <Car size={24} />
+                        )}
+                    </div>
+                    <div>
+                        <div style={{ display: "inline-block", border: "2px solid #0f172a", borderRadius: 6, padding: "3px 12px", background: "#ffffff", fontSize: "1.15rem", fontWeight: 800, letterSpacing: 2, color: "#0f172a", boxShadow: "0 1px 2px rgba(0,0,0,0.05)" }}>
+                            {viewing.licensePlate}
+                        </div>
+                        <div style={{ fontSize: "0.85rem", color: "#64748b", marginTop: 4 }}>
+                            {vehicleNames[viewing.vehicleType.toUpperCase()] || viewing.vehicleType}
+                        </div>
+                    </div>
+                </div>
+                {viewing.isDefault && (
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "#b45309", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 6, padding: "4px 10px", display: "flex", alignItems: "center", gap: 4 }}>
+                        <Star size={13} fill="#b45309" />
+                        Xe mặc định
+                    </span>
+                )}
+            </div>
+
+            <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 10, padding: "14px 16px", display: "grid", gap: 10, fontSize: "0.875rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: 8 }}>
+                    <span style={{ color: "#64748b" }}>Loại phương tiện:</span>
+                    <strong style={{ color: "#0f172a" }}>{vehicleNames[viewing.vehicleType.toUpperCase()] || viewing.vehicleType}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: 8 }}>
+                    <span style={{ color: "#64748b" }}>Vai trò đặt chỗ:</span>
+                    <strong style={{ color: viewing.isDefault ? "#d97706" : "#475569" }}>
+                        {viewing.isDefault ? "Phương tiện chính (Tự động chọn)" : "Phương tiện phụ"}
+                    </strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: 8 }}>
+                    <span style={{ color: "#64748b" }}>Trạng thái nhận diện:</span>
+                    <strong style={{ color: "#16a34a", display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#16a34a", display: "inline-block" }} />
+                        Sẵn sàng đặt chỗ
+                    </strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: "#64748b" }}>Nhận diện tại cổng:</span>
+                    <span style={{ color: "#334155", textAlign: "right", maxWidth: 220 }}>
+                        Camera ANPR tự động quét biển số khi ra/vào bãi
+                    </span>
+                </div>
+            </div>
+
+            <div className="account-row" style={{ justifyContent: "flex-end", gap: 10 }}>
+                <button
+                    type="button"
+                    className="account-button"
+                    onClick={() => {
+                        const v = viewing;
+                        setViewing(null);
+                        open(v);
+                    }}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                >
+                    <Pencil size={14} />
+                    Chỉnh sửa xe này
+                </button>
+                <button type="button" className="account-button" onClick={() => setViewing(null)}>Đóng</button>
+            </div>
+        </div>
+    </AccountDialog>}
     {(adding || editing) && <AccountDialog title={editing ? "Chỉnh sửa phương tiện" : "Thêm phương tiện"} onClose={() => { if (!busy) {
         setAdding(false);
         setEditing(null);

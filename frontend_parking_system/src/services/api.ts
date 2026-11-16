@@ -1091,6 +1091,46 @@ export const api = {
     });
   },
 
+  /**
+   * [REAL API PAYMENT] Sinh mã VietQR / VNPay-QR động theo đơn đặt xe (SCRUM-72)
+   */
+  async createVnPayPaymentQr(bookingId: string, idempotencyKey?: string): Promise<PaymentQrResult> {
+    const headers: Record<string, string> = {};
+    if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+    return request<PaymentQrResult>("/api/v1/payments/vnpay/create-qr", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ bookingId }),
+    });
+  },
+
+  /**
+   * [REAL API PARKING] Gửi sự kiện quét biển số từ thiết bị barrier cổng bãi xe lên Parking Service
+   */
+  async uploadLotPlateRecognition(
+    lotId: string,
+    payload: LotPlateRecognitionUpload,
+    idempotencyKey?: string
+  ): Promise<LotPlateRecognitionResult> {
+    const headers: Record<string, string> = {};
+    if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+    return request<LotPlateRecognitionResult>(`/api/v1/parking-lots/${encodeURIComponent(lotId)}/plate-recognitions`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * [REAL API IDENTITY] Gửi yêu cầu mã OTP đăng nhập khách hàng qua email
+   */
+  async requestGuestOtp(email: string): Promise<{ message: string }> {
+    return request<{ message: string }>("/api/v1/auth/guest/request-otp", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  },
+
   // ─── AI DOCUMENTS, CONVERSATIONAL ASSISTANT & SMART SEARCH ────────────────
   async createAiDocument(payload: AiDocumentRequest): Promise<{ id: string }> {
     return request<{ id: string }>("/api/v1/ai/documents", {
@@ -1205,6 +1245,7 @@ export interface AccountUserDto {
   fullName: string;
   status: string;
   roles?: string[];
+  membershipTier?: string | null;
 }
 
 export interface PlateRecognitionResult {
@@ -1562,4 +1603,28 @@ export interface AiParkingRecommendation {
   summaryExplanation?: string;
   processingTimeMs?: number;
   isFallback?: boolean;
+}
+
+export interface PaymentQrResult {
+  paymentId: string;
+  bookingId: string;
+  amount: number;
+  currency: string;
+  merchantTxnRef: string;
+  paymentUrl: string;
+  qrPayload: string;
+  expiresAt: string;
+}
+
+export interface LotPlateRecognitionUpload {
+  imageBase64: string;
+  contentType: string;
+}
+
+export interface LotPlateRecognitionResult {
+  recognitionId?: string;
+  licensePlate?: string;
+  confidence?: number;
+  status?: string;
+  [key: string]: unknown;
 }

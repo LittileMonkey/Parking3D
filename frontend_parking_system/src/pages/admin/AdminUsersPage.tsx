@@ -49,6 +49,34 @@ export default function AdminUsersPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  // Server Lookup by Email (GET /api/v1/account/by-email)
+  const [serverEmailQuery, setServerEmailQuery] = useState("");
+  const [serverEmailLoading, setServerEmailLoading] = useState(false);
+  const [serverEmailResult, setServerEmailResult] = useState<AccountUserDto | null>(null);
+  const [serverEmailError, setServerEmailError] = useState("");
+
+  const handleLookupByEmailServer = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const email = serverEmailQuery.trim();
+    if (!email) return;
+    setServerEmailLoading(true);
+    setServerEmailError("");
+    setServerEmailResult(null);
+    try {
+      const acc = await api.getAccountByEmail(email);
+      setServerEmailResult(acc);
+      if (acc && !accounts.some((a) => a.id === acc.id)) {
+        setAccounts((prev) => [acc, ...prev]);
+      }
+    } catch (err) {
+      setServerEmailError(
+        err instanceof Error ? err.message : `Không tìm thấy tài khoản với email "${email}" trên Identity Service.`
+      );
+    } finally {
+      setServerEmailLoading(false);
+    }
+  };
+
   useEffect(() => {
     let mounted = true;
     async function loadAccounts() {
@@ -160,6 +188,101 @@ export default function AdminUsersPage() {
               <option value="CUSTOMER">Khách hàng (CUSTOMER)</option>
             </select>
           </div>
+        </div>
+
+        {/* ── Server Email Lookup Bar (GET /api/v1/account/by-email) ── */}
+        <div
+          style={{
+            margin: "0 0 16px 0",
+            padding: "12px 16px",
+            background: "#f8fafc",
+            borderRadius: 10,
+            border: "1px dashed var(--adm-indigo-soft, #c7d2fe)",
+            display: "grid",
+            gap: 10,
+          }}
+        >
+          <form
+            onSubmit={handleLookupByEmailServer}
+            style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 260 }}>
+              <Mail size={16} color="#4338ca" />
+              <input
+                type="email"
+                placeholder="Tra cứu chính xác tài khoản qua Server bằng Email..."
+                className="adm-search-input"
+                style={{ flex: 1, background: "#fff" }}
+                value={serverEmailQuery}
+                onChange={(e) => setServerEmailQuery(e.target.value)}
+              />
+            </div>
+            <button
+              type="submit"
+              className="adm-btn-secondary"
+              style={{ background: "#4338ca", color: "#fff", borderColor: "#4338ca" }}
+              disabled={serverEmailLoading || !serverEmailQuery.trim()}
+            >
+              {serverEmailLoading ? "Đang tra cứu..." : "Tra Cứu Server (Identity)"}
+            </button>
+            {serverEmailResult && (
+              <button
+                type="button"
+                className="adm-btn-secondary"
+                onClick={() => {
+                  setServerEmailResult(null);
+                  setServerEmailQuery("");
+                }}
+              >
+                Xóa kết quả
+              </button>
+            )}
+          </form>
+
+          {serverEmailError && (
+            <div style={{ color: "#b91c1c", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
+              <AlertCircle size={14} />
+              <span>{serverEmailError}</span>
+            </div>
+          )}
+
+          {serverEmailResult && (
+            <div
+              style={{
+                background: "#ecfdf5",
+                border: "1px solid #a7f3d0",
+                borderRadius: 8,
+                padding: "10px 14px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: 10,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <CheckCircle2 size={18} color="#059669" />
+                <div>
+                  <strong style={{ color: "#065f46" }}>{serverEmailResult.fullName}</strong>
+                  <span style={{ fontSize: 12, color: "#047857", marginLeft: 8 }}>
+                    ({serverEmailResult.emailNormalized})
+                  </span>
+                  <div style={{ fontSize: 12, color: "#065f46", marginTop: 2 }}>
+                    Vai trò: <strong>{serverEmailResult.roles?.join(", ") || "CUSTOMER"}</strong> · Hạng:{" "}
+                    <strong>{serverEmailResult.membershipTier || "STANDARD"}</strong>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="adm-btn-secondary"
+                style={{ background: "#059669", color: "#fff", borderColor: "#059669" }}
+                onClick={() => handleOpenEdit(serverEmailResult)}
+              >
+                Phân quyền tài khoản này
+              </button>
+            </div>
+          )}
         </div>
 
         {error && (
