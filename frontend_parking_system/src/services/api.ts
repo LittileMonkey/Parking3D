@@ -457,9 +457,10 @@ export const api = {
     lotId: string,
     startsAt: string,
     endsAt: string,
-    vehicleType: string,
+    vehicleType?: string,
   ): Promise<LotAvailability> {
-    const params = new URLSearchParams({ startTime: startsAt, endTime: endsAt, vehicleType });
+    const params = new URLSearchParams({ startTime: startsAt, endTime: endsAt });
+    if (vehicleType) params.set("vehicleType", vehicleType);
     return request<LotAvailability>(
       `/api/v1/parking-lots/${encodeURIComponent(lotId)}/availability?${params.toString()}`,
     );

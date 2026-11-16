@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
-import { createParkingArea } from "./parking.js";
+import { createBuildingParkingArea, createOutdoorParkingArea, createParkingArea } from "./parking.js";
+
 
 const levels = [
   {
@@ -138,4 +139,29 @@ test("uses spatial position and elevation from 3D layout API when mapObjects are
   matrix.decompose(pos, rot, scale);
   assert.ok(pos.distanceTo(new THREE.Vector3(10, 0.2, -6)) < 0.000001);
   assert.ok(rot.angleTo(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI / 4, 0))) < 0.000001);
+});
+
+test("builds outdoor parking lot with 20 slots in 4 columns", () => {
+  const { slotMeshes, dispose } = createOutdoorParkingArea([
+    { slotId: "id-a01", slotCode: "A01", zoneCode: "A", status: "AVAILABLE" },
+  ]);
+  assert.equal(slotMeshes.length, 20);
+  assert.equal(slotMeshes[0].userData.slotId, "id-a01");
+  assert.equal(slotMeshes[0].userData.slotCode, "A01");
+  dispose();
+});
+
+test("builds 3-floor parking building with 200 car slots across Floor 2 and Floor 3", () => {
+  const { floors, slotMeshes, dispose } = createBuildingParkingArea([
+    {
+      levelId: "lvl-f2",
+      levelCode: "F2",
+      levelName: "Tầng 2 (100 ô tô)",
+      slots: [{ slotId: "f2-a01-id", slotCode: "F2-A01", zoneCode: "A", status: "AVAILABLE" }],
+    },
+  ]);
+  assert.equal(floors.length, 3);
+  assert.equal(slotMeshes.length, 200);
+  assert.equal(slotMeshes[0].userData.slotId, "f2-a01-id");
+  dispose();
 });

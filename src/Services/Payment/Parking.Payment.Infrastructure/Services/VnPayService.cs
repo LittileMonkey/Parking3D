@@ -53,19 +53,34 @@ namespace Parking.Payment.Infrastructure.Services
             var timeZone = TimeZoneInfo.TryFindSystemTimeZoneById("SE Asia Standard Time", out var tz) ? tz : TimeZoneInfo.FindSystemTimeZoneById("Asia/Ho_Chi_Minh");
             var timeNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone);
 
+            var tmnCode = string.IsNullOrWhiteSpace(_settings.TmnCode) ? "LDWHY5M9" : _settings.TmnCode;
+            var hashSecret = string.IsNullOrWhiteSpace(_settings.HashSecret) ? "PYEVKNILPGUCJDOFNSHCLCXIUDYHMPVU" : _settings.HashSecret;
+            var baseUrl = string.IsNullOrWhiteSpace(_settings.BaseUrl) ? "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html" : _settings.BaseUrl;
+            var returnUrl = string.IsNullOrWhiteSpace(_settings.ReturnUrl) ? "http://localhost:8080/api/v1/payments/vnpay/return" : _settings.ReturnUrl;
+
+            var normalizedIp = string.IsNullOrWhiteSpace(ipAddress) ? "127.0.0.1" : ipAddress.Trim();
+            if (normalizedIp.StartsWith("::ffff:", StringComparison.OrdinalIgnoreCase))
+            {
+                normalizedIp = normalizedIp[7..];
+            }
+            if (normalizedIp.Contains(':'))
+            {
+                normalizedIp = "127.0.0.1";
+            }
+
             var vnpParameters = new SortedList<string, string>(new VnPayCompare())
             {
-                { "vnp_Version", _settings.Version },
-                { "vnp_Command", _settings.Command },
-                { "vnp_TmnCode", _settings.TmnCode },
+                { "vnp_Version", string.IsNullOrWhiteSpace(_settings.Version) ? "2.1.0" : _settings.Version },
+                { "vnp_Command", string.IsNullOrWhiteSpace(_settings.Command) ? "pay" : _settings.Command },
+                { "vnp_TmnCode", tmnCode },
                 { "vnp_Amount", (amountMinor * 100).ToString() }, // VNPay quy định nhân 100
                 { "vnp_CreateDate", timeNow.ToString("yyyyMMddHHmmss") },
-                { "vnp_CurrCode", _settings.CurrCode },
-                { "vnp_IpAddr", string.IsNullOrWhiteSpace(ipAddress) ? "127.0.0.1" : ipAddress },
-                { "vnp_Locale", _settings.Locale },
+                { "vnp_CurrCode", string.IsNullOrWhiteSpace(_settings.CurrCode) ? "VND" : _settings.CurrCode },
+                { "vnp_IpAddr", normalizedIp },
+                { "vnp_Locale", string.IsNullOrWhiteSpace(_settings.Locale) ? "vn" : _settings.Locale },
                 { "vnp_OrderInfo", orderInfo },
                 { "vnp_OrderType", "other" },
-                { "vnp_ReturnUrl", _settings.ReturnUrl },
+                { "vnp_ReturnUrl", returnUrl },
                 { "vnp_TxnRef", transactionRef },
                 { "vnp_ExpireDate", timeNow.AddMinutes(5).ToString("yyyyMMddHHmmss") } // Khớp thời hạn giữ chỗ 5 phút
             };
@@ -84,8 +99,8 @@ namespace Parking.Payment.Infrastructure.Services
                 queryString.Append(WebUtility.UrlEncode(key)).Append('=').Append(WebUtility.UrlEncode(value));
                 rawData.Append(WebUtility.UrlEncode(key)).Append('=').Append(WebUtility.UrlEncode(value));
             }
-            var secureHash = HmacSha512(_settings.HashSecret, rawData.ToString());
-            return $"{_settings.BaseUrl}?{queryString}&vnp_SecureHash={secureHash}";
+            var secureHash = HmacSha512(hashSecret, rawData.ToString());
+            return $"{baseUrl}?{queryString}&vnp_SecureHash={secureHash}";
 
         }
 
@@ -99,6 +114,8 @@ namespace Parking.Payment.Infrastructure.Services
             // 1. Nếu không có mã hash truyền vào -> Từ chối ngay
             if (string.IsNullOrWhiteSpace(inputHash))
                 return false;
+
+            var hashSecret = string.IsNullOrWhiteSpace(_settings.HashSecret) ? "PYEVKNILPGUCJDOFNSHCLCXIUDYHMPVU" : _settings.HashSecret;
 
             var rawData = new StringBuilder();
             // 2. Lọc các param vnp_ và bỏ qua chữ ký cũ   
@@ -115,7 +132,7 @@ namespace Parking.Payment.Infrastructure.Services
             }
 
             // 3. Tính toán mã hash thực tế dựa trên Secret Key của hệ thống
-            var checkHash = HmacSha512(_settings.HashSecret, rawData.ToString());
+            var checkHash = HmacSha512(hashSecret, rawData.ToString());
 
             // 4. [CHỐNG TIMING ATTACK]: So sánh mảng byte với thời gian cố định
             return CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(checkHash.ToLowerInvariant()), Encoding.UTF8.GetBytes(inputHash.ToLowerInvariant()));

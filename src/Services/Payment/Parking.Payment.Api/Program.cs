@@ -49,6 +49,29 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+try
+{
+    var db = app.Services.GetRequiredService<NpgsqlDataSource>();
+    await using var schemaCmd = db.CreateCommand("""
+        ALTER TABLE public.billing_accounts
+            ADD COLUMN IF NOT EXISTS customer_id uuid,
+            ADD COLUMN IF NOT EXISTS lot_name varchar(255),
+            ADD COLUMN IF NOT EXISTS plate_number varchar(30);
+        ALTER TABLE public.refunds
+            ADD COLUMN IF NOT EXISTS provider_payload jsonb,
+            ADD COLUMN IF NOT EXISTS last_error text,
+            ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+        ALTER TABLE public.payment_attempts
+            ADD COLUMN IF NOT EXISTS provider_created_date text,
+            ADD COLUMN IF NOT EXISTS payment_url text;
+        """);
+    await schemaCmd.ExecuteNonQueryAsync();
+}
+catch (Exception ex)
+{
+    app.Logger.LogWarning(ex, "Could not auto-apply payment schema compatibility migrations on startup.");
+}
+
 app.UseParkingDefaults("payment");
 Parking.Payment.Api.ReportingEndpoints.MapPaymentReports(app);
 Parking.Payment.Api.RefundEndpoints.MapRefunds(app);

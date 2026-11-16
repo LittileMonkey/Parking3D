@@ -12,7 +12,7 @@ function New-TaskSecret {
 if(Test-Path -LiteralPath $destination){
   if(-not $Ensure){throw '.env already exists. Use -Ensure to append missing local settings without replacing existing secrets.'}
   $existing=Get-Content -Raw -LiteralPath $destination
-  $defaults=@{OTP_HMAC_KEY=(New-TaskSecret);MFA_ENCRYPTION_KEY=(New-TaskSecret);QR_SIGNING_KEY=(New-TaskSecret);DEMO_STAFF_EMAIL='docker.demo.staff@example.test';DEMO_STAFF_PASSWORD=(New-TaskSecret);DEMO_CUSTOMER_EMAIL='docker.demo.customer@example.test';DEMO_CUSTOMER_PASSWORD=(New-TaskSecret)}
+  $defaults=@{OTP_HMAC_KEY=(New-TaskSecret);MFA_ENCRYPTION_KEY=(New-TaskSecret);QR_SIGNING_KEY=(New-TaskSecret);DEMO_STAFF_EMAIL='docker.demo.staff@example.test';DEMO_STAFF_PASSWORD=(New-TaskSecret);DEMO_CUSTOMER_EMAIL='docker.demo.customer@example.test';DEMO_CUSTOMER_PASSWORD=(New-TaskSecret);VNPAY_TMN_CODE='LDWHY5M9';VNPAY_HASH_SECRET='PYEVKNILPGUCJDOFNSHCLCXIUDYHMPVU';VNPAY_RETURN_URL='http://localhost:8080/api/v1/payments/vnpay/return'}
   foreach($key in $defaults.Keys){if($existing -notmatch "(?m)^$key=.+$"){Add-Content -LiteralPath $destination -Value ("`n"+$key+'='+$defaults[$key])}}
   Write-Host 'Kept existing .env; appended only missing demo/QR settings.'
   return
@@ -33,6 +33,9 @@ $lines=@(
  ('DEMO_STAFF_PASSWORD='+(New-TaskSecret))
  'DEMO_CUSTOMER_EMAIL=docker.demo.customer@example.test'
  ('DEMO_CUSTOMER_PASSWORD='+(New-TaskSecret))
+ 'VNPAY_TMN_CODE=LDWHY5M9'
+ 'VNPAY_HASH_SECRET=PYEVKNILPGUCJDOFNSHCLCXIUDYHMPVU'
+ 'VNPAY_RETURN_URL=http://localhost:8080/api/v1/payments/vnpay/return'
  'OCR_ENDPOINT='
  'OCR_API_KEY='
  'GEMINI_API_KEY='
