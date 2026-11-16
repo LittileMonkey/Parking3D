@@ -1,4 +1,4 @@
-﻿param([switch]$Stop,[switch]$TrustLocal,[Security.SecureString]$DatabasePassword)
+﻿param([switch]$Stop,[switch]$TrustLocal,[Security.SecureString]$DatabasePassword,[switch]$KeepAlive)
 $ErrorActionPreference='Stop'
 $repo=(Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 Set-Location $repo
@@ -37,6 +37,7 @@ if(-not $settings.QR_SIGNING_KEY){
     $settings.QR_SIGNING_KEY=([BitConverter]::ToString($bytes)).Replace('-','').ToLowerInvariant()
     Add-Content -LiteralPath '.env' -Value ("`nQR_SIGNING_KEY="+$settings.QR_SIGNING_KEY)
 }
+if(-not $DatabasePassword -and $settings.LOCAL_POSTGRES_PASSWORD){$DatabasePassword=ConvertTo-SecureString $settings.LOCAL_POSTGRES_PASSWORD -AsPlainText -Force}
 if(-not $TrustLocal -and -not $DatabasePassword){$DatabasePassword=Read-Host 'Mật khẩu PostgreSQL local' -AsSecureString}
 $dbPassword=if($DatabasePassword){[Net.NetworkCredential]::new('',$DatabasePassword).Password}else{''}
 
@@ -98,3 +99,7 @@ Write-Host 'BE READY: Identity, Parking, Payment, AI và Gateway http://localhos
 Write-Host 'Terminal FE: cd frontend_parking_system; npm run dev'
 Write-Host 'Đăng nhập bằng BOOTSTRAP_EMAIL/PASSWORD hoặc DEMO_STAFF_EMAIL/PASSWORD, DEMO_CUSTOMER_EMAIL/PASSWORD trong .env.'
 Write-Host 'Dừng BE: .\scripts\microservices\Run-GitHubDev.ps1 -Stop'
+if($KeepAlive){
+    Write-Host 'Stack is running in background. Press Ctrl+C to terminate or use Run-GitHubDev.ps1 -Stop'
+    while($true){ Start-Sleep -Seconds 3600 }
+}
