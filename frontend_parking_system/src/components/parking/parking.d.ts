@@ -46,3 +46,43 @@ export function createParkingArea(
   slotMeshes: InstancedMesh[];
   dispose: () => void;
 };
+
+export const OUTDOOR_SLOT_COLORS: Record<string, number>;
+
+export interface MotoSceneStats {
+  availableMoto: number;
+  maxCapacity: number;
+  currentMoto: number;
+  showOutdoorBanner?: boolean;
+  lang?: "vi" | "en";
+}
+
+export function createOutdoorParkingArea(
+  slots?: ParkingSceneSlot[],
+  initialMotoStats?: MotoSceneStats | null,
+): {
+  scene: Scene;
+  slotMeshes: Mesh[];
+  entranceBarrier: unknown;
+  exitBarrier: unknown;
+  updateMotoStats: (stats: MotoSceneStats | null) => void;
+  dispose: () => void;
+};
+
+export function createBuildingParkingArea(
+  levels?: ParkingSceneLevel[],
+  initialMotoStats?: MotoSceneStats | null,
+): {
+  scene: Scene;
+  floors: import("three").Group[];
+  floorColumnGroups: import("three").Group[];
+  motoFloor1CenterSprite: import("three").Sprite | null;
+  floorHeight: number;
+  slotMeshes: Mesh[];
+  interactables: Mesh[];
+  updateMotoStats: (stats: MotoSceneStats | null) => void;
+  dispose: () => void;
+};
+
+
+
