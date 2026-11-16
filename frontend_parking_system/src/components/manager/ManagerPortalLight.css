@@ -30,6 +30,7 @@
   display: flex;
   min-height: 100vh;
   width: 100%;
+  position: relative;
   background: linear-gradient(135deg, #f8fafc 0%, #edf7fd 50%, #f2f9fe 100%);
   color: var(--pm-navy);
   font-family: "Be Vietnam Pro", "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -40,17 +41,26 @@
   width: 270px;
   min-width: 270px;
   height: 100vh;
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  bottom: 0;
   background: #072d59;
   color: #ffffff;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  z-index: 50;
+  z-index: 100;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 4px 0 24px rgba(7, 45, 89, 0.15);
   overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.pm-manager-sidebar::-webkit-scrollbar {
+  display: none;
 }
 
 .pm-sidebar-top {
@@ -306,12 +316,14 @@
 
 .pm-manager-main {
   flex: 1;
+  margin-left: 270px;
+  width: calc(100% - 270px);
   min-width: 0;
+  min-height: 100vh;
   padding: 24px 32px 64px 32px;
   display: flex;
   flex-direction: column;
   gap: 24px;
-  overflow-y: auto;
 }
 
 .pm-manager-light-shell {

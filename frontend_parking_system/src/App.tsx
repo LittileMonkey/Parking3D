@@ -32,6 +32,16 @@ import StaffShiftsPage from "./pages/manager/StaffShiftsPage";
 import IncidentsApprovalsPage from "./pages/manager/IncidentsApprovalsPage";
 import ReportsAuditPage from "./pages/manager/ReportsAuditPage";
 
+// System Admin Console Components
+import AdminLayout from "./components/admin/AdminLayout";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import Admin3DViewPage from "./pages/admin/Admin3DViewPage";
+import AdminSlotsPage from "./pages/admin/AdminSlotsPage";
+import AdminUsersPage from "./pages/admin/AdminUsersPage";
+import AdminFacilitiesPage from "./pages/admin/AdminFacilitiesPage";
+import AdminStaffAssignmentsPage from "./pages/admin/AdminStaffAssignmentsPage";
+import AdminServicesPage from "./pages/admin/AdminServicesPage";
+
 const Booking = lazy(() => import("./pages/Booking"));
 
 function RequireRole({ roles, children }: { roles: string[]; children: ReactNode }) {
@@ -89,10 +99,19 @@ export default function App() {
         <Route path="reports-audit" element={<ReportsAuditPage />} />
       </Route>
 
-      {/* Admin Portal Route Aliases */}
-      <Route path="/admin" element={<Navigate to="/manager/dashboard" replace />} />
-      <Route path="/admin/dashboard" element={<Navigate to="/manager/dashboard" replace />} />
-      <Route path="/admin/*" element={<Navigate to="/manager/dashboard" replace />} />
+      {/* System Admin Portal Routes */}
+      <Route path="/admin" element={<RequireRole roles={["ADMIN"]}><AdminLayout /></RequireRole>}>
+        <Route index element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="dashboard" element={<AdminDashboard />} />
+        <Route path="map-3d" element={<Admin3DViewPage />} />
+        <Route path="map-3d/:lotId" element={<Admin3DViewPage />} />
+        <Route path="slots" element={<AdminSlotsPage />} />
+        <Route path="slots/:lotId" element={<AdminSlotsPage />} />
+        <Route path="users" element={<AdminUsersPage />} />
+        <Route path="facilities" element={<AdminFacilitiesPage />} />
+        <Route path="staff-assignments" element={<AdminStaffAssignmentsPage />} />
+        <Route path="services" element={<AdminServicesPage />} />
+      </Route>
 
       <Route path="*" element={<Home />} />
     </Routes>

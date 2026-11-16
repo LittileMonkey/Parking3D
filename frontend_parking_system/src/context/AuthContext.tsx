@@ -92,8 +92,9 @@ export function extractUserFromToken(token: string, fallbackUserName = ""): Auth
 
 /**
  * Xác định trang đích dựa trên vai trò của tài khoản
- * - ADMIN / PARKING_MANAGER -> /manager/dashboard (Admin Dashboard)
- * - PARKING_STAFF -> /staff/dashboard (Staff Dashboard)
+ * - ADMIN -> /admin/dashboard (System Admin Dashboard)
+ * - PARKING_MANAGER -> /manager/dashboard (Manager Facility Dashboard)
+ * - PARKING_STAFF -> /staff/dashboard (Staff Operations Dashboard)
  * - CUSTOMER / Khách -> / (Trang chủ)
  */
 export function getRedirectPathForUser(targetUser?: AuthUser | null): string {
@@ -103,17 +104,22 @@ export function getRedirectPathForUser(targetUser?: AuthUser | null): string {
     ...(targetUser.role ? [targetUser.role] : []),
   ].map((r) => r.trim().toUpperCase());
 
-  // 1. Tài khoản Quản trị viên (Admin) hoặc Quản lý (Manager)
-  if (allRoles.some((r) => r.includes("ADMIN") || r.includes("MANAGER"))) {
+  // 1. Tài khoản Quản trị viên hệ thống (Admin)
+  if (allRoles.some((r) => r.includes("ADMIN"))) {
+    return "/admin/dashboard";
+  }
+
+  // 2. Tài khoản Quản lý bãi đỗ xe (Manager)
+  if (allRoles.some((r) => r.includes("MANAGER"))) {
     return "/manager/dashboard";
   }
 
-  // 2. Tài khoản Nhân viên vận hành bãi (Staff)
+  // 3. Tài khoản Nhân viên vận hành bãi (Staff)
   if (allRoles.some((r) => r.includes("STAFF"))) {
     return "/staff/dashboard";
   }
 
-  // 3. Khách hàng hoặc tài khoản thông thường
+  // 4. Khách hàng hoặc tài khoản thông thường
   return "/";
 }
 
