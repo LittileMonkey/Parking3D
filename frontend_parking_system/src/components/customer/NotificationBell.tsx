@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Bell, Check, CheckCheck, ArrowUpRight, RefreshCw, X } from "lucide-react";
-import { request } from "../../services/api";
+import { api, request } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 type Notice = {
     id: string;
@@ -99,7 +99,11 @@ export default function NotificationBell({ open, onOpenChange }: {
         setBusy(true);
         setError("");
         try {
-            await request(item ? `/api/v1/notifications/${encodeURIComponent(item.id)}/read` : "/api/v1/notifications/read-all", { method: "POST" });
+            if (item) {
+                await api.markNotificationRead(item.id);
+            } else {
+                await api.markAllNotificationsRead();
+            }
             if (!mounted.current || controllerRef.current !== controller)
                 return;
             setItems(rows => rows.map(row => !item || row.id === item.id ? { ...row, readAt: row.readAt || new Date().toISOString() } : row));

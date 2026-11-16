@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { UserRound, Mail, Phone, Car, Bike, Zap, Plus, Pencil, Trash2, Star, Ticket, ArrowUpRight, MapPin, Clock3, RefreshCw } from "lucide-react";
-import { api, request, ApiError, type MembershipDto, type UserVehicle } from "../../services/api";
+import { api, ApiError, type MembershipDto, type UserVehicle } from "../../services/api";
 import { normalizePhoneNumber } from "../../services/registration";
 import { useAuth } from "../../context/AuthContext";
 import { AccountAlert, AccountDialog, accountDate, bookingStatusLabels } from "./AccountUi";
@@ -88,7 +88,7 @@ export function AccountVehicles() {
             if (editing)
                 await api.updateUserVehicle(editing.id, payload);
             else
-                await request("/api/v1/user-vehicles", { method: "POST", body: JSON.stringify(payload) });
+                await api.createUserVehicle(payload);
             setEditing(null);
             setAdding(false);
             setNotice(editing ? "Đã cập nhật phương tiện." : "Đã thêm phương tiện.");
@@ -167,7 +167,7 @@ type Visit = {
 export function AccountBookings() {
     const [items, setItems] = useState<Visit[]>([]), [loading, setLoading] = useState(true), [loaded, setLoaded] = useState(false), [error, setError] = useState(""), [revision, setRevision] = useState(0);
     const [query, setQuery] = useState(""), [filter, setFilter] = useState("all"), [page, setPage] = useState(1);
-    useEffect(() => { let active = true; setLoading(true); setError(""); request<Visit[]>("/api/v1/bookings/mine").then(rows => { if (active) {
+    useEffect(() => { let active = true; setLoading(true); setError(""); api.getMyBookings().then(rows => { if (active) {
         setItems(rows);
         setLoaded(true);
     } }).catch(e => { if (active)

@@ -31,6 +31,7 @@ import {
 } from "recharts";
 import { managerApi } from "../../services/manager/managerApi";
 import { operations, type UsageReport, type RevenueReport } from "../../services/operations";
+import { api, type StaffSessionRow } from "../../services/api";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 1. PARKMATRIX BRAND COLOR PALETTE (Light Theme Synchronized with Home & Customer)
@@ -336,6 +337,29 @@ export default function ManagerDashboard() {
     };
   }, [selectedLotId, period, refreshKey]);
 
+  // Real-time live sessions from GET /api/v1/parking-lots/{lotId}/sessions
+  const [liveSessions, setLiveSessions] = useState<StaffSessionRow[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadSessions() {
+      const lotId = (!selectedLotId || selectedLotId === "all") ? rows[0]?.id : selectedLotId;
+      if (!lotId) return;
+      try {
+        const sessionRows = await api.getStaffSessions(lotId);
+        if (mounted) setLiveSessions(sessionRows || []);
+      } catch {
+        if (mounted) setLiveSessions([]);
+      }
+    }
+    loadSessions();
+    const interval = setInterval(loadSessions, 15000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [selectedLotId, rows, refreshKey]);
+
   // Aggregate telemetry totals
   const liveTotals = useMemo(() => {
     return rows.reduce(
@@ -379,16 +403,44 @@ export default function ManagerDashboard() {
     };
   }, [liveTotals]);
 
+  // Helper to calculate human readable duration
+  const getElapsedDuration = (startTime: string) => {
+    const diffMs = Math.max(0, Date.now() - new Date(startTime).getTime());
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 60) return `${mins}m`;
+    const hours = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    return `${hours}h ${remMins}m`;
+  };
+
+  // Live sessions mapped from real API with graceful fallback to mock if no live vehicles
+  const sessionList = useMemo(() => {
+    if (liveSessions.length > 0) {
+      return liveSessions.map((sess) => ({
+        id: `SESS-${sess.sessionId.substring(0, 6).toUpperCase()}`,
+        plate: sess.licensePlate,
+        vehicleType: sess.vehicleType === "Car" ? "Ô tô tiêu chuẩn" : (sess.vehicleType === "Bike" || sess.vehicleType === "Motorbike" ? "Xe máy" : sess.vehicleType),
+        slotCode: sess.slotCode || "Chưa gán",
+        checkInTime: new Date(sess.checkinAt).toLocaleTimeString("vi-VN"),
+        duration: getElapsedDuration(sess.checkinAt),
+        estimatedFee: 25000,
+        status: sess.status || "ACTIVE",
+        zone: sess.levelName || "Khu vực bãi",
+      }));
+    }
+    return LIVE_SESSIONS_MOCK;
+  }, [liveSessions]);
+
   // Filtered live sessions
   const filteredSessions = useMemo(() => {
-    return LIVE_SESSIONS_MOCK.filter((sess) => {
+    return sessionList.filter((sess) => {
       const matchSearch =
         sess.plate.toLowerCase().includes(searchQuery.toLowerCase()) ||
         sess.slotCode.toLowerCase().includes(searchQuery.toLowerCase());
       const matchFilter = sessionFilter === "ALL" || sess.status === sessionFilter;
       return matchSearch && matchFilter;
     });
-  }, [searchQuery, sessionFilter]);
+  }, [sessionList, searchQuery, sessionFilter]);
 
   return (
     <div style={{ width: "100%", paddingBottom: 32 }}>
@@ -925,7 +977,15 @@ export default function ManagerDashboard() {
                     <Activity size={18} />
                   </div>
                   <div>
-                    <h3 className="pm-card-h3">Danh Sách Phiên Đỗ Xe Đang Hoạt Động ({filteredSessions.length})</h3>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <h3 className="pm-card-h3">Danh Sách Phiên Đỗ Xe Đang Hoạt Động ({filteredSessions.length})</h3>
+                      <span
+                        className={liveSessions.length > 0 ? "pm-badge success" : "pm-badge info"}
+                        style={{ fontSize: "0.72rem" }}
+                      >
+                        {liveSessions.length > 0 ? "● Live API :8082" : "Dữ liệu mẫu"}
+                      </span>
+                    </div>
                     <span className="pm-card-sub">Theo dõi thời gian thực xe đang lưu bãi</span>
                   </div>
                 </div>

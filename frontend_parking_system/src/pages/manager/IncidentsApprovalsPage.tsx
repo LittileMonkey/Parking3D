@@ -10,6 +10,8 @@ import {
   XCircle,
   AlertCircle,
   DollarSign,
+  RotateCcw,
+  Ban,
 } from "lucide-react";
 import { api, ApiError, type IncidentDto, type IncidentEvidenceDto, type IncidentSummaryDto } from "../../services/api";
 import { operations } from "../../services/operations";
@@ -201,6 +203,53 @@ export default function IncidentsApprovalsPage() {
       } else {
         setError(err instanceof Error ? err.message : "Không lưu được quyết định.");
       }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleReopenIncident() {
+    if (!selected || !reason.trim()) {
+      setError("Vui lòng nhập lý do mở lại sự cố để phục vụ lưu vết kiểm toán.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await api.reopenIncident(selectedLotId, selected.incidentId, {
+        expectedVersion: selected.version,
+        reason: reason.trim(),
+      });
+      setNotice("Đã mở lại sự cố thành công!");
+      setRevision((v) => v + 1);
+      setTimeout(() => setNotice(""), 6000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Mở lại sự cố thất bại.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCancelIncident() {
+    if (!selected || !reason.trim()) {
+      setError("Vui lòng nhập lý do hủy bỏ sự cố để phục vụ lưu vết kiểm toán.");
+      return;
+    }
+    if (!window.confirm("Bạn có chắc chắn muốn hủy bỏ sự cố này không?")) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await api.cancelIncident(selectedLotId, selected.incidentId, {
+        expectedVersion: selected.version,
+        reason: reason.trim(),
+      });
+      setNotice("Đã hủy bỏ sự cố thành công.");
+      setRevision((v) => v + 1);
+      setTimeout(() => setNotice(""), 6000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Hủy sự cố thất bại.");
     } finally {
       setBusy(false);
     }
@@ -481,7 +530,35 @@ export default function IncidentsApprovalsPage() {
             </div>
 
             {/* Decision Action Buttons */}
-            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 8 }}>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 8 }}>
+              {selected.status !== "Cancelled" && (
+                <button
+                  type="button"
+                  className="pm-btn pm-btn-secondary"
+                  disabled={busy || uploadingField !== null}
+                  style={{ color: "#b91c1c" }}
+                  onClick={handleCancelIncident}
+                  title="Hủy bỏ bản ghi sự cố này"
+                >
+                  <Ban size={15} />
+                  <span>Hủy Sự Cố</span>
+                </button>
+              )}
+
+              {(selected.status === "Resolved" || selected.status === "Cancelled") && (
+                <button
+                  type="button"
+                  className="pm-btn pm-btn-secondary"
+                  disabled={busy || uploadingField !== null}
+                  style={{ color: "#0284c7" }}
+                  onClick={handleReopenIncident}
+                  title="Mở lại sự cố để tiếp tục xử lý"
+                >
+                  <RotateCcw size={15} />
+                  <span>Mở Lại Sự Cố</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 className="pm-btn pm-btn-secondary"

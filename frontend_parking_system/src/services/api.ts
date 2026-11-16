@@ -1025,6 +1025,13 @@ export const api = {
     });
   },
 
+  async createUserVehicle(payload: { licensePlate: string; vehicleType: string; isDefault: boolean }): Promise<UserVehicle> {
+    return request<UserVehicle>("/api/v1/user-vehicles", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
   async getUserVehicleById(vehicleId: string): Promise<UserVehicle> {
     return request<UserVehicle>(`/api/v1/user-vehicles/${encodeURIComponent(vehicleId)}`);
   },
@@ -1042,6 +1049,39 @@ export const api = {
   async deleteUserVehicle(vehicleId: string): Promise<void> {
     await request<unknown>(`/api/v1/user-vehicles/${encodeURIComponent(vehicleId)}`, {
       method: "DELETE",
+    });
+  },
+
+  async getMyBookings(): Promise<Array<{ id: string; code: string; status: string; startsAt: string; endsAt: string; estimatedAmount: number; lotName: string }>> {
+    return request<Array<{ id: string; code: string; status: string; startsAt: string; endsAt: string; estimatedAmount: number; lotName: string }>>("/api/v1/bookings/mine");
+  },
+
+  async getLotStaffAssignments(lotId: string): Promise<StaffAssignmentItem[]> {
+    return request<StaffAssignmentItem[]>(`/api/v1/staff-assignments?lotId=${encodeURIComponent(lotId)}`);
+  },
+
+  async getMfaStatus(signal?: AbortSignal): Promise<{ enabled: boolean }> {
+    return request<{ enabled: boolean }>("/api/v1/auth/mfa", { signal });
+  },
+
+  async setupMfa(password: string): Promise<{ secret: string; qrCodeUri?: string; manualEntryKey?: string }> {
+    return request<{ secret: string; qrCodeUri?: string; manualEntryKey?: string }>("/api/v1/auth/mfa/setup", {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    });
+  },
+
+  async enableMfa(password: string, code: string): Promise<{ enabled: boolean }> {
+    return request<{ enabled: boolean }>("/api/v1/auth/mfa/enable", {
+      method: "POST",
+      body: JSON.stringify({ password, code }),
+    });
+  },
+
+  async disableMfa(password: string, code: string): Promise<{ enabled: boolean }> {
+    return request<{ enabled: boolean }>("/api/v1/auth/mfa/disable", {
+      method: "POST",
+      body: JSON.stringify({ password, code }),
     });
   },
 

@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { KeyRound, ShieldCheck, Smartphone, Check, ArrowRight, RefreshCw } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { api, request } from "../../services/api";
+import { api } from "../../services/api";
 import { AccountAlert, AccountPasswordField } from "./AccountUi";
 export default function AccountSecurity({ onReauthenticate }: {
     onReauthenticate: (kind: "password" | "mfa") => Promise<void>;
@@ -21,9 +21,7 @@ export default function AccountSecurity({ onReauthenticate }: {
         setLoading(true);
         setMfaError("");
         setEnabled(null);
-        request<{
-            enabled: boolean;
-        }>("/api/v1/auth/mfa", { signal: controller.signal }).then(value => { if (!controller.signal.aborted) {
+        api.getMfaStatus(controller.signal).then(value => { if (!controller.signal.aborted) {
             if (typeof value.enabled !== "boolean")
                 throw new Error("Chưa xác định được trạng thái bảo mật. Hãy tải lại.");
             setEnabled(value.enabled);
@@ -84,10 +82,7 @@ export default function AccountSecurity({ onReauthenticate }: {
         setMfaError("");
         try {
             if (!enabled && !setup) {
-                const result = await request<{
-                    secret: string;
-                    uri: string;
-                }>("/api/v1/auth/mfa/setup", { method: "POST", body: JSON.stringify({ password: mfaPassword }) });
+                const result = await api.setupMfa(mfaPassword) as { secret: string; uri: string };
                 if (!result.secret || !result.uri?.startsWith("otpauth://totp/"))
                     throw new Error("Chưa nhận được thông tin thiết lập hợp lệ. Hãy thử lại.");
                 setSetup({ ...result, expiresAt: Date.now() + 590000 });
@@ -98,9 +93,7 @@ export default function AccountSecurity({ onReauthenticate }: {
                     setMfaError("Nhập mã gồm 6 chữ số từ ứng dụng xác thực.");
                     return;
                 }
-                const result = await request<{
-                    enabled: boolean;
-                }>(`/api/v1/auth/mfa/${enabled ? "disable" : "enable"}`, { method: "POST", body: JSON.stringify({ password: mfaPassword, code }) });
+                const result = enabled ? await api.disableMfa(mfaPassword, code) : await api.enableMfa(mfaPassword, code);
                 if (result.enabled !== !enabled)
                     throw new Error("Chưa xác nhận được thay đổi bảo mật. Tải lại trạng thái trước khi tiếp tục.");
                 cancelMfa();

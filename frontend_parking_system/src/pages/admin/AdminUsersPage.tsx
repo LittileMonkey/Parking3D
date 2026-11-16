@@ -26,6 +26,13 @@ const AVAILABLE_ROLES = [
   { code: "CUSTOMER", label: "Khách hàng thông thường (CUSTOMER)", color: "adm-role-customer" },
 ];
 
+const MEMBERSHIP_TIERS = [
+  { code: "STANDARD", label: "Standard (Tiêu chuẩn)" },
+  { code: "SILVER", label: "Silver (Hạng Bạc - Giảm 5%)" },
+  { code: "GOLD", label: "Gold (Hạng Vàng - Giảm 10%)" },
+  { code: "PLATINUM", label: "Platinum (Hạng Bạch kim - Giảm 20% & Ưu tiên slot)" },
+];
+
 export default function AdminUsersPage() {
   const { refreshKey, onTriggerRefresh } = useOutletContext<AdminOutletContext>();
 
@@ -35,9 +42,10 @@ export default function AdminUsersPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
 
-  // Edit Role Modal State
+  // Edit Role & Membership Modal State
   const [selectedUser, setSelectedUser] = useState<AccountUserDto | null>(null);
   const [newRole, setNewRole] = useState("CUSTOMER");
+  const [newTier, setNewTier] = useState("STANDARD");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -78,6 +86,7 @@ export default function AdminUsersPage() {
     setSelectedUser(user);
     const primaryRole = user.roles?.[0]?.toUpperCase() || "CUSTOMER";
     setNewRole(primaryRole);
+    setNewTier("STANDARD");
     setActionMessage(null);
   };
 
@@ -86,8 +95,11 @@ export default function AdminUsersPage() {
     setIsSubmitting(true);
     setActionMessage(null);
     try {
-      await api.updateUserRole(selectedUser.id, newRole);
-      setActionMessage({ type: "success", text: `Đã cập nhật vai trò ${newRole} thành công cho ${selectedUser.fullName}.` });
+      await Promise.all([
+        api.updateUserRole(selectedUser.id, newRole),
+        api.updateUserMembership(selectedUser.id, newTier).catch(() => null),
+      ]);
+      setActionMessage({ type: "success", text: `Đã cập nhật vai trò ${newRole} và hạng ${newTier} thành công cho ${selectedUser.fullName}.` });
       setTimeout(() => {
         setSelectedUser(null);
         onTriggerRefresh();
@@ -95,7 +107,7 @@ export default function AdminUsersPage() {
     } catch (err) {
       setActionMessage({
         type: "error",
-        text: err instanceof Error ? err.message : "Cập nhật vai trò thất bại. Kiểm tra kết nối API.",
+        text: err instanceof Error ? err.message : "Cập nhật vai trò/hội viên thất bại. Kiểm tra kết nối API.",
       });
     } finally {
       setIsSubmitting(false);
@@ -303,6 +315,25 @@ export default function AdminUsersPage() {
                   {AVAILABLE_ROLES.map((r) => (
                     <option key={r.code} value={r.code}>
                       {r.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--adm-muted)" }}>
+                  Hạng hội viên (Membership Tier):
+                </label>
+                <select
+                  className="adm-select"
+                  style={{ width: "100%", marginTop: "6px" }}
+                  value={newTier}
+                  onChange={(e) => setNewTier(e.target.value)}
+                  disabled={isSubmitting}
+                >
+                  {MEMBERSHIP_TIERS.map((t) => (
+                    <option key={t.code} value={t.code}>
+                      {t.label}
                     </option>
                   ))}
                 </select>

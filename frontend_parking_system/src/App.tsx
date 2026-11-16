@@ -42,6 +42,9 @@ import AdminFacilitiesPage from "./pages/admin/AdminFacilitiesPage";
 import AdminStaffAssignmentsPage from "./pages/admin/AdminStaffAssignmentsPage";
 import AdminServicesPage from "./pages/admin/AdminServicesPage";
 
+// Global AI Conversational Assistant
+import AiChatbotWidget from "./components/ai/AiChatbotWidget";
+
 const Booking = lazy(() => import("./pages/Booking"));
 
 function RequireRole({ roles, children }: { roles: string[]; children: ReactNode }) {
@@ -58,7 +61,8 @@ function SearchRedirect() {
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      <Routes>
       <Route path="/account" element={<MyAccount />} />
       <Route path="/payment-return" element={<PaymentReturn />} />
       <Route path="/guest-login" element={<Navigate to="/login" replace />} />
@@ -115,5 +119,7 @@ export default function App() {
 
       <Route path="*" element={<Home />} />
     </Routes>
+    <AiChatbotWidget />
+  </>
   );
 }
