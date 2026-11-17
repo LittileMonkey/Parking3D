@@ -945,20 +945,30 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
                 ))}
               </div>
 
-              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-                <input
-                  type="text"
-                  placeholder={isEn ? "e.g. Find cheapest car lot near District 7 for 2 hours..." : "Ví dụ: Tìm bãi ô tô gần Quận 7 giá dưới 25k, còn chỗ trống..."}
+              <div style={{ display: "flex", gap: "10px", alignItems: "flex-end", flexWrap: "wrap" }}>
+                <textarea
+                  rows={2}
+                  placeholder={isEn ? "e.g. Find cheapest car lot near District 7 for 2 hours... (Enter to search, Shift+Enter for new line)" : "Ví dụ: Tìm bãi ô tô gần Quận 7 giá dưới 25k, còn chỗ trống... (Enter để tìm, Shift+Enter xuống dòng)"}
                   value={aiPrompt}
                   onChange={(e) => setAiPrompt(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") void handleSmartAiSearch(); }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      if (!aiSearching && aiPrompt.trim()) void handleSmartAiSearch();
+                    }
+                  }}
                   style={{
                     flex: 1,
                     minWidth: "260px",
+                    minHeight: "52px",
+                    maxHeight: "160px",
                     padding: "10px 14px",
                     borderRadius: "8px",
                     border: "1px solid #c4b5fd",
                     fontSize: "14px",
+                    lineHeight: 1.5,
+                    resize: "vertical",
+                    fontFamily: "inherit",
                   }}
                   disabled={aiSearching}
                 />

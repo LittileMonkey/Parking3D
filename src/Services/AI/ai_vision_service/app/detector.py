@@ -96,10 +96,10 @@ class LicensePlateDetector:
         h, w = image.shape[:2]
         ratio = w / float(h) if h > 0 else 1.0
 
-        # Tỷ lệ chuẩn biển số Việt Nam:
-        # - Biển vuông xe máy / ô tô: 1.1 <= ratio <= 1.85
-        # - Biển dài ô tô: 2.6 <= ratio <= 5.5
-        is_already_plate_ratio = (1.1 <= ratio <= 1.85) or (2.6 <= ratio <= 5.5)
+        # Tỷ lệ chuẩn biển số Việt Nam (mở rộng cho cả ảnh chụp biển 2 dòng vuông/chữ nhật và biển dài 1 dòng):
+        # - Biển vuông 2 dòng xe máy / ô tô: 0.85 <= ratio <= 2.2
+        # - Biển dài 1 dòng ô tô: 2.3 <= ratio <= 6.0
+        is_already_plate_ratio = (0.85 <= ratio <= 2.2) or (2.3 <= ratio <= 6.0)
 
         # Trường hợp 1: Ultralytics YOLO
         if self.backend == "ultralytics" and self.model is not None:
@@ -159,20 +159,9 @@ class LicensePlateDetector:
         except Exception as e:
             print(f"[Detector] Lỗi contour detection: {e}")
 
-        # Trường hợp 4: Nếu bản thân ảnh đầu vào đã có tỷ lệ chuẩn của biển số xe Việt Nam:
-        # Giữ nguyên toàn bộ ảnh, không cắt xén mù quáng làm mất dòng trên
-        if is_already_plate_ratio:
-            return image, 0.92, (0, 0, w, h)
-
-        # Trường hợp 5: Ảnh toàn cảnh xe chụp từ xa qua camera barrier (chiếm 1/3 dưới giữa ảnh)
-        x1 = int(w * 0.20)
-        x2 = int(w * 0.80)
-        y1 = int(h * 0.45)
-        y2 = int(h * 0.90)
-        cropped = image[y1:y2, x1:x2]
-        if cropped.size == 0:
-            cropped = image
-        return cropped, 0.85, (x1, y1, x2, y2)
+        # Trường hợp 4 & 5: Giữ nguyên toàn bộ khung hình ảnh gốc để bộ OCR quét được cả Dòng 1 và Dòng 2
+        # (Tuyệt đối không cắt bỏ 45% nửa trên vì sẽ làm mất dòng mã tỉnh + sê-ri của biển số 2 dòng)
+        return image, 0.90, (0, 0, w, h)
 
     @staticmethod
     def _apply_padding_and_crop(image: np.ndarray, box: np.ndarray | tuple, conf: float, h: int, w: int):

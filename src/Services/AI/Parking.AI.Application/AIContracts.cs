@@ -5,7 +5,12 @@ public interface IPlateProvider
 {
     Task<PlateCandidate> RecognizeAsync(byte[] image, string contentType, CancellationToken ct);
 }
-public sealed record PlateReviewRequest(string Plate, int Version, string Reason);
+public sealed record PlateReviewRequest(
+    string? Plate = null,
+    int Version = 1,
+    string? Reason = null,
+    string? CorrectedPlate = null,
+    string? ReviewNotes = null);
 public sealed record AssistantRequest(string Question);
 public sealed record DocumentRequest(Guid? LotId, string DocumentKey, int Revision, string Title,
     string SourceReference, DateTimeOffset EffectiveFrom, DateTimeOffset? EffectiveUntil, string Content);

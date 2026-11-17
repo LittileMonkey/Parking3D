@@ -1238,7 +1238,7 @@ export default function ManagerDashboard() {
                   <BarChart data={WEEKLY_REVENUE_DATA} margin={{ top: 20, right: 20, left: 20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(7, 45, 89, 0.08)" vertical={false} />
                     <XAxis dataKey="day" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${v / 1000000}tr`} />
+                    <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v: number) => `${v / 1000000}tr`} />
                     <Tooltip content={<CustomLightTooltip suffix=" ₫" />} />
                     <Bar dataKey="actual" name="Doanh thu thực tế" fill="#0d4685" radius={[6, 6, 0, 0]} />
                     <Bar dataKey="target" name="Chỉ tiêu kế hoạch" fill="#cbd5e1" radius={[6, 6, 0, 0]} />

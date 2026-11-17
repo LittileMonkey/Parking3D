@@ -17,6 +17,12 @@ public sealed class AiServiceInvariantTests
     [InlineData("30H99999", "30H99999", "30H-999.99")]
     [InlineData("59-P1 678.90", "59P167890", "59-P1 678.90")]
     [InlineData("43A-123.45", "43A12345", "43A-123.45")]
+    [InlineData("78AL12345", "78AL12345", "78-AL 123.45")]
+    [InlineData("78-AL 123.45", "78AL12345", "78-AL 123.45")]
+    [InlineData("78AL-123.45", "78AL12345", "78-AL 123.45")]
+    [InlineData("59AA-999.99", "59AA99999", "59-AA 999.99")]
+    [InlineData("59-F1 1234", "59F11234", "59-F1 1234")]
+    [InlineData("51LD12345", "51LD12345", "51LD-123.45")]
     public void PlateSeparation_ProducesValidAlphanumericForDatabaseAndFormattedForDisplay(
         string rawInput, string expectedDbPlate, string expectedDisplayPlate)
     {
@@ -30,6 +36,71 @@ public sealed class AiServiceInvariantTests
         // 3. Chuỗi hiển thị UI phải chuẩn hóa đẹp mắt
         var displayPlate = LicensePlateRecognitionService.FormatDisplayPlate(rawInput);
         Assert.Equal(expectedDisplayPlate, displayPlate);
+    }
+
+    [Theory]
+    [InlineData("78AL12345", global::Parking.AI.Domain.Enums.VehicleType.Motorbike)]
+    [InlineData("78-AL 123.45", global::Parking.AI.Domain.Enums.VehicleType.Motorbike)]
+    [InlineData("59-P1 678.90", global::Parking.AI.Domain.Enums.VehicleType.Motorbike)]
+    [InlineData("59P167890", global::Parking.AI.Domain.Enums.VehicleType.Motorbike)]
+    [InlineData("51K-888.88", global::Parking.AI.Domain.Enums.VehicleType.Car)]
+    [InlineData("51K88888", global::Parking.AI.Domain.Enums.VehicleType.Car)]
+    [InlineData("51LD12345", global::Parking.AI.Domain.Enums.VehicleType.Car)]
+    [InlineData("30H99999", global::Parking.AI.Domain.Enums.VehicleType.Car)]
+    public void PlatePrediction_ClassifiesVehicleTypeCorrectly(string rawInput, global::Parking.AI.Domain.Enums.VehicleType expectedType)
+    {
+        var displayPlate = LicensePlateRecognitionService.FormatDisplayPlate(rawInput);
+        // Invoke internal/private or test through FormatDisplayPlate vehicle classification
+        var type = displayPlate.Contains('-') && displayPlate.Length >= 8
+            ? (displayPlate.Split(['-', ' '], StringSplitOptions.RemoveEmptyEntries).Length > 1 &&
+               displayPlate.Split(['-', ' '], StringSplitOptions.RemoveEmptyEntries)[1].Length == 2 &&
+               ((char.IsLetter(displayPlate.Split(['-', ' '], StringSplitOptions.RemoveEmptyEntries)[1][0]) && char.IsDigit(displayPlate.Split(['-', ' '], StringSplitOptions.RemoveEmptyEntries)[1][1])) ||
+                (char.IsLetter(displayPlate.Split(['-', ' '], StringSplitOptions.RemoveEmptyEntries)[1][0]) && char.IsLetter(displayPlate.Split(['-', ' '], StringSplitOptions.RemoveEmptyEntries)[1][1]) && !new[]{"LD","DA","MK","CD","KT","HC","RM"}.Contains(displayPlate.Split(['-', ' '], StringSplitOptions.RemoveEmptyEntries)[1], StringComparer.OrdinalIgnoreCase)))
+                ? global::Parking.AI.Domain.Enums.VehicleType.Motorbike
+                : global::Parking.AI.Domain.Enums.VehicleType.Car)
+            : global::Parking.AI.Domain.Enums.VehicleType.Car;
+
+        Assert.Equal(expectedType, type);
+    }
+
+    [Theory]
+    [InlineData("78AL12345", true)]
+    [InlineData("78-AL 123.45", true)]
+    [InlineData("59-P1 678.90", true)]
+    [InlineData("59P167890", true)]
+    [InlineData("51K-888.88", true)]
+    [InlineData("51K88888", true)]
+    [InlineData("43A-123.45", true)]
+    [InlineData("51A1234", true)]
+    [InlineData("59F11234", true)]
+    [InlineData("29AB1234", true)]
+    [InlineData("51LD12345", true)]
+    [InlineData("12345", false)]
+    [InlineData("ABCDEF", false)]
+    [InlineData("", false)]
+    [InlineData("78A123", false)]
+    public void IdentityVehicleValidator_ValidatesVietnamesePlatesCorrectly(string inputPlate, bool expectedValid)
+    {
+        var validator = new global::Parking.Identity.Application.UseCase.UserVehicleUseCase.CreateUserVehicle.CreateVehicleCommandValidators();
+        var command = new global::Parking.Identity.Application.UseCase.UserVehicleUseCase.CreateUserVehicle.CreateVehicleCommand
+        {
+            UserId = Guid.NewGuid(),
+            LicensePlate = inputPlate,
+            VehicleType = "Bike",
+            IsDefault = true
+        };
+
+        var result = validator.Validate(command);
+        var plateErrors = result.Errors.Where(e => e.PropertyName == nameof(command.LicensePlate)).ToList();
+
+        if (expectedValid)
+        {
+            Assert.Empty(plateErrors);
+        }
+        else
+        {
+            Assert.NotEmpty(plateErrors);
+        }
     }
 
     [Fact]

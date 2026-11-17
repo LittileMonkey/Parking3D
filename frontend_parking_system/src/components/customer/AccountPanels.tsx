@@ -235,7 +235,14 @@ export function AccountVehicles() {
         setAdding(false);
         setEditing(null);
         setError("");
-    } }}><form className="account-form" onSubmit={save}><AccountAlert error={error}/><label className="account-field">Biển số xe<input required maxLength={16} placeholder="Ví dụ: 51A-123.45" value={form.licensePlate} disabled={busy} onChange={e => setForm({ ...form, licensePlate: e.target.value })}/></label><label className="account-field">Loại phương tiện<select value={form.vehicleType} disabled={busy} onChange={e => setForm({ ...form, vehicleType: e.target.value })}><option value="Car">Ô tô</option><option value="Bike">Xe máy</option><option value="EV">Ô tô điện</option></select></label><label className="account-checkbox"><input type="checkbox" checked={form.isDefault} disabled={busy} onChange={e => setForm({ ...form, isDefault: e.target.checked })}/>Dùng làm phương tiện mặc định</label><button className="account-primary" disabled={busy}>{busy ? "Đang lưu…" : "Lưu phương tiện"}</button></form></AccountDialog>}
+    } }}><form className="account-form" onSubmit={save}><AccountAlert error={error}/><label className="account-field">Biển số xe<input required maxLength={16} placeholder="VD: 51A-123.45, 78-AL 123.45, 59-P1 123.45" value={form.licensePlate} disabled={busy} onChange={e => {
+        const nextPlate = e.target.value;
+        const clean = nextPlate.toUpperCase().replace(/[^A-Z0-9]/g, "");
+        const m = clean.match(/^[0-9]{2}([A-Z][0-9]|[A-Z]{2})[0-9]{4,5}$/);
+        const specialCar = ["LD", "DA", "MK", "CD", "KT", "HC", "RM", "NG", "NN", "QT"];
+        const autoType = m && !specialCar.includes(m[1]) ? "Bike" : /^[0-9]{2}[A-Z][0-9]{4,5}$/.test(clean) && form.vehicleType === "Bike" ? "Car" : form.vehicleType;
+        setForm({ ...form, licensePlate: nextPlate, vehicleType: autoType });
+    }}/></label><label className="account-field">Loại phương tiện<select value={form.vehicleType} disabled={busy} onChange={e => setForm({ ...form, vehicleType: e.target.value })}><option value="Car">Ô tô</option><option value="Bike">Xe máy</option><option value="EV">Ô tô điện</option></select></label><label className="account-checkbox"><input type="checkbox" checked={form.isDefault} disabled={busy} onChange={e => setForm({ ...form, isDefault: e.target.checked })}/>Dùng làm phương tiện mặc định</label><button className="account-primary" disabled={busy}>{busy ? "Đang lưu…" : "Lưu phương tiện"}</button></form></AccountDialog>}
     {deleting && <AccountDialog title="Xóa phương tiện?" onClose={() => { if (!busy) {
         setDeleting(null);
         setError("");
