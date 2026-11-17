@@ -814,7 +814,13 @@ export const api = {
       `/api/v1/parking-lots/${encodeURIComponent(lotId)}/plate-recognitions/${encodeURIComponent(recognitionId)}/review`,
       {
         method: "POST",
-        body: JSON.stringify({ correctedPlate, reviewNotes }),
+        body: JSON.stringify({
+          plate: correctedPlate,
+          correctedPlate,
+          version: 1,
+          reason: reviewNotes || "Nhân viên kiểm tra và đính chính biển số",
+          reviewNotes,
+        }),
       }
     );
   },
@@ -1597,6 +1603,8 @@ export interface AiParkingRecommendation {
     availableSlots: number;
     totalCapacity: number;
     occupancyRatePercent: number;
+    hasEvCharging?: boolean;
+    hasRoofedShelter?: boolean;
     matchScore: number;
     recommendationReason: string;
   }>;

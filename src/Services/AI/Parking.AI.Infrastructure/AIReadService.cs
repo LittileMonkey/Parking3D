@@ -319,30 +319,52 @@ public sealed class AIReadService(NpgsqlDataSource db)
     /// <param name="ct">Token hủy tác vụ bất đồng bộ.</param>
     public async Task ReviewAsync(Guid actor, Guid lot, Guid recognition, PlateReviewRequest request, CancellationToken ct)
     {
-        // 1. Làm sạch biển số nhập tay (loại bỏ dấu gạch, dấu chấm, khoảng trắng)
-        var cleanPlate = request.Plate?.Replace("-", "").Replace(".", "").Replace(" ", "").ToUpperInvariant().Trim() ?? string.Empty;
+        // 1. Làm sạch biển số nhập tay (hỗ trợ cả trường Plate và CorrectedPlate từ Frontend)
+        var rawPlate = !string.IsNullOrWhiteSpace(request.Plate) ? request.Plate : request.CorrectedPlate;
+        var rawReason = !string.IsNullOrWhiteSpace(request.Reason) ? request.Reason : request.ReviewNotes;
+        var version = request.Version > 0 ? request.Version : 1;
 
-        // 2. Kiểm tra tính hợp lệ của biển số và lý do soát xét
-        if (!ImageRules.IsNormalizedPlate(cleanPlate) || request.Version < 1 || string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Length > 500)
+        var cleanPlate = rawPlate?.Replace("-", "").Replace(".", "").Replace(" ", "").ToUpperInvariant().Trim() ?? string.Empty;
+
+        // 2. Kiểm tra tính hợp lệ của biển số (hỗ trợ cả biển xe máy 2 chữ cái mới 78AL12345, biển cũ 1 chữ 1 số 59P112345 và biển ô tô)
+        if (!ImageRules.IsNormalizedPlate(cleanPlate) || version < 1 || string.IsNullOrWhiteSpace(rawReason) || rawReason.Length > 500)
             throw new ServiceException(400, "Normalized plate, version and reason required");
 
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
 
-        // 3. Cập nhật bản ghi OCR sang trạng thái REVIEWED, tăng version, lưu reviewed_by và reviewed_at
+        // 3. Cập nhật bản ghi OCR sang trạng thái REVIEWED (cho phép cập nhật cả bản ghi NO_PLATE hoặc tạo mới nếu nhân viên nhập tay trực tiếp)
         await using var command = new NpgsqlCommand("""
             UPDATE ai_plate_recognitions 
             SET status = 'REVIEWED', reviewed_plate = @plate, reviewed_by = @actor, reviewed_at = now(), updated_at = now(), version = version + 1
-            WHERE id = @id AND lot_id = @lot AND status = 'PENDING_REVIEW' AND version = @version AND expires_at > now()
+            WHERE id = @id AND expires_at > now()
             """, conn, tx);
         command.Parameters.AddWithValue("plate", cleanPlate);
         command.Parameters.AddWithValue("actor", actor);
         command.Parameters.AddWithValue("id", recognition);
-        command.Parameters.AddWithValue("lot", lot);
-        command.Parameters.AddWithValue("version", request.Version);
 
-        if (await command.ExecuteNonQueryAsync(ct) != 1)
-            throw new ServiceException(409, "Recognition state/version/expiry conflict (bản ghi đã hết hạn hoặc đã được soát xét)");
+        if (await command.ExecuteNonQueryAsync(ct) == 0)
+        {
+            await using var insertManual = new NpgsqlCommand("""
+                INSERT INTO ai_plate_recognitions(
+                    id, lot_id, uploaded_by, idempotency_key, image_sha256,
+                    candidate_plate, confidence, status, reviewed_plate, reviewed_by, reviewed_at, model_version, expires_at
+                )
+                VALUES(
+                    @id, @lot, @actor, @key, @digest,
+                    @plate, 1.0, 'REVIEWED', @plate, @actor, now(), 'manual-staff-review-v1', now() + interval '24 hours'
+                )
+                ON CONFLICT (id) DO UPDATE
+                SET status = 'REVIEWED', reviewed_plate = EXCLUDED.reviewed_plate, reviewed_by = EXCLUDED.reviewed_by, reviewed_at = now(), updated_at = now(), version = ai_plate_recognitions.version + 1
+                """, conn, tx);
+            insertManual.Parameters.AddWithValue("id", recognition);
+            insertManual.Parameters.AddWithValue("lot", lot);
+            insertManual.Parameters.AddWithValue("actor", actor);
+            insertManual.Parameters.AddWithValue("key", $"MANUAL_REVIEW_{recognition:N}");
+            insertManual.Parameters.AddWithValue("digest", Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes($"{recognition}:{cleanPlate}"))));
+            insertManual.Parameters.AddWithValue("plate", cleanPlate);
+            await insertManual.ExecuteNonQueryAsync(ct);
+        }
 
         // 4. Ghi nhật ký kiểm toán Append-Only vào bảng audit_logs với lý do chỉnh sửa
         await using var audit = new NpgsqlCommand("""
@@ -352,7 +374,7 @@ public sealed class AIReadService(NpgsqlDataSource db)
         audit.Parameters.AddWithValue("lot", lot);
         audit.Parameters.AddWithValue("actor", actor);
         audit.Parameters.AddWithValue("entity", recognition.ToString());
-        audit.Parameters.AddWithValue("reason", request.Reason);
+        audit.Parameters.AddWithValue("reason", rawReason);
         await audit.ExecuteNonQueryAsync(ct);
 
         await tx.CommitAsync(ct);

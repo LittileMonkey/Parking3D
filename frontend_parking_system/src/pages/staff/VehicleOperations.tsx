@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { StaffDialog, staffDate } from "../../components/staff/StaffUi";
 import { Link, useSearchParams, useOutletContext } from "react-router-dom";
@@ -40,24 +40,68 @@ import type {
 interface WebcamCaptureModalProps {
   camId: string;
   camTitle: string;
-  onCapture: (file: File) => void;
+  onRecognizeFrame: (file: File, camId: string) => Promise<PlateRecognitionResult>;
+  onConfirmPlate: (
+    confirmedPlate: string,
+    file: File | null,
+    result: PlateRecognitionResult | null,
+    camId: string
+  ) => void;
+  onSwitchToUpload: (camId: string) => void;
   onClose: () => void;
 }
 
-function WebcamCaptureModal({ camId, camTitle, onCapture, onClose }: WebcamCaptureModalProps) {
+interface StabilityCandidate {
+  cleanPlate: string;
+  displayPlate: string;
+  count: number;
+  bestConfidence: number;
+  result: PlateRecognitionResult;
+  file: File;
+  previewUrl: string;
+}
+
+function isPlausibleVietnamesePlate(rawText: string): boolean {
+  const clean = (rawText || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return /^[0-9]{2}([A-Z]{1,2}|[A-Z][0-9])[0-9]{4,5}$/.test(clean);
+}
+
+function WebcamCaptureModal({
+  camId,
+  camTitle,
+  onRecognizeFrame,
+  onConfirmPlate,
+  onSwitchToUpload,
+  onClose,
+}: WebcamCaptureModalProps) {
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const streamRef = React.useRef<MediaStream | null>(null);
+  const mountedRef = React.useRef<boolean>(true);
+  const isProcessingFrameRef = React.useRef<boolean>(false);
 
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [isStarting, setIsStarting] = useState(true);
+  const [isCameraActive, setIsCameraActive] = useState(true);
   const [isFlashing, setIsFlashing] = useState(false);
 
-  // Smart Plate Clarity & Auto-Scan State
+  // Live Frame Recognition & Stability Configuration
   const [autoScanEnabled, setAutoScanEnabled] = useState(true);
-  const [captured, setCaptured] = useState(false);
+  const [frameIntervalMs, setFrameIntervalMs] = useState<number>(800);
+  const [requiredConsistentFrames, setRequiredConsistentFrames] = useState<number>(2);
+  const [jpegQuality] = useState<number>(0.88);
+  const [minConfidenceThreshold] = useState<number>(0.65);
+
+  // Live Recognition & Clarity States
+  const [isRecognizingFrame, setIsRecognizingFrame] = useState(false);
+  const [framesProcessed, setFramesProcessed] = useState(0);
+  const [liveCandidate, setLiveCandidate] = useState<StabilityCandidate | null>(null);
+  const [lockedCandidate, setLockedCandidate] = useState<StabilityCandidate | null>(null);
+  const [editablePlate, setEditablePlate] = useState<string>("");
+  const [ocrFeedbackMsg, setOcrFeedbackMsg] = useState<string>("Đang chờ khung hình biển số...");
+
   const [isPlateClear, setIsPlateClear] = useState(false);
   const [clarityStatus, setClarityStatus] = useState<string>("Đang tìm biển số trong khung...");
   const [clarityScore, setClarityScore] = useState<number>(0);
@@ -66,28 +110,51 @@ function WebcamCaptureModal({ camId, camTitle, onCapture, onClose }: WebcamCaptu
 
   const analyzerCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const prevLumaRef = React.useRef<number>(0);
-  const steadyCountRef = React.useRef<number>(0);
+  const candidateMapRef = React.useRef<Record<string, StabilityCandidate>>({});
+  const lastConfirmedPlateRef = React.useRef<string>("");
 
-  const stopStream = () => {
+  const stopStream = useCallback(() => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current.getTracks().forEach((track) => {
+        track.onended = null;
+        track.stop();
+      });
       streamRef.current = null;
     }
-  };
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setIsCameraActive(false);
+  }, []);
 
-  const startStream = async (deviceId?: string) => {
+  const resetRecognitionSession = useCallback(() => {
+    candidateMapRef.current = {};
+    setLiveCandidate(null);
+    setLockedCandidate(null);
+    setEditablePlate("");
+    setFramesProcessed(0);
+    setOcrFeedbackMsg("Đang quét khung hình trực tiếp qua AI YOLO + OCR...");
+  }, []);
+
+  const startStream = useCallback(async (deviceId?: string) => {
     setIsStarting(true);
     setError("");
-    setCaptured(false);
     setIsPlateClear(false);
-    steadyCountRef.current = 0;
-    setClarityStatus("Đang tìm biển số trong khung...");
+    setClarityStatus("Đang khởi tạo luồng video...");
     stopStream();
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setError(
+        "Trình duyệt hiện tại không hỗ trợ WebRTC MediaDevices API. Vui lòng sử dụng Chrome/Edge hoặc chuyển sang Tải ảnh / Nhập thủ công."
+      );
+      setIsStarting(false);
+      return;
+    }
 
     try {
       const constraints: MediaStreamConstraints = {
         video: deviceId
-          ? { deviceId: { exact: deviceId } }
+          ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
           : {
               facingMode: { ideal: "environment" },
               width: { ideal: 1280 },
@@ -97,7 +164,24 @@ function WebcamCaptureModal({ camId, camTitle, onCapture, onClose }: WebcamCaptu
       };
 
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+      if (!mountedRef.current) {
+        newStream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+
+      // Lắng nghe sự kiện camera bị ngắt kết nối đột ngột
+      const videoTrack = newStream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.onended = () => {
+          if (mountedRef.current) {
+            setError("Thiết bị camera đã bị ngắt kết nối đột ngột. Vui lòng kiểm tra lại cáp/webcam hoặc chuyển sang Tải ảnh.");
+            stopStream();
+          }
+        };
+      }
+
       streamRef.current = newStream;
+      setIsCameraActive(true);
 
       if (videoRef.current) {
         videoRef.current.srcObject = newStream;
@@ -108,80 +192,177 @@ function WebcamCaptureModal({ camId, camTitle, onCapture, onClose }: WebcamCaptu
       const videoInputs = allDevices.filter((d) => d.kind === "videoinput");
       setDevices(videoInputs);
       if (!deviceId && videoInputs.length > 0) {
-        setSelectedDeviceId(videoInputs[0].deviceId);
+        const activeTrackSettings = videoTrack?.getSettings();
+        setSelectedDeviceId(activeTrackSettings?.deviceId || videoInputs[0].deviceId);
       }
+      setOcrFeedbackMsg("Đưa biển số vào khung ngắm — AI đang tự động quét khung hình...");
     } catch (err: unknown) {
       console.error("Camera access error:", err);
-      if (err instanceof Error && (err.name === "NotAllowedError" || err.name === "PermissionDeniedError")) {
+      const errName = err instanceof Error ? err.name : "";
+      if (errName === "NotAllowedError" || errName === "PermissionDeniedError") {
         setError(
-          "Trình duyệt chưa được cấp quyền truy cập Camera. Vui lòng bấm vào biểu tượng ổ khóa/camera trên thanh địa chỉ trình duyệt để Cho phép (Allow), sau đó bấm Thử lại."
+          "Trình duyệt đã từ chối quyền truy cập Camera. Vui lòng bấm vào biểu tượng ổ khóa/camera trên thanh địa chỉ trình duyệt để Cho phép (Allow), hoặc chọn Tải ảnh / Nhập thủ công."
         );
-      } else if (err instanceof Error && err.name === "NotFoundError") {
+      } else if (errName === "NotFoundError" || errName === "DevicesNotFoundError") {
         setError(
-          "Không tìm thấy thiết bị camera hoặc webcam nào trên máy tính. Bạn có thể sử dụng tính năng 'Tải ảnh' để tải ảnh biển số."
+          "Không tìm thấy thiết bị webcam nào trên laptop. Vui lòng kết nối camera hoặc chuyển sang Tải ảnh / Nhập thủ công."
+        );
+      } else if (errName === "NotReadableError" || errName === "TrackStartError") {
+        setError(
+          "Camera laptop đang bị chiếm dụng bởi một ứng dụng khác (Zoom, Teams, Camera app...). Vui lòng đóng ứng dụng đó rồi bấm Thử lại."
         );
       } else {
-        setError("Không thể khởi động camera máy tính: " + (err instanceof Error ? err.message : String(err)));
+        setError("Không thể khởi động camera laptop: " + (err instanceof Error ? err.message : String(err)));
       }
     } finally {
-      setIsStarting(false);
+      if (mountedRef.current) {
+        setIsStarting(false);
+      }
     }
-  };
+  }, [stopStream]);
 
   useEffect(() => {
+    mountedRef.current = true;
     void startStream();
     return () => {
+      mountedRef.current = false;
       stopStream();
     };
-  }, []);
+  }, [startStream, stopStream]);
 
   const handleDeviceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newId = e.target.value;
     setSelectedDeviceId(newId);
+    resetRecognitionSession();
     void startStream(newId);
   };
 
-  const handleCapture = () => {
-    if (captured) return;
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas) return;
+  // Trích xuất khung hình hiện tại từ HTMLVideoElement qua Canvas và gửi tới pipeline YOLO + OCR
+  const captureAndProcessFrame = useCallback(
+    async (forceImmediateLock = false) => {
+      if (isProcessingFrameRef.current || !mountedRef.current) return;
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (!video || !canvas || video.readyState < 2 || video.videoWidth === 0) return;
 
-    const width = video.videoWidth || 1280;
-    const height = video.videoHeight || 720;
-    canvas.width = width;
-    canvas.height = height;
+      const width = video.videoWidth || 1280;
+      const height = video.videoHeight || 720;
+      canvas.width = width;
+      canvas.height = height;
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
 
-    setCaptured(true);
-    // Hiệu ứng flash khi chụp
-    setIsFlashing(true);
-    ctx.drawImage(video, 0, 0, width, height);
+      isProcessingFrameRef.current = true;
+      setIsRecognizingFrame(true);
+      if (forceImmediateLock) {
+        setIsFlashing(true);
+        setTimeout(() => {
+          if (mountedRef.current) setIsFlashing(false);
+        }, 160);
+      }
 
-    canvas.toBlob(
-      (blob) => {
-        setIsFlashing(false);
-        if (!blob) {
-          setError("Không thể xuất ảnh từ camera.");
-          setCaptured(false);
-          return;
-        }
-        const capturedFile = new File([blob], `scan-${camId}-${Date.now()}.jpg`, {
+      try {
+        ctx.drawImage(video, 0, 0, width, height);
+
+        const blob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob((b) => resolve(b), "image/jpeg", jpegQuality)
+        );
+        if (!blob || !mountedRef.current) return;
+
+        const frameFile = new File([blob], `live-frame-${camId}-${Date.now()}.jpg`, {
           type: "image/jpeg",
         });
-        stopStream();
-        onCapture(capturedFile);
-      },
-      "image/jpeg",
-      0.95
-    );
-  };
 
-  // Smart Plate Clarity & Sharpness Analyzer: Tích hợp bộ lọc chống lóa sáng (Anti-Glare) + Phương sai Laplace
+        setFramesProcessed((prev) => prev + 1);
+        const result = await onRecognizeFrame(frameFile, camId);
+        if (!mountedRef.current) return;
+
+        const rawPlate = (result.displayPlate || result.plateNumber || "").trim();
+        const cleanPlate = rawPlate.toUpperCase().replace(/[^A-Z0-9]/g, "");
+        const validFormat = isPlausibleVietnamesePlate(cleanPlate);
+        const isUnrecognized =
+          !cleanPlate ||
+          cleanPlate === "NOPLATE" ||
+          result.confidence < minConfidenceThreshold ||
+          !validFormat;
+
+        if (isUnrecognized) {
+          if (forceImmediateLock) {
+            setOcrFeedbackMsg(
+              rawPlate && rawPlate !== "NO_PLATE"
+                ? `Phát hiện chuỗi "${rawPlate}" nhưng chưa đúng chuẩn biển số VN hoặc độ tin cậy thấp (${(result.confidence * 100).toFixed(0)}%). Hãy giữ biển số rõ nét hơn hoặc nhập chỉnh sửa bên dưới.`
+                : "Khung hình vừa chụp chưa phát hiện rõ biển số. Vui lòng đưa biển số lại gần khung ngắm hoặc nhập tay."
+            );
+            if (rawPlate && rawPlate !== "NO_PLATE") {
+              setEditablePlate(rawPlate.toUpperCase());
+            }
+          } else {
+            setOcrFeedbackMsg("Đang quét... Chưa phát hiện biển số hợp lệ trong khung hình.");
+          }
+          return;
+        }
+
+        // Bỏ qua nếu biển số này vừa được xác nhận trong cùng phiên để tránh quét lặp vô tận
+        if (!forceImmediateLock && lastConfirmedPlateRef.current === cleanPlate && lockedCandidate) {
+          return;
+        }
+
+        const previewUrl = URL.createObjectURL(frameFile);
+        const existing = candidateMapRef.current[cleanPlate];
+        const nextCount = (existing?.count ?? 0) + 1;
+        const bestConf = Math.max(existing?.bestConfidence ?? 0, result.confidence);
+        const bestResult = result.confidence >= (existing?.bestConfidence ?? 0) ? result : existing.result;
+
+        const updatedCandidate: StabilityCandidate = {
+          cleanPlate,
+          displayPlate: bestResult.displayPlate || rawPlate,
+          count: nextCount,
+          bestConfidence: bestConf,
+          result: bestResult,
+          file: frameFile,
+          previewUrl,
+        };
+
+        candidateMapRef.current[cleanPlate] = updatedCandidate;
+        setLiveCandidate(updatedCandidate);
+
+        // Kiểm tra điều kiện ổn định (Stability Validation):
+        // - Đạt đủ số khung hình đồng nhất liên tiếp (requiredConsistentFrames)
+        // - Hoặc người dùng bấm chụp chủ động (forceImmediateLock)
+        // - Hoặc AI trả về độ tin cậy rất cao (>= 90%) trên định dạng biển số Việt Nam chuẩn
+        const isHighConfStable = result.confidence >= 0.90 && validFormat && nextCount >= Math.min(2, requiredConsistentFrames);
+        if (forceImmediateLock || nextCount >= requiredConsistentFrames || isHighConfStable) {
+          lastConfirmedPlateRef.current = cleanPlate;
+          setLockedCandidate(updatedCandidate);
+          setEditablePlate(updatedCandidate.displayPlate);
+          setOcrFeedbackMsg(
+            `✓ Đã nhận diện ổn định biển số: ${updatedCandidate.displayPlate} (${(updatedCandidate.bestConfidence * 100).toFixed(1)}% · ${
+              updatedCandidate.result.plateType === "TwoLine" ? "Biển 2 dòng" : "Biển 1 dòng"
+            })`
+          );
+        } else {
+          setOcrFeedbackMsg(
+            `Đang kiểm tra độ ổn định: ${updatedCandidate.displayPlate} (${nextCount}/${requiredConsistentFrames} khung hình khớp · ${(result.confidence * 100).toFixed(0)}%)`
+          );
+        }
+      } catch (err: unknown) {
+        if (!mountedRef.current) return;
+        const msg = err instanceof Error ? err.message : "Lỗi kết nối dịch vụ AI OCR";
+        setOcrFeedbackMsg(`⚠️ Tạm gián đoạn khi quét khung hình: ${msg}. Đang tự động thử lại...`);
+      } finally {
+        isProcessingFrameRef.current = false;
+        if (mountedRef.current) {
+          setIsRecognizingFrame(false);
+        }
+      }
+    },
+    [camId, jpegQuality, lockedCandidate, minConfidenceThreshold, onRecognizeFrame, requiredConsistentFrames]
+  );
+
+  // Vòng lặp 1: Phân tích độ sáng / lóa / độ nét thời gian thực trên Canvas phụ (không tốn băng thông mạng)
   useEffect(() => {
-    if (isStarting || error || captured || !autoScanEnabled) return;
+    if (isStarting || error || !isCameraActive) return;
 
     const interval = setInterval(() => {
       const video = videoRef.current;
@@ -198,11 +379,10 @@ function WebcamCaptureModal({ camId, camTitle, onCapture, onClose }: WebcamCaptu
 
       ctx.drawImage(video, 0, 0, 240, 135);
 
-      // Phân tích vùng ROI ở giữa tương ứng khung ngắm reticle (168 x 60 pixel)
       const rx = 36;
-      const ry = 38;
+      const ry = 28;
       const rw = 168;
-      const rh = 60;
+      const rh = 78;
 
       const imgData = ctx.getImageData(rx, ry, rw, rh);
       const data = imgData.data;
@@ -219,9 +399,9 @@ function WebcamCaptureModal({ camId, camTitle, onCapture, onClose }: WebcamCaptu
         const luma = Math.round(0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2]);
         lumaGrid[i] = luma;
         totalLuma += luma;
-        if (luma > 235) glarePixels++;
+        if (luma > 242) glarePixels++;
         if (luma < 95) darkPixels++;
-        if (luma > 140) brightPixels++;
+        if (luma > 135) brightPixels++;
       }
 
       const avgLuma = totalLuma / pixelCount;
@@ -233,7 +413,6 @@ function WebcamCaptureModal({ camId, camTitle, onCapture, onClose }: WebcamCaptu
 
       setGlareRatio(glarePct);
 
-      // 1. Phân tích phương sai Laplace (Laplacian Variance - thước đo độ nét chuẩn xác cao)
       let sumLap = 0;
       let sumSqLap = 0;
       let innerCount = 0;
@@ -242,7 +421,12 @@ function WebcamCaptureModal({ camId, camTitle, onCapture, onClose }: WebcamCaptu
         const rowOffset = y * rw;
         for (let x = 1; x < rw - 1; x++) {
           const c = lumaGrid[rowOffset + x];
-          const lap = 4 * c - lumaGrid[rowOffset + x - 1] - lumaGrid[rowOffset + x + 1] - lumaGrid[(y - 1) * rw + x] - lumaGrid[(y + 1) * rw + x];
+          const lap =
+            4 * c -
+            lumaGrid[rowOffset + x - 1] -
+            lumaGrid[rowOffset + x + 1] -
+            lumaGrid[(y - 1) * rw + x] -
+            lumaGrid[(y + 1) * rw + x];
           sumLap += lap;
           sumSqLap += lap * lap;
           innerCount++;
@@ -250,152 +434,244 @@ function WebcamCaptureModal({ camId, camTitle, onCapture, onClose }: WebcamCaptu
       }
 
       const meanLap = sumLap / innerCount;
-      const lapVariance = Math.max(0, (sumSqLap / innerCount) - (meanLap * meanLap));
+      const lapVariance = Math.max(0, sumSqLap / innerCount - meanLap * meanLap);
 
-      // 2. Kiểm tra các điều kiện chất lượng ảnh:
-      // A. Màn hình bị lóa sáng / cháy sáng (glarePct >= 18%)
-      if (glarePct >= 18) {
-        steadyCountRef.current = 0;
+      if (glarePct >= 38) {
         setIsPlateClear(false);
         setAlertLevel("glare");
-        setClarityScore(Math.max(5, Math.round(25 - glarePct * 0.2)));
-        setClarityStatus(`⚠️ Màn hình bị lóa sáng (${glarePct}%) - Giảm độ sáng hoặc nghiêng góc máy`);
+        setClarityScore(Math.max(10, Math.round(40 - glarePct * 0.4)));
+        setClarityStatus(`⚠️ Bị lóa sáng mạnh (${glarePct}%) - Hãy nghiêng nhẹ góc biển số`);
         return;
       }
 
-      // B. Khung hình quá tối (avgLuma < 35)
-      if (avgLuma < 35) {
-        steadyCountRef.current = 0;
+      if (avgLuma < 25) {
         setIsPlateClear(false);
         setAlertLevel("dark");
-        setClarityScore(Math.max(0, Math.round(avgLuma * 0.6)));
-        setClarityStatus("⚠️ Quá tối - Cần thêm ánh sáng để camera nhìn rõ");
+        setClarityScore(Math.max(0, Math.round(avgLuma)));
+        setClarityStatus("⚠️ Khung hình quá tối - Cần thêm ánh sáng");
         return;
       }
 
-      // C. Rung lắc mạnh khi đang lia máy (motionDelta > 6.0)
-      if (motionDelta > 6.0) {
-        steadyCountRef.current = 0;
-        setIsPlateClear(false);
-        setAlertLevel("warn");
-        setClarityStatus("Đang chuyển động: Vui lòng giữ yên camera...");
-        return;
-      }
-
-      // D. Tính điểm độ sắc nét chuẩn (0..100%)
-      const rawScore = Math.min(100, Math.max(0, Math.round(((lapVariance - 20) / 70) * 100)));
-      // Yêu cầu có phân bố chữ và nền (ít nhất 5% chữ đen và 18% nền sáng)
-      const hasPlateCharacters = darkPct >= 5 && brightPct >= 18;
-      const finalScore = hasPlateCharacters ? rawScore : Math.min(45, rawScore);
+      const rawScore = Math.min(100, Math.max(15, Math.round(((lapVariance - 12) / 55) * 100)));
+      const hasPlateCharacters = darkPct >= 3 && brightPct >= 12;
+      const finalScore = hasPlateCharacters ? rawScore : Math.min(55, rawScore);
       setClarityScore(finalScore);
 
-      // E. Đạt ngưỡng nét chuẩn (>= 75%) và ổn định (motionDelta <= 4.0)
-      if (finalScore >= 75 && motionDelta <= 4.0) {
-        steadyCountRef.current += 1;
+      if (finalScore >= 55 && motionDelta <= 8.0) {
         setIsPlateClear(true);
         setAlertLevel("ok");
-        setClarityStatus(`✓ Độ nét đạt ${finalScore}% - Giữ yên...`);
-
-        if (steadyCountRef.current >= 3) {
-          clearInterval(interval);
-          setClarityStatus(`🎯 ĐANG CHỤP BIỂN SỐ (${finalScore}%)...`);
-          setTimeout(() => {
-            handleCapture();
-          }, 100);
-        }
+        setClarityStatus(`✓ Khung hình rõ nét (${finalScore}%) — AI đang nhận diện biển số...`);
       } else {
-        steadyCountRef.current = 0;
         setIsPlateClear(false);
         setAlertLevel("warn");
-        if (!hasPlateCharacters) {
-          setClarityStatus(`Đang căn nét: Căn biển số có chữ số vào giữa khung (Nét: ${finalScore}%)`);
-        } else {
-          setClarityStatus(`Độ nét: ${finalScore}% (Cần ≥ 75%) - Giữ yên và tiến gần hơn`);
-        }
+        setClarityStatus(`Độ nét: ${finalScore}% — Giữ biển số ổn định trong khung ngắm`);
       }
-    }, 180);
+    }, 220);
 
     return () => clearInterval(interval);
-  }, [isStarting, error, captured, autoScanEnabled]);
+  }, [isStarting, error, isCameraActive]);
 
-  // Phím tắt Space hoặc Enter để chụp ngay lập tức chủ động
+  // Vòng lặp 2: Trích xuất khung hình định kỳ gửi qua pipeline YOLO + OCR (Max 1 request đồng thời)
+  useEffect(() => {
+    if (
+      isStarting ||
+      Boolean(error) ||
+      !isCameraActive ||
+      !autoScanEnabled ||
+      Boolean(lockedCandidate)
+    ) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      if (!isProcessingFrameRef.current && alertLevel !== "dark") {
+        void captureAndProcessFrame(false);
+      }
+    }, frameIntervalMs);
+
+    return () => clearInterval(timer);
+  }, [
+    isStarting,
+    error,
+    isCameraActive,
+    autoScanEnabled,
+    lockedCandidate,
+    frameIntervalMs,
+    alertLevel,
+    captureAndProcessFrame,
+  ]);
+
+  // Phím tắt Space để chụp & nhận diện ngay lập tức
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === " " || e.key === "Enter") {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === " ") {
         e.preventDefault();
-        handleCapture();
+        void captureAndProcessFrame(true);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isStarting, error, captured]);
+  }, [captureAndProcessFrame]);
 
   const handleClose = () => {
     stopStream();
     onClose();
   };
 
+  const handleConfirmAndApply = () => {
+    const finalPlate = editablePlate.trim().toUpperCase();
+    if (!finalPlate) return;
+    const chosenCandidate = lockedCandidate || liveCandidate;
+    stopStream();
+    onConfirmPlate(
+      finalPlate,
+      chosenCandidate?.file ?? null,
+      chosenCandidate?.result ?? null,
+      camId
+    );
+  };
+
+  const activeCandidate = lockedCandidate || liveCandidate;
+  const stabilityProgress = activeCandidate
+    ? Math.min(100, Math.round((activeCandidate.count / requiredConsistentFrames) * 100))
+    : 0;
+
   return (
-    <StaffDialog title={`Quét trực tiếp qua Camera - ${camTitle}`} onClose={handleClose}>
-      <div className="staff-modal-body" style={{ display: "grid", gap: 14 }}>
+    <StaffDialog title={`Quét Biển Số Trực Tiếp (Live Camera ANPR) - ${camTitle}`} onClose={handleClose}>
+      <div className="staff-modal-body" style={{ display: "grid", gap: 12 }}>
+        {/* Thanh điều khiển Camera: Chọn thiết bị, Bật/Tắt Camera, Chu kỳ quét, Ngưỡng ổn định */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 8,
+            background: "#0f172a",
+            padding: "8px 12px",
+            borderRadius: 10,
+            border: "1px solid #1e293b",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="pm-cam-upload-btn compact"
+              style={{
+                background: isCameraActive ? "rgba(239, 68, 68, 0.18)" : "rgba(16, 185, 129, 0.2)",
+                borderColor: isCameraActive ? "#ef4444" : "#10b981",
+                color: isCameraActive ? "#fca5a5" : "#6ee7b7",
+                padding: "5px 10px",
+                fontWeight: 700,
+              }}
+              onClick={() => {
+                if (isCameraActive) {
+                  stopStream();
+                } else {
+                  void startStream(selectedDeviceId || undefined);
+                }
+              }}
+            >
+              <Camera size={13} />
+              <span>{isCameraActive ? "Tắt Camera" : "Bật Camera"}</span>
+            </button>
+
+            {devices.length > 0 && (
+              <select
+                className="pm-form-input"
+                style={{ padding: "4px 8px", fontSize: 12, maxWidth: 210, height: 30 }}
+                value={selectedDeviceId}
+                onChange={handleDeviceChange}
+                disabled={!isCameraActive}
+                title="Chọn thiết bị Camera"
+              >
+                {devices.map((d, index) => (
+                  <option key={d.deviceId || index} value={d.deviceId}>
+                    {d.label || `Camera Laptop ${index + 1}`}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <select
+              className="pm-form-input"
+              style={{ padding: "4px 8px", fontSize: 12, width: "auto", height: 30 }}
+              value={frameIntervalMs}
+              onChange={(e) => setFrameIntervalMs(Number(e.target.value))}
+              title="Chu kỳ trích xuất khung hình gửi AI"
+            >
+              <option value={600}>Quét nhanh (600ms)</option>
+              <option value={800}>Chuẩn (800ms)</option>
+              <option value={1200}>Tiết kiệm (1200ms)</option>
+            </select>
+
+            <select
+              className="pm-form-input"
+              style={{ padding: "4px 8px", fontSize: 12, width: "auto", height: 30 }}
+              value={requiredConsistentFrames}
+              onChange={(e) => setRequiredConsistentFrames(Number(e.target.value))}
+              title="Số khung hình nhận diện trùng khớp liên tiếp để khóa kết quả"
+            >
+              <option value={1}>Ổn định: 1 khung hình</option>
+              <option value={2}>Ổn định: 2 khung hình (Khuyên dùng)</option>
+              <option value={3}>Ổn định: 3 khung hình (Nghiêm ngặt)</option>
+            </select>
+          </div>
+
+          <label
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              cursor: "pointer",
+              fontSize: 12.5,
+              fontWeight: 600,
+              color: "#2dd4bf",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={autoScanEnabled}
+              onChange={(e) => setAutoScanEnabled(e.target.checked)}
+              style={{ accentColor: "#0d9488", width: 15, height: 15 }}
+            />
+            <span>Quét AI tự động (YOLO + OCR)</span>
+          </label>
+        </div>
+
         {error ? (
-          <div style={{ display: "grid", gap: 12, padding: "16px 0" }}>
+          <div style={{ display: "grid", gap: 12, padding: "12px 0" }}>
             <div className="staff-alert error" style={{ margin: 0 }}>
               {error}
             </div>
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="staff-btn-secondary"
+                onClick={() => {
+                  stopStream();
+                  onSwitchToUpload(camId);
+                }}
+              >
+                <Upload size={14} /> Chuyển sang Tải ảnh
+              </button>
               <button type="button" className="staff-btn-secondary" onClick={handleClose}>
-                Đóng
+                Chuyển sang Nhập thủ công
               </button>
               <button
                 type="button"
                 className="pm-cta-btn pm-btn-teal"
                 style={{ width: "auto" }}
-                onClick={() => void startStream(selectedDeviceId)}
+                onClick={() => void startStream(selectedDeviceId || undefined)}
               >
-                <RotateCcw size={14} /> Thử lại
+                <RotateCcw size={14} /> Thử kết nối lại Camera
               </button>
             </div>
           </div>
         ) : (
           <>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-              {devices.length > 1 ? (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 200 }}>
-                  <label style={{ fontSize: 13, fontWeight: 600, color: "#475569" }}>Nguồn Camera:</label>
-                  <select
-                    className="pm-form-input"
-                    style={{ flex: 1, padding: "5px 10px", fontSize: 13 }}
-                    value={selectedDeviceId}
-                    onChange={handleDeviceChange}
-                  >
-                    {devices.map((d, index) => (
-                      <option key={d.deviceId || index} value={d.deviceId}>
-                        {d.label || `Camera ${index + 1}`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : <div />}
-
-              {/* Toggle Auto-Scan */}
-              <label style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, fontWeight: 600, color: "#0f766e" }}>
-                <input
-                  type="checkbox"
-                  checked={autoScanEnabled}
-                  onChange={(e) => {
-                    setAutoScanEnabled(e.target.checked);
-                    if (!e.target.checked) {
-                      setIsPlateClear(false);
-                      setClarityStatus("Chế độ chụp thủ công");
-                    }
-                  }}
-                  style={{ accentColor: "#0d9488", width: 16, height: 16 }}
-                />
-                <span>Tự động chụp khi biển số rõ nét</span>
-              </label>
-            </div>
-
             {/* Live Camera Viewport */}
             <div
               style={{
@@ -422,9 +698,33 @@ function WebcamCaptureModal({ camId, camTitle, onCapture, onClose }: WebcamCaptu
                   width: "100%",
                   height: "100%",
                   objectFit: "cover",
+                  opacity: isCameraActive ? 1 : 0.25,
                 }}
               />
               <canvas ref={canvasRef} style={{ display: "none" }} />
+
+              {!isCameraActive && !isStarting && (
+                <div
+                  style={{
+                    zIndex: 25,
+                    color: "#94a3b8",
+                    textAlign: "center",
+                    padding: 20,
+                  }}
+                >
+                  <p style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 600 }}>
+                    Camera đang tạm dừng
+                  </p>
+                  <button
+                    type="button"
+                    className="pm-cta-btn pm-btn-teal"
+                    style={{ width: "auto", padding: "6px 16px" }}
+                    onClick={() => void startStream(selectedDeviceId || undefined)}
+                  >
+                    <Camera size={14} /> Bật lại Camera
+                  </button>
+                </div>
+              )}
 
               {/* Flash effect overlay */}
               {isFlashing && (
@@ -434,189 +734,130 @@ function WebcamCaptureModal({ camId, camTitle, onCapture, onClose }: WebcamCaptu
                     inset: 0,
                     background: "#ffffff",
                     zIndex: 25,
-                    opacity: 0.85,
+                    opacity: 0.8,
                     pointerEvents: "none",
                   }}
                 />
               )}
 
-              {/* Auto-Scan Status Pill Banner */}
-              {autoScanEnabled && !isStarting && !error && !isFlashing && (
+              {/* Top Status Pill Banner */}
+              {isCameraActive && !isStarting && (
                 <div
                   style={{
                     position: "absolute",
-                    top: 14,
+                    top: 12,
                     left: "50%",
                     transform: "translateX(-50%)",
-                    background: alertLevel === "glare"
+                    background: lockedCandidate
+                      ? "rgba(6, 78, 59, 0.95)"
+                      : alertLevel === "glare"
                       ? "rgba(127, 29, 29, 0.94)"
-                      : isPlateClear
-                      ? "rgba(6, 78, 59, 0.94)"
-                      : "rgba(15, 23, 42, 0.88)",
+                      : "rgba(15, 23, 42, 0.90)",
                     backdropFilter: "blur(6px)",
-                    border: alertLevel === "glare"
+                    border: lockedCandidate
+                      ? "1.5px solid #10b981"
+                      : alertLevel === "glare"
                       ? "1px solid #ef4444"
-                      : isPlateClear
-                      ? "1px solid #10b981"
                       : "1px solid rgba(45, 212, 191, 0.5)",
-                    color: alertLevel === "glare"
-                      ? "#fca5a5"
-                      : isPlateClear
-                      ? "#34d399"
-                      : "#2dd4bf",
-                    padding: "6px 16px",
+                    color: lockedCandidate ? "#6ee7b7" : alertLevel === "glare" ? "#fca5a5" : "#2dd4bf",
+                    padding: "6px 14px",
                     borderRadius: 20,
-                    fontSize: 12.5,
+                    fontSize: 12,
                     fontWeight: 700,
                     display: "flex",
                     alignItems: "center",
                     gap: 8,
                     zIndex: 20,
-                    boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
-                    letterSpacing: 0.3,
-                    transition: "all 0.2s ease",
+                    maxWidth: "92%",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
                   }}
                 >
                   <span
                     style={{
-                      width: 9,
-                      height: 9,
+                      width: 8,
+                      height: 8,
+                      flexShrink: 0,
                       borderRadius: "50%",
-                      background: alertLevel === "glare" ? "#ef4444" : isPlateClear ? "#10b981" : "#f59e0b",
-                      boxShadow: `0 0 10px ${alertLevel === "glare" ? "#ef4444" : isPlateClear ? "#10b981" : "#f59e0b"}`,
+                      background: lockedCandidate
+                        ? "#10b981"
+                        : isRecognizingFrame
+                        ? "#38bdf8"
+                        : alertLevel === "glare"
+                        ? "#ef4444"
+                        : "#f59e0b",
                     }}
                   />
-                  {clarityStatus}
+                  <span>{ocrFeedbackMsg}</span>
                 </div>
               )}
 
               {/* Laser Scanning Line Animation */}
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  pointerEvents: "none",
-                  overflow: "hidden",
-                  zIndex: 8,
-                }}
-              >
-                <div className="pm-cam-laser-scanner" />
-              </div>
-
-              {/* Viewfinder Target Reticle (Đã căn chuẩn 100% chính giữa trung tâm) */}
-              <div
-                style={{
-                  position: "absolute",
-                  top: "50%",
-                  left: "50%",
-                  transform: "translate(-50%, -50%)",
-                  width: "72%",
-                  maxWidth: 440,
-                  height: "46%",
-                  border: isFlashing
-                    ? "3px solid #ffffff"
-                    : alertLevel === "glare"
-                    ? "3px solid #ef4444"
-                    : isPlateClear
-                    ? "3px solid #10b981"
-                    : "2px dashed #2dd4bf",
-                  borderRadius: 12,
-                  boxShadow: alertLevel === "glare"
-                    ? "0 0 25px rgba(239, 68, 68, 0.7)"
-                    : isPlateClear
-                    ? "0 0 25px rgba(16, 185, 129, 0.7)"
-                    : "0 0 16px rgba(45, 212, 191, 0.35)",
-                  pointerEvents: "none",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  zIndex: 10,
-                  transition: "all 0.18s ease",
-                }}
-              >
-                {/* 4 corner accents */}
+              {isCameraActive && !lockedCandidate && (
                 <div
                   style={{
                     position: "absolute",
-                    top: -2,
-                    left: -2,
-                    width: 16,
-                    height: 16,
-                    borderTop: alertLevel === "glare" ? "3px solid #ef4444" : isPlateClear ? "3px solid #10b981" : "3px solid #2dd4bf",
-                    borderLeft: alertLevel === "glare" ? "3px solid #ef4444" : isPlateClear ? "3px solid #10b981" : "3px solid #2dd4bf",
-                  }}
-                />
-                <div
-                  style={{
-                    position: "absolute",
-                    top: -2,
-                    right: -2,
-                    width: 16,
-                    height: 16,
-                    borderTop: alertLevel === "glare" ? "3px solid #ef4444" : isPlateClear ? "3px solid #10b981" : "3px solid #2dd4bf",
-                    borderRight: alertLevel === "glare" ? "3px solid #ef4444" : isPlateClear ? "3px solid #10b981" : "3px solid #2dd4bf",
-                  }}
-                />
-                <div
-                  style={{
-                    position: "absolute",
-                    bottom: -2,
-                    left: -2,
-                    width: 16,
-                    height: 16,
-                    borderBottom: alertLevel === "glare" ? "3px solid #ef4444" : isPlateClear ? "3px solid #10b981" : "3px solid #2dd4bf",
-                    borderLeft: alertLevel === "glare" ? "3px solid #ef4444" : isPlateClear ? "3px solid #10b981" : "3px solid #2dd4bf",
-                  }}
-                />
-                <div
-                  style={{
-                    position: "absolute",
-                    bottom: -2,
-                    right: -2,
-                    width: 16,
-                    height: 16,
-                    borderBottom: alertLevel === "glare" ? "3px solid #ef4444" : isPlateClear ? "3px solid #10b981" : "3px solid #2dd4bf",
-                    borderRight: alertLevel === "glare" ? "3px solid #ef4444" : isPlateClear ? "3px solid #10b981" : "3px solid #2dd4bf",
-                  }}
-                />
-
-                <span
-                  style={{
-                    background: alertLevel === "glare"
-                      ? "rgba(127, 29, 29, 0.9)"
-                      : isPlateClear
-                      ? "rgba(6, 78, 59, 0.9)"
-                      : "rgba(15, 23, 42, 0.8)",
-                    color: alertLevel === "glare"
-                      ? "#fca5a5"
-                      : isPlateClear
-                      ? "#34d399"
-                      : "#2dd4bf",
-                    border: alertLevel === "glare"
-                      ? "1px solid #ef4444"
-                      : isPlateClear
-                      ? "1px solid #10b981"
-                      : "1px solid rgba(45, 212, 191, 0.3)",
-                    padding: "4px 12px",
-                    borderRadius: 6,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    letterSpacing: 0.5,
-                    textTransform: "uppercase",
-                    backdropFilter: "blur(4px)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    transition: "all 0.2s ease",
+                    inset: 0,
+                    pointerEvents: "none",
+                    overflow: "hidden",
+                    zIndex: 8,
                   }}
                 >
-                  {alertLevel === "glare"
-                    ? "⚠️ BỊ LÓA SÁNG - GIẢM ĐỘ SÁNG MÀN HÌNH"
-                    : isPlateClear
-                    ? "✓ BIỂN SỐ RÕ NÉT - GIỮ YÊN"
-                    : "CĂN BIỂN SỐ VÀO KHUNG NÀY"}
-                </span>
-              </div>
+                  <div className="pm-cam-laser-scanner" />
+                </div>
+              )}
+
+              {/* Viewfinder Target Reticle (Hỗ trợ cả biển 1 dòng dài và biển 2 dòng vuông) */}
+              {isCameraActive && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "52%",
+                    left: "50%",
+                    transform: "translate(-50%, -50%)",
+                    width: "68%",
+                    maxWidth: 420,
+                    height: "54%",
+                    border: lockedCandidate
+                      ? "3px solid #10b981"
+                      : alertLevel === "glare"
+                      ? "3px solid #ef4444"
+                      : isPlateClear
+                      ? "2.5px solid #38bdf8"
+                      : "2px dashed #2dd4bf",
+                    borderRadius: 12,
+                    boxShadow: lockedCandidate
+                      ? "0 0 28px rgba(16, 185, 129, 0.75)"
+                      : "0 0 16px rgba(45, 212, 191, 0.3)",
+                    pointerEvents: "none",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "flex-end",
+                    paddingBottom: 10,
+                    zIndex: 10,
+                  }}
+                >
+                  <span
+                    style={{
+                      background: "rgba(15, 23, 42, 0.85)",
+                      color: lockedCandidate ? "#34d399" : "#2dd4bf",
+                      border: "1px solid rgba(45, 212, 191, 0.35)",
+                      padding: "3px 10px",
+                      borderRadius: 6,
+                      fontSize: 11,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {lockedCandidate
+                      ? `✓ ĐÃ NHẬN DIỆN: ${lockedCandidate.displayPlate}`
+                      : isRecognizingFrame
+                      ? "⚡ AI YOLO + OCR ĐANG XỬ LÝ KHUNG HÌNH..."
+                      : "ĐẶT BIỂN SỐ (1 DÒNG HOẶC 2 DÒNG) VÀO KHUNG"}
+                  </span>
+                </div>
+              )}
 
               {isStarting && (
                 <div
@@ -634,111 +875,157 @@ function WebcamCaptureModal({ camId, camTitle, onCapture, onClose }: WebcamCaptu
                     zIndex: 30,
                   }}
                 >
-                  <RotateCcw size={18} /> Đang khởi động camera...
+                  <RotateCcw size={18} /> Đang khởi động camera laptop...
                 </div>
               )}
             </div>
 
-            {/* Live Clarity & Quality HUD Meter (Hiển thị điểm phần trăm độ nét & lóa sáng trực quan) */}
-            {autoScanEnabled && !isStarting && !error && (
-              <div
-                style={{
-                  background: "#0f172a",
-                  border: alertLevel === "glare"
-                    ? "1px solid #ef4444"
-                    : isPlateClear
-                    ? "1px solid #10b981"
-                    : "1px solid #334155",
-                  borderRadius: 10,
-                  padding: "10px 14px",
-                  display: "grid",
-                  gap: 6,
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 13 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}>
-                    <span
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: "50%",
-                        background: alertLevel === "glare" ? "#ef4444" : isPlateClear ? "#10b981" : "#f59e0b",
-                        boxShadow: `0 0 8px ${alertLevel === "glare" ? "#ef4444" : isPlateClear ? "#10b981" : "#f59e0b"}`,
-                      }}
-                    />
-                    <span style={{ color: alertLevel === "glare" ? "#fca5a5" : isPlateClear ? "#6ee7b7" : "#cbd5e1" }}>
-                      {clarityStatus}
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      fontWeight: 700,
-                      fontSize: 13,
-                      color: alertLevel === "glare" ? "#ef4444" : isPlateClear ? "#10b981" : "#f59e0b",
-                    }}
-                  >
-                    {alertLevel === "glare" ? `Lóa: ${glareRatio}%` : `Độ nét: ${clarityScore}%`}
-                  </div>
-                </div>
-
-                {/* Meter Progress Bar */}
-                <div style={{ position: "relative", width: "100%", height: 8, background: "#1e293b", borderRadius: 4, overflow: "hidden" }}>
-                  <div
-                    style={{
-                      height: "100%",
-                      width: `${Math.min(100, Math.max(0, clarityScore))}%`,
-                      background: alertLevel === "glare"
-                        ? "#ef4444"
-                        : isPlateClear
-                        ? "#10b981"
-                        : clarityScore > 50
-                        ? "#f59e0b"
-                        : "#64748b",
-                      borderRadius: 4,
-                      transition: "width 0.15s ease, background-color 0.2s ease",
-                    }}
-                  />
-                  {/* 75% target threshold marker */}
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      bottom: 0,
-                      left: "75%",
-                      width: 2,
-                      background: "rgba(255, 255, 255, 0.7)",
-                      boxShadow: "0 0 4px #ffffff",
-                    }}
-                    title="Ngưỡng tự động chụp (75%)"
-                  />
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#64748b" }}>
-                  <span>0%</span>
-                  <span style={{ color: "#94a3b8" }}>Ngưỡng tự động chụp: ≥ 75%</span>
-                  <span>100%</span>
-                </div>
+            {/* Thanh đo Độ nét + Tiến trình Kiểm tra Độ ổn định đa khung hình (Stability Validation) */}
+            <div
+              style={{
+                background: "#0f172a",
+                border: lockedCandidate ? "1.5px solid #10b981" : "1px solid #334155",
+                borderRadius: 10,
+                padding: "10px 14px",
+                display: "grid",
+                gap: 8,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5, flexWrap: "wrap", gap: 8 }}>
+                <span style={{ color: "#cbd5e1", fontWeight: 600 }}>
+                  {clarityStatus} · Nét: <strong>{clarityScore}%</strong> · Lóa: <strong>{glareRatio}%</strong> · Đã phân tích <strong>{framesProcessed}</strong> khung hình
+                </span>
+                <span style={{ color: lockedCandidate ? "#10b981" : "#38bdf8", fontWeight: 700 }}>
+                  Độ ổn định kết quả:{" "}
+                  {activeCandidate
+                    ? `${Math.min(activeCandidate.count, requiredConsistentFrames)}/${requiredConsistentFrames} khung hình (${stabilityProgress}%)`
+                    : `0/${requiredConsistentFrames}`}
+                </span>
               </div>
-            )}
 
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: 0 }}>
-              <p style={{ margin: 0, fontSize: 12.5, color: "#64748b" }}>
-                Giữ yên biển số trong khung để tự động chụp, hoặc nhấn phím <strong>Space / Enter</strong> để chụp ngay.
-              </p>
+              <div style={{ width: "100%", height: 7, background: "#1e293b", borderRadius: 4, overflow: "hidden" }}>
+                <div
+                  style={{
+                    height: "100%",
+                    width: `${lockedCandidate ? 100 : stabilityProgress}%`,
+                    background: lockedCandidate ? "#10b981" : "#38bdf8",
+                    transition: "width 0.2s ease",
+                  }}
+                />
+              </div>
             </div>
 
-            <div className="staff-modal-footer" style={{ marginTop: 6 }}>
-              <button type="button" className="staff-btn-secondary" onClick={handleClose}>
-                Hủy bỏ
-              </button>
+            {/* Khung Kết quả Nhận diện & Xác nhận / Chỉnh sửa trước khi đưa vào phiếu Check-in */}
+            <div
+              style={{
+                background: lockedCandidate ? "rgba(6, 78, 59, 0.18)" : "rgba(15, 23, 42, 0.6)",
+                border: lockedCandidate ? "1.5px solid #10b981" : "1px solid #334155",
+                borderRadius: 10,
+                padding: "12px 14px",
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {activeCandidate?.result.croppedPlateBase64 && (
+                    <img
+                      src={`data:image/jpeg;base64,${activeCandidate.result.croppedPlateBase64}`}
+                      alt="Vùng biển số đã cắt"
+                      style={{
+                        height: 44,
+                        maxWidth: 120,
+                        objectFit: "contain",
+                        borderRadius: 6,
+                        border: "1.5px solid #2dd4bf",
+                        background: "#000",
+                      }}
+                    />
+                  )}
+                  <div>
+                    <div style={{ fontSize: 11.5, color: "#94a3b8", fontWeight: 600 }}>
+                      BIỂN SỐ NHẬN DIỆN (CÓ THỂ KIỂM TRA / SỬA TRƯỚC KHI XÁC NHẬN):
+                    </div>
+                    <div style={{ fontSize: 12, color: "#2dd4bf", marginTop: 2 }}>
+                      {activeCandidate ? (
+                        <>
+                          Độ tin cậy AI: <strong>{(activeCandidate.bestConfidence * 100).toFixed(1)}%</strong> · Loại biển:{" "}
+                          <strong>{activeCandidate.result.plateType === "TwoLine" ? "2 dòng (Vuông)" : "1 dòng (Dài)"}</strong>
+                        </>
+                      ) : (
+                        "Đưa biển số vào khung ngắm hoặc bấm 'Quét khung hình này'"
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {lockedCandidate && (
+                  <button
+                    type="button"
+                    className="staff-btn-secondary"
+                    style={{ padding: "5px 10px", fontSize: 12 }}
+                    onClick={() => {
+                      resetRecognitionSession();
+                      if (!isCameraActive) void startStream(selectedDeviceId || undefined);
+                    }}
+                  >
+                    <RotateCcw size={13} /> Quét lại (Retry)
+                  </button>
+                )}
+              </div>
+
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <input
+                  type="text"
+                  className="pm-form-input"
+                  style={{
+                    flex: 1,
+                    minWidth: 200,
+                    fontSize: 17,
+                    fontWeight: 800,
+                    letterSpacing: 1.2,
+                    borderColor: lockedCandidate ? "#10b981" : undefined,
+                  }}
+                  placeholder="Biển số nhận diện (VD: 78-AL 123.45, 51K-888.88)"
+                  value={editablePlate}
+                  onChange={(e) => setEditablePlate(e.target.value.toUpperCase())}
+                />
+                <button
+                  type="button"
+                  className="pm-cta-btn pm-btn-teal"
+                  style={{ width: "auto", padding: "9px 18px", fontWeight: 700 }}
+                  disabled={!editablePlate.trim()}
+                  onClick={handleConfirmAndApply}
+                >
+                  <CheckCircle2 size={16} /> Xác nhận &amp; Điền vào phiếu
+                </button>
+              </div>
+            </div>
+
+            <div className="staff-modal-footer" style={{ marginTop: 4, display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button type="button" className="staff-btn-secondary" onClick={handleClose}>
+                  Đóng
+                </button>
+                <button
+                  type="button"
+                  className="staff-btn-secondary"
+                  onClick={() => {
+                    stopStream();
+                    onSwitchToUpload(camId);
+                  }}
+                >
+                  <Upload size={14} /> Tải ảnh từ máy
+                </button>
+              </div>
               <button
                 type="button"
-                className="pm-cta-btn pm-btn-teal"
-                style={{ width: "auto", display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 20px" }}
-                disabled={isStarting || captured}
-                onClick={handleCapture}
+                className="pm-cta-btn pm-btn-blue"
+                style={{ width: "auto", display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px" }}
+                disabled={isStarting || !isCameraActive || isRecognizingFrame}
+                onClick={() => void captureAndProcessFrame(true)}
               >
-                <Camera size={16} /> Chụp ngay (Phím Space)
+                <Camera size={15} /> {isRecognizingFrame ? "Đang nhận diện..." : "Quét khung hình này (Space)"}
               </button>
             </div>
           </>
@@ -911,6 +1198,16 @@ export default function VehicleOperations() {
     setReviewMsg("");
   };
 
+  const isVietnameseMotorbikePlate = (plateStr: string): boolean => {
+    const clean = plateStr.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    // Biển xe máy cũ (1 chữ + 1 số: VD 59P112345) hoặc biển xe máy mới Thông tư 24/2023 (2 chữ cái: VD 78AL12345), trừ sê-ri ô tô đặc thù
+    const match = clean.match(/^[0-9]{2}([A-Z][0-9]|[A-Z]{2})[0-9]{4,5}$/);
+    if (!match) return false;
+    const series = match[1];
+    const specialCarSeries = ["LD", "DA", "MK", "CD", "KT", "HC", "RM", "NG", "NN", "QT"];
+    return !specialCarSeries.includes(series);
+  };
+
   const handleConfirmReviewOcr = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reviewCamId || !reviewPlateInput.trim()) return;
@@ -921,22 +1218,28 @@ export default function VehicleOperations() {
     const lotId = currentGate?.lotId || selectedLotId || "";
     if (!lotId) return;
 
+    const cleanedPlate = reviewPlateInput.trim().toUpperCase();
     setReviewSubmitting(true);
     setReviewMsg("");
     try {
-      await api.reviewPlateRecognition(lotId, recId, reviewPlateInput.trim().toUpperCase(), reviewNotes.trim());
+      await api.reviewPlateRecognition(lotId, recId, cleanedPlate, reviewNotes.trim());
       setCameraStates((prev) => ({
         ...prev,
         [reviewCamId]: {
           ...prev[reviewCamId],
-          plateText: reviewPlateInput.trim().toUpperCase(),
+          plateText: cleanedPlate,
           confidence: "AI Đã Đính Chính (Staff Reviewed)",
         },
       }));
-      if (activeTab === "checkin") setCheckInPlate(reviewPlateInput.trim().toUpperCase());
-      else {
-        setCheckOutQuery(reviewPlateInput.trim().toUpperCase());
-        handleLookupFee(reviewPlateInput.trim().toUpperCase());
+      if (activeTab === "checkin") {
+        setCheckInPlate(cleanedPlate);
+        if (isVietnameseMotorbikePlate(cleanedPlate)) {
+          setCheckInVehicleType("Motorcycle");
+          setCameraVehicleCategory("Motorcycle");
+        }
+      } else {
+        setCheckOutQuery(cleanedPlate);
+        handleLookupFee(cleanedPlate);
       }
       setReviewCamId(null);
     } catch (err) {
@@ -1026,11 +1329,10 @@ export default function VehicleOperations() {
           setCheckInPlate(rawPlate);
 
           const isMoto =
-            result.vehicleTypeSuggestion === "Motorcycle" ||
+            String(result.vehicleTypeSuggestion || "").toLowerCase().includes("moto") ||
             String(result.vehicleTypeSuggestion) === "1" ||
             result.plateType === "TwoLine" ||
-            rawPlate.includes("-P") ||
-            rawPlate.includes("-V");
+            isVietnameseMotorbikePlate(rawPlate);
 
           if (isMoto) {
             setCheckInVehicleType("Motorcycle");
@@ -1057,6 +1359,94 @@ export default function VehicleOperations() {
         },
       }));
     }
+  };
+
+  const recognizeLiveWebcamFrame = useCallback(
+    async (file: File, _camId: string): Promise<PlateRecognitionResult> => {
+      const gate =
+        activeTab === "checkin"
+          ? entryGates.find((item) => item.id === checkInGate) || entryGates[0]
+          : exitGates.find((item) => item.id === exitGate) || exitGates[0];
+      const gateIdToUse = gate?.id || "GATE_IN_01";
+      const lotIdToUse = gate?.lotId || selectedLotId || undefined;
+      const direction = activeTab === "checkin" ? "IN" : "OUT";
+      return await staffApi.scanLicensePlate(file, gateIdToUse, direction, lotIdToUse);
+    },
+    [activeTab, checkInGate, entryGates, exitGate, exitGates, selectedLotId]
+  );
+
+  const handleConfirmLiveWebcamPlate = (
+    confirmedPlate: string,
+    file: File | null,
+    result: PlateRecognitionResult | null,
+    camId: string
+  ) => {
+    const cleanDisplay = confirmedPlate.trim().toUpperCase();
+    if (!cleanDisplay) return;
+
+    const previewUrl = file ? URL.createObjectURL(file) : cameraStates[camId]?.fileUrl;
+    const confPct = result ? (result.confidence * 100).toFixed(1) : "100.0";
+    const confLabel = result
+      ? `Độ tin cậy AI Live: ${confPct}% (${result.plateType === "TwoLine" ? "Biển 2 dòng" : "Biển 1 dòng"})`
+      : "Đã xác nhận từ Live Camera";
+
+    setCameraStates((prev) => ({
+      ...prev,
+      [camId]: {
+        fileUrl: previewUrl,
+        result: result ?? prev[camId]?.result,
+        scanning: false,
+        plateText: cleanDisplay,
+        confidence: confLabel,
+      },
+    }));
+
+    // Gửi sự kiện lưu nhận diện về Parking Service (nếu có ảnh khung hình)
+    const gate =
+      activeTab === "checkin"
+        ? entryGates.find((item) => item.id === checkInGate) || entryGates[0]
+        : exitGates.find((item) => item.id === exitGate) || exitGates[0];
+    if (file && gate?.lotId) {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const raw = String(reader.result || "");
+          const base64 = raw.split(",")[1] || "";
+          if (base64) {
+            await api.uploadLotPlateRecognition(gate.lotId, {
+              imageBase64: base64,
+              contentType: file.type || "image/jpeg",
+            });
+          }
+        } catch (lotRecErr) {
+          console.warn("Could not dispatch live camera plate recognition event:", lotRecErr);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+
+    if (activeTab === "checkin") {
+      setCheckInPlate(cleanDisplay);
+      const isMoto =
+        (result &&
+          (String(result.vehicleTypeSuggestion || "").toLowerCase().includes("moto") ||
+            String(result.vehicleTypeSuggestion) === "1" ||
+            result.plateType === "TwoLine")) ||
+        isVietnameseMotorbikePlate(cleanDisplay);
+      if (isMoto) {
+        setCheckInVehicleType("Motorcycle");
+        setCameraVehicleCategory("Motorcycle");
+      } else {
+        setCheckInVehicleType("Car");
+        setCameraVehicleCategory("Car");
+      }
+      renewCheckInKey();
+    } else {
+      setCheckOutQuery(cleanDisplay);
+      handleLookupFee(cleanDisplay);
+    }
+
+    setWebcamTargetCam(null);
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1450,16 +1840,62 @@ export default function VehicleOperations() {
               <div className="pm-op-card-body">
                 <form onSubmit={handleCheckIn} className="pm-form-stack">
                   <div className="pm-form-field">
-                    <label className="pm-form-label">
-                      Biển số xe nhận diện (hoặc nhập thủ công) <span className="pm-required">*</span>:
-                    </label>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
+                      <label className="pm-form-label" style={{ margin: 0 }}>
+                        Biển số xe nhận diện (hoặc nhập thủ công) <span className="pm-required">*</span>:
+                      </label>
+                      <div style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }} role="group" aria-label="Phương thức nhập biển số">
+                        <button
+                          type="button"
+                          className="pm-cam-upload-btn compact"
+                          style={{
+                            background: "rgba(16, 185, 129, 0.16)",
+                            borderColor: "rgba(16, 185, 129, 0.55)",
+                            color: "#34d399",
+                            padding: "4px 10px",
+                            fontWeight: 700,
+                          }}
+                          onClick={() =>
+                            setWebcamTargetCam(
+                              checkInVehicleType === "Motorcycle" ? "moto-cam2" : "car-cam1"
+                            )
+                          }
+                          title="Mở Camera Laptop quét biển số trực tiếp (Live Camera ANPR)"
+                        >
+                          <Camera size={12} />
+                          <span>Quét Camera Laptop</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="pm-cam-upload-btn compact"
+                          style={{ padding: "4px 10px" }}
+                          onClick={() =>
+                            handleTriggerUploadForCam(
+                              checkInVehicleType === "Motorcycle" ? "moto-cam2" : "car-cam1"
+                            )
+                          }
+                          title="Tải ảnh chụp biển số từ máy tính"
+                        >
+                          <Upload size={12} />
+                          <span>Tải ảnh</span>
+                        </button>
+                      </div>
+                    </div>
                     <input
                       type="text"
                       required
                       className="pm-form-input pm-plate-input"
-                      placeholder="VD: 51K-892.45"
+                      placeholder="VD: 51K-892.45, 78-AL 123.45, 59-P1 678.90"
                       value={checkInPlate}
-                      onChange={(e) => { setCheckInPlate(e.target.value); renewCheckInKey(); }}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setCheckInPlate(val);
+                        if (isVietnameseMotorbikePlate(val)) {
+                          setCheckInVehicleType("Motorcycle");
+                          setCameraVehicleCategory("Motorcycle");
+                        }
+                        renewCheckInKey();
+                      }}
                     />
                   </div>
 
@@ -1648,6 +2084,45 @@ export default function VehicleOperations() {
               </div>
 
               <div className="pm-op-card-body">
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
+                  <span className="pm-form-label" style={{ margin: 0 }}>Biển số xe ra bãi:</span>
+                  <div style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      className="pm-cam-upload-btn compact"
+                      style={{
+                        background: "rgba(16, 185, 129, 0.16)",
+                        borderColor: "rgba(16, 185, 129, 0.55)",
+                        color: "#34d399",
+                        padding: "4px 10px",
+                        fontWeight: 700,
+                      }}
+                      onClick={() =>
+                        setWebcamTargetCam(
+                          cameraVehicleCategory === "Motorcycle" ? "moto-cam2" : "car-cam1"
+                        )
+                      }
+                      title="Mở Camera Laptop quét biển số xe ra"
+                    >
+                      <Camera size={12} />
+                      <span>Quét Camera Laptop</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="pm-cam-upload-btn compact"
+                      style={{ padding: "4px 10px" }}
+                      onClick={() =>
+                        handleTriggerUploadForCam(
+                          cameraVehicleCategory === "Motorcycle" ? "moto-cam2" : "car-cam1"
+                        )
+                      }
+                      title="Tải ảnh biển số xe ra từ máy tính"
+                    >
+                      <Upload size={12} />
+                      <span>Tải ảnh</span>
+                    </button>
+                  </div>
+                </div>
                 <div className="pm-lookup-row" style={{ marginBottom: 10 }}>
                   <input
                     type="text"
@@ -2696,10 +3171,11 @@ export default function VehicleOperations() {
         <WebcamCaptureModal
           camId={webcamTargetCam}
           camTitle={getCamLabel(webcamTargetCam)}
-          onCapture={(file) => {
-            const target = webcamTargetCam;
+          onRecognizeFrame={recognizeLiveWebcamFrame}
+          onConfirmPlate={handleConfirmLiveWebcamPlate}
+          onSwitchToUpload={(targetCam) => {
             setWebcamTargetCam(null);
-            void processPlateFile(file, target);
+            handleTriggerUploadForCam(targetCam);
           }}
           onClose={() => setWebcamTargetCam(null)}
         />

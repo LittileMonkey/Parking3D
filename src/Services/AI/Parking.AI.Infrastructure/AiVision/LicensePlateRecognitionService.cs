@@ -203,37 +203,87 @@ public partial class LicensePlateRecognitionService(
     }
 
     /// <summary>
+    /// Các sê-ri gồm 2 chữ cái đặc thù của xe ô tô tại Việt Nam (Thông tư 24/2023/TT-BCA và Thông tư 58/2020/TT-BCA).
+    /// Ngoài các sê-ri chuyên biệt này, tất cả các biển có sê-ri 2 chữ cái (như AA, AB, AL, FA...) đều là biển xe máy.
+    /// </summary>
+    private static readonly HashSet<string> SpecialCarSeries = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "LD", "DA", "MK", "CD", "KT", "HC", "RM", "NG", "NN", "QT"
+    };
+
+    /// <summary>
     /// Định dạng biển số hiển thị thân thiện trên giao diện UI/UX theo quy chuẩn Việt Nam.
     /// <para>
-    /// - Ô tô: Mã tỉnh + Sê-ri chữ + Dấu gạch ngang + Số có chấm (Ví dụ: <b>51K-888.88</b>)
-    /// - Xe máy: Mã tỉnh + Gạch ngang + Sê-ri + Khoảng trắng + Số có chấm (Ví dụ: <b>59-P1 678.90</b>)
+    /// - Ô tô 5 số tiêu chuẩn: <b>51K-888.88</b>
+    /// - Ô tô 4 số tiêu chuẩn: <b>51A-1234</b>
+    /// - Ô tô sê-ri 2 chữ cái đặc thù: <b>51LD-123.45</b>
+    /// - Xe máy cũ (1 chữ + 1 số): <b>59-P1 678.90</b> hoặc <b>59-F1 1234</b>
+    /// - Xe máy mới (2 chữ cái theo TT 24/2023): <b>78-AL 123.45</b> hoặc <b>29-AB 1234</b>
     /// </para>
     /// </summary>
     public static string FormatDisplayPlate(string rawText)
     {
+        if (string.IsNullOrWhiteSpace(rawText)) return string.Empty;
+
+        // 0. Nếu chuỗi gốc có dấu phân cách rõ ràng cho xe máy 4 số cũ (VD: 59-F1 1234 hoặc 59-F1-1234)
+        var rawBike4Match = RawBike4DigitsRegex().Match(rawText.Trim().ToUpperInvariant());
+        if (rawBike4Match.Success)
+        {
+            return $"{rawBike4Match.Groups[1].Value}-{rawBike4Match.Groups[2].Value} {rawBike4Match.Groups[3].Value}";
+        }
+
         var cleaned = ToAlphanumericPlate(rawText);
         if (cleaned.Length < 7) return cleaned;
 
-        // Kiểm tra mẫu biển số xe ô tô: 2 số tỉnh + 1-2 chữ sê-ri + 4-5 số
-        var carMatch = CarPlateRegex().Match(cleaned);
-        if (carMatch.Success)
+        // 1. Kiểm tra mẫu biển xe ô tô 5 số tiêu chuẩn: 2 số tỉnh + 1 chữ cái sê-ri + đúng 5 số (VD: 51K88888, 30H99999, 43A12345)
+        var car5Match = Car5DigitsPlateRegex().Match(cleaned);
+        if (car5Match.Success)
         {
-            var province = carMatch.Groups[1].Value;
-            var series = carMatch.Groups[2].Value;
-            var numbers = carMatch.Groups[3].Value;
-
-            return numbers.Length == 5
-                ? $"{province}{series}-{numbers[..3]}.{numbers[3..]}"
-                : $"{province}{series}-{numbers}";
+            var province = car5Match.Groups[1].Value;
+            var series = car5Match.Groups[2].Value;
+            var numbers = car5Match.Groups[3].Value;
+            return $"{province}{series}-{numbers[..3]}.{numbers[3..]}";
         }
 
-        // Kiểm tra mẫu biển số xe máy: 2 số tỉnh + 1 chữ 1 số sê-ri (hoặc 2 chữ) + 4-5 số
-        var bikeMatch = BikePlateRegex().Match(cleaned);
-        if (bikeMatch.Success)
+        // 2. Kiểm tra mẫu biển xe ô tô 4 số tiêu chuẩn: 2 số tỉnh + 1 chữ cái sê-ri + đúng 4 số (VD: 51A1234, 29H5678)
+        var car4Match = Car4DigitsPlateRegex().Match(cleaned);
+        if (car4Match.Success)
         {
-            var province = bikeMatch.Groups[1].Value;
-            var series = bikeMatch.Groups[2].Value;
-            var numbers = bikeMatch.Groups[3].Value;
+            var province = car4Match.Groups[1].Value;
+            var series = car4Match.Groups[2].Value;
+            var numbers = car4Match.Groups[3].Value;
+            return $"{province}{series}-{numbers}";
+        }
+
+        // 3. Kiểm tra mẫu biển số xe máy sê-ri cũ: 2 số tỉnh + 1 chữ cái 1 số sê-ri + 4-5 số (VD: 59P167890, 59F11234)
+        var bikeOldMatch = BikeOldPlateRegex().Match(cleaned);
+        if (bikeOldMatch.Success)
+        {
+            var province = bikeOldMatch.Groups[1].Value;
+            var series = bikeOldMatch.Groups[2].Value;
+            var numbers = bikeOldMatch.Groups[3].Value;
+
+            return numbers.Length == 5
+                ? $"{province}-{series} {numbers[..3]}.{numbers[3..]}"
+                : $"{province}-{series} {numbers}";
+        }
+
+        // 4. Kiểm tra mẫu biển sê-ri 2 chữ cái (VD: 78AL12345 hoặc 51LD12345):
+        // - Nếu là sê-ri ô tô chuyên biệt (LD, DA, MK, CD, KT, HC, RM...): định dạng kiểu ô tô (VD: 51LD-123.45)
+        // - Các sê-ri 2 chữ cái khác (VD: 78AL, 29AB, 59AA...): định dạng kiểu xe máy chuẩn Thông tư 24/2023 (VD: 78-AL 123.45)
+        var twoLetterMatch = TwoLetterSeriesPlateRegex().Match(cleaned);
+        if (twoLetterMatch.Success)
+        {
+            var province = twoLetterMatch.Groups[1].Value;
+            var series = twoLetterMatch.Groups[2].Value;
+            var numbers = twoLetterMatch.Groups[3].Value;
+
+            if (SpecialCarSeries.Contains(series))
+            {
+                return numbers.Length == 5
+                    ? $"{province}{series}-{numbers[..3]}.{numbers[3..]}"
+                    : $"{province}{series}-{numbers}";
+            }
 
             return numbers.Length == 5
                 ? $"{province}-{series} {numbers[..3]}.{numbers[3..]}"
@@ -264,16 +314,27 @@ public partial class LicensePlateRecognitionService(
 
     /// <summary>
     /// Phỏng đoán loại phương tiện (Ô tô vs Xe máy) dựa trên đặc điểm cấu trúc ký tự sê-ri biển số:
-    /// Biển số xe máy Việt Nam thường có sê-ri gồm 1 chữ cái và 1 chữ số (ví dụ: P1, B2, C1, N1).
+    /// - Xe máy cũ: Sê-ri gồm 1 chữ cái và 1 chữ số (ví dụ: P1, B2, C1, N1).
+    /// - Xe máy mới (Thông tư 24/2023): Sê-ri gồm 2 chữ cái (ví dụ: AL, AA, AB...), loại trừ mã ô tô chuyên biệt (LD, DA...).
     /// </summary>
     private static VehicleType PredictVehicleType(string displayPlate)
     {
         if (displayPlate.Contains('-') && displayPlate.Length >= 8)
         {
             var parts = displayPlate.Split(['-', ' '], StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length > 1 && parts[1].Length == 2 && char.IsDigit(parts[1][1]))
+            if (parts.Length > 1 && parts[1].Length == 2)
             {
-                return VehicleType.Motorbike;
+                var series = parts[1];
+                // Sê-ri xe máy cũ: 1 chữ cái + 1 chữ số (P1, B2...)
+                if (char.IsLetter(series[0]) && char.IsDigit(series[1]))
+                {
+                    return VehicleType.Motorbike;
+                }
+                // Sê-ri xe máy mới (TT 24/2023): 2 chữ cái (AL, AA, AB...) không thuộc mã ô tô chuyên biệt
+                if (char.IsLetter(series[0]) && char.IsLetter(series[1]) && !SpecialCarSeries.Contains(series))
+                {
+                    return VehicleType.Motorbike;
+                }
             }
         }
 
@@ -300,20 +361,44 @@ public partial class LicensePlateRecognitionService(
     private static partial Regex CleanSpecialCharactersRegex();
 
     /// <summary>
-    /// Biểu thức chính quy phát hiện biển số xe ô tô Việt Nam:
+    /// Biểu thức chính quy phát hiện biển số xe ô tô 5 số tiêu chuẩn:
     /// Nhóm 1: 2 chữ số mã tỉnh (VD: 51, 30, 43, 29)
-    /// Nhóm 2: 1 đến 2 chữ cái sê-ri (VD: A, B, C, K, LD)
-    /// Nhóm 3: 4 đến 5 chữ số thứ tự (VD: 88888, 1234)
+    /// Nhóm 2: 1 chữ cái sê-ri (VD: A, B, C, K, H)
+    /// Nhóm 3: Đúng 5 chữ số thứ tự (VD: 88888, 99999)
     /// </summary>
-    [GeneratedRegex(@"^([0-9]{2})([A-Z]{1,2})([0-9]{4,5})$")]
-    private static partial Regex CarPlateRegex();
+    [GeneratedRegex(@"^([0-9]{2})([A-Z])([0-9]{5})$")]
+    private static partial Regex Car5DigitsPlateRegex();
 
     /// <summary>
-    /// Biểu thức chính quy phát hiện biển số xe máy Việt Nam:
-    /// Nhóm 1: 2 chữ số mã tỉnh (VD: 59, 29, 60)
-    /// Nhóm 2: Sê-ri xe máy gồm 1 chữ cái + 1 chữ số HOẶC 2 chữ cái (VD: P1, X2, FA)
-    /// Nhóm 3: 4 đến 5 chữ số thứ tự (VD: 67890)
+    /// Biểu thức chính quy phát hiện biển số xe ô tô 4 số tiêu chuẩn:
+    /// Nhóm 1: 2 chữ số mã tỉnh (VD: 51, 30, 43, 29)
+    /// Nhóm 2: 1 chữ cái sê-ri (VD: A, B, C, K, H)
+    /// Nhóm 3: Đúng 4 chữ số thứ tự (VD: 1234, 5678)
     /// </summary>
-    [GeneratedRegex(@"^([0-9]{2})([A-Z][0-9]|[A-Z]{2})([0-9]{4,5})$")]
-    private static partial Regex BikePlateRegex();
+    [GeneratedRegex(@"^([0-9]{2})([A-Z])([0-9]{4})$")]
+    private static partial Regex Car4DigitsPlateRegex();
+
+    /// <summary>
+    /// Biểu thức chính quy phát hiện biển số có sê-ri 2 chữ cái (VD: 78AL12345, 51LD12345, 29AB99999):
+    /// Nhóm 1: 2 chữ số mã tỉnh
+    /// Nhóm 2: 2 chữ cái sê-ri
+    /// Nhóm 3: 4 đến 5 chữ số thứ tự
+    /// </summary>
+    [GeneratedRegex(@"^([0-9]{2})([A-Z]{2})([0-9]{4,5})$")]
+    private static partial Regex TwoLetterSeriesPlateRegex();
+
+    /// <summary>
+    /// Biểu thức chính quy phát hiện biển số xe máy sê-ri cũ 4 số có ký tự phân cách (VD: 59-F1 1234, 59-F1-1234):
+    /// </summary>
+    [GeneratedRegex(@"^([0-9]{2})[- ]([A-Z][0-9])[- ]?([0-9]{4})$")]
+    private static partial Regex RawBike4DigitsRegex();
+
+    /// <summary>
+    /// Biểu thức chính quy phát hiện biển số xe máy sê-ri cũ Việt Nam:
+    /// Nhóm 1: 2 chữ số mã tỉnh (VD: 59, 29, 60)
+    /// Nhóm 2: Sê-ri xe máy gồm 1 chữ cái + 1 chữ số (VD: P1, X2, F1)
+    /// Nhóm 3: 4 đến 5 chữ số thứ tự (VD: 67890, 1234)
+    /// </summary>
+    [GeneratedRegex(@"^([0-9]{2})([A-Z][0-9])([0-9]{4,5})$")]
+    private static partial Regex BikeOldPlateRegex();
 }

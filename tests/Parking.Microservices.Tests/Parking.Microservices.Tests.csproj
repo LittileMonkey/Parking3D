@@ -10,6 +10,7 @@
     <ProjectReference Include="../../src/Services/Parking/Parking.Parking.Infrastructure/Parking.Parking.Infrastructure.csproj" />
     <ProjectReference Include="../../src/Services/Parking/Parking.Parking.Persistence/Parking.Parking.Persistence.csproj" />
     <ProjectReference Include="../../src/Services/Identity/Parking.Identity.Persistence/Parking.Identity.Persistence.csproj" />
+    <ProjectReference Include="../../src/Services/Identity/Parking.Identity.Application/Parking.Identity.Application.csproj" />
     <ProjectReference Include="../../src/Services/AI/Parking.AI.Infrastructure/Parking.AI.Infrastructure.csproj" />
     <ProjectReference Include="../../src/Services/Identity/Parking.Identity.Infrastructure/Parking.Identity.Infrastructure.csproj" />
     <ProjectReference Include="../../src/BuildingBlocks/Parking.PricingEngine/Parking.PricingEngine.csproj" />
