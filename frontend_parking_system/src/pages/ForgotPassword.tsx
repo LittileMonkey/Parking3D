@@ -1,9 +1,21 @@
 import { useState, type FormEvent } from "react";
-import { ArrowLeft, CheckCircle2 } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Lock,
+  Mail,
+  ShieldCheck,
+  AlertCircle
+} from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../services/api";
+import AuthShowcase from "../components/auth/AuthShowcase";
+import "./Auth.css";
 
-type Step = "email" | "otp" | "password" | "success";
+type Step = "email" | "password" | "success";
 
 export default function ForgotPassword() {
   const [step, setStep] = useState<Step>("email");
@@ -11,6 +23,8 @@ export default function ForgotPassword() {
   const [otp, setOtp] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -24,42 +38,40 @@ export default function ForgotPassword() {
       const normalized = email.trim().toLowerCase();
       setBusy(true);
       try {
-        const res = await api.forgetPassword(normalized);
+        await api.forgetPassword(normalized);
         setEmail(normalized);
-        setNotice(res?.message || "Đã gửi mã OTP qua email. Vui lòng kiểm tra hộp thư.");
-        setStep("otp");
+        setNotice("Nếu email đã được đăng ký, mã xác thực sẽ được gửi đến hộp thư. Mã có hiệu lực trong 5 phút.");
+        setStep("password");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Không gửi được mã OTP.");
+        setError(err instanceof Error ? err.message : "Không gửi được mã OTP khôi phục.");
       } finally {
         setBusy(false);
       }
       return;
     }
 
-    if (step === "otp") {
-      if (!/^\d{6}$/.test(otp)) {
-        setError("OTP phải gồm đúng 6 chữ số.");
-        return;
-      }
-      setStep("password");
-      return;
-    }
+    if (!/^\d{6}$/.test(otp)) { setError("Mã xác thực phải gồm đúng 6 chữ số."); return; }
 
     if (password.length < 8) {
       setError("Mật khẩu mới cần có ít nhất 8 ký tự.");
       return;
     }
     if (password !== confirmPassword) {
-      setError("Mật khẩu xác nhận chưa khớp.");
+      setError("Mật khẩu xác nhận chưa khớp với mật khẩu mới.");
       return;
     }
 
     setBusy(true);
     try {
       await api.resetPassword(email, otp, password);
+      setOtp(""); setPassword(""); setConfirmPassword("");
       setStep("success");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Không đặt lại được mật khẩu.");
+      const message = err instanceof Error ? err.message : "";
+      setError(/expired|no active verification/i.test(message) ? "Mã xác thực đã hết hạn. Vui lòng yêu cầu mã mới."
+        : /maximum verification|locked/i.test(message) ? "Bạn đã thử quá nhiều lần. Vui lòng chờ rồi yêu cầu mã mới."
+        : /verification code is incorrect|otp.*invalid/i.test(message) ? "Mã xác thực chưa đúng. Vui lòng kiểm tra email."
+        : "Không đặt lại được mật khẩu. Vui lòng kiểm tra mã xác thực và thử lại.");
     } finally {
       setBusy(false);
     }
@@ -68,120 +80,207 @@ export default function ForgotPassword() {
   const goBack = () => {
     setError("");
     setNotice("");
-    setStep(step === "password" ? "otp" : "email");
+    setOtp(""); setPassword(""); setConfirmPassword(""); setStep("email");
   };
 
   return (
-    <main className="forgot-page">
-      <Link className="forgot-back-link" to="/login">
-        <ArrowLeft size={17} />
-        Quay lại đăng nhập
-      </Link>
+    <div className="auth-split-layout">
+      {/* Ambient Radial Lighting */}
+      <div className="auth-ambient-glow top-left" aria-hidden="true" />
+      <div className="auth-ambient-glow bottom-right" aria-hidden="true" />
 
-      <section className="forgot-card">
-        {step === "success" ? (
-          <div className="forgot-success" role="status">
-            <CheckCircle2 size={48} />
-            <h1>Đổi mật khẩu thành công</h1>
-            <p>Bạn có thể đăng nhập bằng mật khẩu mới ngay bây giờ.</p>
-            <Link className="forgot-submit" to="/login">Đi đến đăng nhập</Link>
-          </div>
-        ) : (
-          <>
-            <header className="forgot-heading">
-              <h1>
-                {step === "email" && "Quên mật khẩu"}
-                {step === "otp" && "Xác thực OTP"}
-                {step === "password" && "Đặt mật khẩu mới"}
-              </h1>
-              <p>
-                {step === "email" && "Nhập email để nhận mã PIN xác thực qua Gmail."}
-                {step === "otp" && <>Nhập mã OTP đã được gửi đến <strong>{email}</strong>.</>}
-                {step === "password" && "Tạo mật khẩu mới để hoàn tất khôi phục tài khoản."}
+      <AuthShowcase variant="recovery" />
+
+      {/* RIGHT COLUMN: FORGOT FORM */}
+      <main className="auth-form-wrapper">
+        <nav className="auth-top-nav">
+          <Link to="/login" className="auth-nav-link">
+            <ArrowLeft size={15} /> Đăng nhập
+          </Link>
+        </nav>
+
+        <section className="auth-card" aria-labelledby="forgot-heading">
+          {step === "success" ? (
+            <div className="auth-success-card">
+              <div className="auth-success-icon-box">
+                <CheckCircle2 size={38} />
+              </div>
+              <h2 id="forgot-heading" className="auth-card-title">Đổi mật khẩu thành công!</h2>
+              <p className="auth-card-subtitle" style={{ marginBottom: "24px" }}>
+                Mật khẩu của tài khoản <strong>{email}</strong> đã được cập nhật thành công.
               </p>
-            </header>
+              <Link to="/login" className="auth-submit-btn" style={{ textDecoration: "none" }}>
+                Đăng nhập ngay
+              </Link>
+            </div>
+          ) : (
+            <>
+              <header className="auth-card-header">
+                <h2 id="forgot-heading" className="auth-card-title">
+                  {step === "email" && "Quên mật khẩu?"}
+                  {step === "password" && "Tạo mật khẩu mới"}
+                </h2>
+                <p className="auth-card-subtitle">
+                  {step === "email" && "Nhập email đã đăng ký để nhận mã xác thực."}
+                  {step === "password" && <>Nhập mã gửi tới <strong>{email}</strong> và mật khẩu mới.</>}
+                </p>
+              </header>
 
-            <form className="forgot-form" onSubmit={submit}>
-              {error && <div className="forgot-error" role="alert">{error}</div>}
-              {notice && <div className="forgot-notice" role="status">{notice}</div>}
-
-              {step === "email" && (
-                <div className="forgot-field">
-                  <label htmlFor="forgot-email">Địa chỉ email</label>
-                  <input
-                    id="forgot-email"
-                    type="email"
-                    autoComplete="email"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    placeholder="name@example.com"
-                    required
-                  />
+              {error && (
+                <div className="auth-alert auth-alert-error" role="alert">
+                  <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 2 }} />
+                  <div>{error}</div>
                 </div>
               )}
 
-              {step === "otp" && (
-                <div className="forgot-field">
-                  <label htmlFor="forgot-otp">Mã OTP 6 chữ số</label>
-                  <input
-                    id="forgot-otp"
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    maxLength={6}
-                    value={otp}
-                    onChange={(event) => setOtp(event.target.value.replace(/\D/g, ""))}
-                    placeholder="Nhập mã OTP"
-                    required
-                  />
+              {notice && (
+                <div className="auth-alert auth-alert-notice" role="status">
+                  <div>{notice}</div>
                 </div>
               )}
+
+              <form className="auth-form" onSubmit={submit}>
+                {step === "email" && (
+                  <div className="auth-form-field">
+                    <label htmlFor="forgot-email" className="auth-form-label">
+                      <Mail size={14} /> Địa chỉ Email
+                    </label>
+                    <div className="auth-input-wrapper">
+                      <Mail size={17} className="auth-input-icon" />
+                      <input
+                        id="forgot-email"
+                        type="email"
+                        autoComplete="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="name@example.com"
+                        className="auth-input"
+                        required
+                        disabled={busy}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {step === "password" && (
+                  <div className="auth-form-field">
+                    <label htmlFor="forgot-otp" className="auth-form-label">
+                      <KeyRound size={14} /> Mã xác thực (OTP 6 số)
+                    </label>
+                    <div className="auth-input-wrapper">
+                      <KeyRound size={17} className="auth-input-icon" />
+                      <input
+                        id="forgot-otp"
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        value={otp}
+                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                        placeholder="123456"
+                        className="auth-input"
+                        required
+                        disabled={busy}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {step === "password" && (
+                  <>
+                    <div className="auth-form-field">
+                      <label htmlFor="forgot-password" className="auth-form-label">
+                        <Lock size={14} /> Mật khẩu mới
+                      </label>
+                      <div className="auth-input-wrapper">
+                        <Lock size={17} className="auth-input-icon" />
+                        <input
+                          id="forgot-password"
+                          type={showPassword ? "text" : "password"}
+                          autoComplete="new-password"
+                          minLength={8}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="Tối thiểu 8 ký tự"
+                          className="auth-input"
+                          required
+                          disabled={busy}
+                        />
+                        <button
+                          type="button"
+                          className="auth-password-toggle"
+                          aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                          onClick={() => setShowPassword(!showPassword)}
+                          disabled={busy}
+                        >
+                          {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="auth-form-field">
+                      <label htmlFor="forgot-confirm" className="auth-form-label">
+                        <ShieldCheck size={14} /> Xác nhận mật khẩu mới
+                      </label>
+                      <div className="auth-input-wrapper">
+                        <ShieldCheck size={17} className="auth-input-icon" />
+                        <input
+                          id="forgot-confirm"
+                          type={showConfirmPassword ? "text" : "password"}
+                          autoComplete="new-password"
+                          minLength={8}
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          placeholder="Nhập lại mật khẩu mới"
+                          className="auth-input"
+                          required
+                          disabled={busy}
+                        />
+                        <button type="button" className="auth-password-toggle" aria-label={showConfirmPassword ? "Ẩn mật khẩu xác nhận" : "Hiện mật khẩu xác nhận"} onClick={() => setShowConfirmPassword(!showConfirmPassword)} disabled={busy}>
+                          {showConfirmPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Primary Action Button (Deep Navy) */}
+                <button className="auth-submit-btn" type="submit" disabled={busy}>
+                  {busy
+                    ? "Đang xử lý..."
+                    : step === "email"
+                    ? "Gửi mã khôi phục"
+                    : "Đổi mật khẩu"}
+                </button>
+              </form>
 
               {step === "password" && (
-                <>
-                  <div className="forgot-field">
-                    <label htmlFor="forgot-password">Mật khẩu mới</label>
-                    <input
-                      id="forgot-password"
-                      type="password"
-                      autoComplete="new-password"
-                      minLength={8}
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                      placeholder="Ít nhất 8 ký tự"
-                      required
-                    />
-                  </div>
-                  <div className="forgot-field">
-                    <label htmlFor="forgot-confirm-password">Xác nhận mật khẩu mới</label>
-                    <input
-                      id="forgot-confirm-password"
-                      type="password"
-                      autoComplete="new-password"
-                      minLength={8}
-                      value={confirmPassword}
-                      onChange={(event) => setConfirmPassword(event.target.value)}
-                      placeholder="Nhập lại mật khẩu mới"
-                      required
-                    />
-                  </div>
-                </>
+                <div style={{ marginTop: "16px", textAlign: "center" }}>
+                  <button
+                    type="button"
+                    onClick={goBack}
+                    disabled={busy}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "var(--color-navy)",
+                      fontWeight: 600,
+                      fontSize: "13px",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                    }}
+                  >
+                    <ArrowLeft size={14} />
+                    Gửi lại mã / đổi email
+                  </button>
+                </div>
               )}
-
-              <button className="forgot-submit" type="submit" disabled={busy}>
-                {busy ? "Đang xử lý..." : step === "email" ? "Gửi mã PIN" : step === "otp" ? "Xác thực OTP" : "Đổi mật khẩu"}
-              </button>
-            </form>
-
-            {(step === "otp" || step === "password") && (
-              <button className="forgot-step-back" type="button" onClick={goBack}>
-                <ArrowLeft size={15} />
-                {step === "otp" ? "Quay lại nhập email" : "Quay lại xác thực OTP"}
-              </button>
-            )}
-          </>
-        )}
-      </section>
-    </main>
+            </>
+          )}
+        </section>
+      </main>
+    </div>
   );
 }

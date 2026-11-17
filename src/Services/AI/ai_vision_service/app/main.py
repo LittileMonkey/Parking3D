@@ -98,7 +98,7 @@ def health_check():
 
 def _sanitize_digits(text: str) -> str:
     """
-    Chuẩn hóa các ký tự chữ cái hay bị OCR nhận diện nhầm thành chữ số trong dãy số sê-ri biển số:
+    Chuẩn hóa các ký tự chữ cái hay bị OCR nhận diện nhầm thành chữ số trong dãy số thứ tự biển số:
     Ví dụ: 'G', 'Q', 'g', 'q' -> '9'; 'B' -> '8'; 'O', 'D' -> '0'; 'I', 'L', 'T' -> '1'; 'Z' -> '2'; 'S' -> '5'; 'A' -> '4'
     """
     trans = str.maketrans({
@@ -115,22 +115,43 @@ def _sanitize_digits(text: str) -> str:
     return re.sub(r'[^0-9]', '', converted)
 
 
-def _ocr_read_lines(image_crop: np.ndarray) -> tuple[str, float, str]:
+def _normalize_top_line(text: str) -> str:
     """
-    Phân tích và nhận diện cấu trúc dòng văn bản của biển số:
-    - Sắp xếp các khối văn bản theo trục tung Y (từ trên xuống dưới).
-    - Nhận diện Dòng 1: Mã tỉnh + sê-ri chữ (VD: 29C1, 59P1, 51K, 30H).
-    - Nhận diện Dòng 2: Dãy số thứ tự 4-5 chữ số (VD: 99999, 67890, 12345).
-    - Trả về (plate_text, confidence, plate_type: 'OneLine' hoặc 'TwoLine').
+    Chuẩn hóa Dòng 1 của biển số 2 dòng (Mã tỉnh 2 chữ số + Sê-ri 1-2 chữ cái hoặc 1 chữ 1 số, VD: 78AL, 59P1, 51K):
+    - 2 ký tự đầu bắt buộc là chữ số mã tỉnh (chuyển B->8, S->5, O/D->0, I/L/T->1, Z->2, G/Q->9, A->4)
+    - Ký tự thứ 3 bắt buộc là chữ cái sê-ri đầu tiên (chuyển 8->B, 0->D, 1->L, 2->Z, 4->A, 5->S)
+    - Ký tự thứ 4 (nếu có) giữ nguyên chữ cái (biển mới 2 chữ: 78AL, 59AA) hoặc chữ số (biển cũ 1 chữ 1 số: 59P1)
     """
+    clean = re.sub(r'[^A-Z0-9]', '', text.strip().upper())
+    if len(clean) < 3 or len(clean) > 4:
+        return clean
+
+    to_digit = {
+        'G': '9', 'Q': '9', 'B': '8', 'O': '0', 'D': '0',
+        'I': '1', 'L': '1', 'T': '1', 'Z': '2', 'S': '5', 'A': '4'
+    }
+    to_alpha = {
+        '8': 'B', '0': 'D', '1': 'L', '2': 'Z', '4': 'A', '5': 'S', '6': 'G', '9': 'G'
+    }
+    p1 = to_digit.get(clean[0], clean[0])
+    p2 = to_digit.get(clean[1], clean[1])
+    s1 = to_alpha.get(clean[2], clean[2])
+    s2 = clean[3] if len(clean) == 4 else ""
+    return f"{p1}{p2}{s1}{s2}"
+
+
+def _is_complete_vietnamese_plate(text: str) -> bool:
+    clean = re.sub(r'[^A-Z0-9]', '', (text or "").upper())
+    return bool(re.match(r'^[0-9]{2}([A-Z]{1,2}|[A-Z][0-9])[0-9]{4,5}$', clean))
+
+
+def _ocr_extract_candidates(image_crop: np.ndarray) -> list[dict]:
     if ocr_reader is None or image_crop is None or image_crop.size == 0:
-        return "", 0.0, "OneLine"
+        return []
 
     raw_candidates = []
-
     if ocr_type == "easyocr":
         try:
-            # Tiền xử lý lọc nhiễu tăng cường độ nét chữ
             gray = cv2.cvtColor(image_crop, cv2.COLOR_BGR2GRAY)
             clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
             enh = clahe.apply(gray)
@@ -144,11 +165,13 @@ def _ocr_read_lines(image_crop: np.ndarray) -> tuple[str, float, str]:
                     continue
                 clean = re.sub(r'[^A-Z0-9]', '', text.strip().upper())
                 digits = _sanitize_digits(text)
+                top_norm = _normalize_top_line(text)
                 ys = [p[1] for p in bbox]
                 cy = sum(ys) / len(ys) if ys else 0
                 raw_candidates.append({
                     "raw": text.strip(),
                     "clean": clean,
+                    "top_norm": top_norm,
                     "digits": digits,
                     "conf": float(conf),
                     "cy": cy
@@ -166,11 +189,13 @@ def _ocr_read_lines(image_crop: np.ndarray) -> tuple[str, float, str]:
                     conf = line[1][1]
                     clean = re.sub(r'[^A-Z0-9]', '', text.strip().upper())
                     digits = _sanitize_digits(text)
+                    top_norm = _normalize_top_line(text)
                     ys = [p[1] for p in box]
                     cy = sum(ys) / len(ys) if ys else 0
                     raw_candidates.append({
                         "raw": text.strip(),
                         "clean": clean,
+                        "top_norm": top_norm,
                         "digits": digits,
                         "conf": float(conf),
                         "cy": cy
@@ -178,20 +203,30 @@ def _ocr_read_lines(image_crop: np.ndarray) -> tuple[str, float, str]:
         except Exception as e:
             print(f"[OCR] PaddleOCR error: {e}")
 
+    raw_candidates.sort(key=lambda x: x["cy"])
+    return raw_candidates
+
+
+def _ocr_read_lines(image_crop: np.ndarray) -> tuple[str, float, str]:
+    """
+    Phân tích và nhận diện cấu trúc dòng văn bản của biển số:
+    - Sắp xếp các khối văn bản theo trục tung Y (từ trên xuống dưới).
+    - Nhận diện Dòng 1: Mã tỉnh + sê-ri chữ (VD: 78AL, 29C1, 59P1, 51K, 30H).
+    - Nhận diện Dòng 2: Dãy số thứ tự 4-5 chữ số (VD: 99999, 67890, 12345).
+    - Trả về (plate_text, confidence, plate_type: 'OneLine' hoặc 'TwoLine').
+    """
+    raw_candidates = _ocr_extract_candidates(image_crop)
     if not raw_candidates:
         return "", 0.0, "OneLine"
 
-    # Sắp xếp các dòng theo tọa độ Y từ trên xuống dưới
-    raw_candidates.sort(key=lambda x: x["cy"])
-
-    # 1. Tìm ứng viên Dòng 1 (Mã tỉnh + sê-ri: VD 29C1, 59P1, 51K, 30H)
+    # 1. Tìm ứng viên Dòng 1 (Mã tỉnh + sê-ri: VD 78AL, 59AA, 29C1, 59P1, 51K, 30H)
     line1 = None
     for cand in raw_candidates:
-        if re.match(r'^[0-9]{2}[A-Z]{1,2}[0-9]?$', cand["clean"]):
+        if re.match(r'^[0-9]{2}([A-Z]{1,2}|[A-Z][0-9])$', cand["top_norm"]):
             line1 = cand
             break
 
-    # 2. Tìm ứng viên Dòng 2 (Số thứ tự: 4-5 chữ số, VD 99999, 67890)
+    # 2. Tìm ứng viên Dòng 2 (Số thứ tự: 4-5 chữ số, VD 99999, 67890, 12345)
     line2 = None
     for cand in raw_candidates:
         if cand is not line1 and re.match(r'^[0-9]{4,5}$', cand["digits"]):
@@ -200,17 +235,25 @@ def _ocr_read_lines(image_crop: np.ndarray) -> tuple[str, float, str]:
 
     # Nếu tìm thấy cả 2 dòng biển số
     if line1 and line2:
-        combined = f"{line1['clean']} {line2['digits']}"
+        combined = f"{line1['top_norm']} {line2['digits']}"
         avg_conf = float((line1['conf'] + line2['conf']) / 2)
-        # Nâng confidence nếu cấu trúc chuẩn biển số xe Việt Nam
         if avg_conf < 0.85:
             avg_conf = min(0.92, avg_conf + 0.15)
         return combined, avg_conf, "TwoLine"
 
-    # Nếu chỉ tìm thấy 1 dòng là biển dài ô tô (VD: 51K88888 hoặc 30H12345)
+    # Nếu chỉ tìm thấy 1 dòng có đầy đủ cả mã tỉnh + sê-ri + số thứ tự (ô tô 51K88888, xe máy mới 78AL12345 hoặc xe máy cũ 59P112345)
     for cand in raw_candidates:
-        if re.match(r'^[0-9]{2}[A-Z]{1,2}[0-9]{4,5}$', cand["clean"]):
+        if re.match(r'^[0-9]{2}[A-Z][0-9]{4,5}$', cand["clean"]):
             return cand["clean"], max(cand["conf"], 0.88), "OneLine"
+        if re.match(r'^[0-9]{2}([A-Z][0-9]|[A-Z]{2})[0-9]{4,5}$', cand["clean"]):
+            return cand["clean"], max(cand["conf"], 0.88), "TwoLine"
+        # Thử chuẩn hóa 3 ký tự đầu + các ký tự cuối là số nếu OCR ghép liền 2 dòng
+        if 7 <= len(cand["clean"]) <= 9:
+            head = _normalize_top_line(cand["clean"][:-5] if len(cand["clean"]) >= 8 else cand["clean"][:-4])
+            tail = _sanitize_digits(cand["clean"][len(head):])
+            if re.match(r'^[0-9]{2}([A-Z]{1,2}|[A-Z][0-9])$', head) and re.match(r'^[0-9]{4,5}$', tail):
+                p_type = "OneLine" if len(head) == 3 else "TwoLine"
+                return f"{head} {tail}", max(cand["conf"], 0.86), p_type
 
     # Ghép tất cả các dòng tìm được
     all_clean = [c["clean"] for c in raw_candidates if len(c["clean"]) >= 2]
@@ -231,7 +274,7 @@ def _process_image_array(image: np.ndarray, start_time: float) -> tuple[str, flo
     - Giai đoạn 2: Phân tích bố cục biển (Layout Analysis):
       + Phóng to ảnh nhỏ (enlarge_small_crop)
       + Nhận dạng ký tự quang học phân tích dòng 1 & dòng 2
-      + Tách dòng thông minh (split_compact_crop) cho biển số 2 dòng
+      + Tách dòng thông minh (split_compact_crop) cho biển số 2 dòng khi đọc nguyên khối chưa ra biển chuẩn
     - Giai đoạn 3: Đánh giá chất lượng an toàn (valid, low_confidence, invalid_format, empty)
     """
     h, w = image.shape[:2]
@@ -245,7 +288,7 @@ def _process_image_array(image: np.ndarray, start_time: float) -> tuple[str, flo
         ocr_conf = det_conf
 
     # Phóng to ảnh nhỏ để nâng cao độ nét trước khi xử lý
-    cropped = enlarge_small_crop(cropped, minimum_side=48)
+    cropped = enlarge_small_crop(cropped, minimum_side=64)
 
     # 2. Xử lý OCR kết hợp phân tích Layout
     if ocr_reader is not None:
@@ -253,27 +296,59 @@ def _process_image_array(image: np.ndarray, start_time: float) -> tuple[str, flo
             # Chạy nhận diện phân tích cấu trúc dòng trên ảnh cropped
             parsed_text, parsed_conf, detected_type = _ocr_read_lines(cropped)
 
-            if parsed_text:
+            if parsed_text and _is_complete_vietnamese_plate(parsed_text):
                 plate_text = parsed_text
                 ocr_conf = parsed_conf
                 plate_type = detected_type
-            elif is_compact_plate(cropped, aspect_ratio_threshold=1.6):
-                # Fallback: Thuật toán tách dòng bằng phương sai điểm ảnh hàng ngang
-                try:
-                    top_crop, bottom_crop = split_compact_crop(cropped, search_start=0.35, search_end=0.65)
-                    top_txt, top_conf, _ = _ocr_read_lines(top_crop)
-                    bot_txt, bot_conf, _ = _ocr_read_lines(bottom_crop)
+            else:
+                # Nếu ảnh có tỷ lệ biển 2 dòng (hoặc chưa đọc ra biển hợp lệ), tách riêng Dòng 1 và Dòng 2 để OCR độc lập
+                if is_compact_plate(cropped, aspect_ratio_threshold=2.1):
+                    try:
+                        top_crop, bottom_crop = split_compact_crop(cropped, search_start=0.32, search_end=0.68)
+                        top_crop = enlarge_small_crop(top_crop, minimum_side=48)
+                        bottom_crop = enlarge_small_crop(bottom_crop, minimum_side=48)
 
-                    if top_txt and bot_txt:
-                        plate_text = f"{top_txt.strip()} {bot_txt.strip()}"
-                        ocr_conf = float((top_conf + bot_conf) / 2)
-                        plate_type = "TwoLine"
-                    elif top_txt or bot_txt:
-                        plate_text = (top_txt or bot_txt).strip()
-                        ocr_conf = float(top_conf if top_txt else bot_conf)
-                        plate_type = "TwoLine"
-                except Exception:
-                    pass
+                        top_cands = _ocr_extract_candidates(top_crop)
+                        bot_cands = _ocr_extract_candidates(bottom_crop)
+
+                        top_str = ""
+                        top_cf = 0.85
+                        for tc in top_cands:
+                            if re.match(r'^[0-9]{2}([A-Z]{1,2}|[A-Z][0-9])$', tc["top_norm"]):
+                                top_str = tc["top_norm"]
+                                top_cf = tc["conf"]
+                                break
+                        if not top_str and top_cands:
+                            joined_top = "".join(c["clean"] for c in top_cands)
+                            norm_joined = _normalize_top_line(joined_top)
+                            if re.match(r'^[0-9]{2}([A-Z]{1,2}|[A-Z][0-9])$', norm_joined):
+                                top_str = norm_joined
+                                top_cf = float(np.mean([c["conf"] for c in top_cands]))
+
+                        bot_str = ""
+                        bot_cf = 0.85
+                        for bc in bot_cands:
+                            if re.match(r'^[0-9]{4,5}$', bc["digits"]):
+                                bot_str = bc["digits"]
+                                bot_cf = bc["conf"]
+                                break
+                        if not bot_str and bot_cands:
+                            joined_digits = _sanitize_digits("".join(c["raw"] for c in bot_cands))
+                            if re.match(r'^[0-9]{4,5}$', joined_digits):
+                                bot_str = joined_digits
+                                bot_cf = float(np.mean([c["conf"] for c in bot_cands]))
+
+                        if top_str and bot_str:
+                            plate_text = f"{top_str} {bot_str}"
+                            ocr_conf = max(0.86, float((top_cf + bot_cf) / 2))
+                            plate_type = "TwoLine"
+                    except Exception as split_err:
+                        print(f"[OCR] Two-line split OCR fallback error: {split_err}")
+
+                if not plate_text and parsed_text:
+                    plate_text = parsed_text
+                    ocr_conf = parsed_conf
+                    plate_type = detected_type
         except Exception as e:
             print(f"[OCR] General OCR recognition error: {e}")
 

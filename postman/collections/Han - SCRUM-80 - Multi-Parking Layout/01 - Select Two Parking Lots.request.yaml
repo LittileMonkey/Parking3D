@@ -1,0 +1,30 @@
+$kind: http-request
+description: Run first. Select two existing lots and save lotId/otherLotId. DEMO-Q1 is preferred when lotId is empty. Clear snapshots from previous runs.
+url: "{{baseUrl}}/api/v1/parking-lots"
+method: GET
+headers:
+  Accept: application/json
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("HTTP 200", () => pm.response.to.have.status(200));
+      const lots = pm.response.json().result;
+      const selectedId = pm.environment.get("lotId");
+      const otherId = pm.environment.get("otherLotId");
+      const primary = selectedId ? lots.find(lot => lot.id === selectedId) : lots.find(lot => lot.code === "DEMO-Q1") || lots[0];
+      const secondary = otherId ? lots.find(lot => lot.id === otherId) : lots.find(lot => lot.id !== primary?.id);
+
+      pm.test("Two distinct existing parking lots", function () {
+          pm.expect(lots).to.be.an("array");
+          pm.expect(new Set(lots.map(lot => lot.id)).size).to.be.at.least(2);
+          pm.expect(primary, "Check lotId in the environment").to.exist;
+          pm.expect(secondary, "Check otherLotId in the environment").to.exist;
+          pm.expect(secondary.id).to.not.equal(primary.id);
+      });
+      if (primary && secondary && primary.id !== secondary.id) {
+          pm.environment.set("lotId", primary.id);
+          pm.environment.set("otherLotId", secondary.id);
+      }
+      ["scrum80_primaryLayout", "scrum80_primaryIds", "scrum80_currentIds"].forEach(key => pm.collectionVariables.unset(key));
+    language: text/javascript
+order: 1000

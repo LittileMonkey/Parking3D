@@ -1,3 +1,4 @@
+import { StaffDialog } from "../../components/staff/StaffUi";
 import ReservationRelocation from "../../components/parking/ReservationRelocation";
 import ParkingViewer, { type ModelLevel } from "../../components/parking/ParkingViewer";
 import { useParkingHub } from "../../components/parking/useParkingHub";
@@ -45,6 +46,7 @@ export default function LiveParkingView() {
   const { selectedLotId } = useOutletContext<{ selectedLotId?: string }>() || {};
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [levels, setLevels] = useState<Array<{ levelId: string; levelCode: string; levelName: string; totalSlots: number; availableSlots: number }>>([]);
   const [selectedLevelId, setSelectedLevelId] = useState<string>("");
   const [slots, setSlots] = useState<ParkingSlotDetail[]>([]);
@@ -82,12 +84,13 @@ export default function LiveParkingView() {
       }
       setLevels(data.levels);
       setSlots(data.slots);
+      setLoadError("");
       setSessions(sessionRows);
       if (data.levels.length > 0 && !data.levels.some(level => level.levelId === selectedLevelId)) {
         setSelectedLevelId(data.levels[0].levelId);
       }
     } catch (err) {
-      console.error("Load levels error:", err);
+      setLoadError(err instanceof Error ? err.message : "Không tải được sơ đồ bãi. Hãy thử lại.");
     } finally {
       setLoading(false);
     }
@@ -246,16 +249,17 @@ export default function LiveParkingView() {
 
   return (
     <div className="pm-layout-wrapper">
-      <ReservationRelocation key={selectedLotId} lotId={selectedLotId ?? ""} onMoved={() => void loadData()} />
+      {loadError && <div className="staff-alert error" role="alert">{loadError}<button className="staff-button" onClick={() => void loadData()}>Thử lại</button></div>}
+
       {/* ─── 1. Page Header & Theme Unification ───────────────────────────── */}
       <div className="pm-header-row">
         <div>
           <h1 className="pm-section-title pm-title-flex">
             <Grid3X3 size={26} color="var(--pm-teal)" />
-            <span>Giám sát Mặt bằng &amp; Sơ đồ Vị trí Ô đỗ</span>
+            <span>Sơ đồ bãi đỗ</span>
           </h1>
           <p className="pm-section-subtitle">
-            Trực quan hóa trạng thái vị trí đỗ xe theo tầng thời gian thực, can thiệp cảm biến và khóa bảo trì
+            Theo dõi vị trí theo tầng, kiểm tra phiên đỗ và quản lý bảo trì tại bãi đang chọn.
           </p>
         </div>
 
@@ -274,24 +278,7 @@ export default function LiveParkingView() {
               </button>
             ))
           ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => setSelectedLevelId("lvl-b1")}
-                className={`pm-level-btn ${selectedLevelId !== "lvl-b2" ? "active" : ""}`}
-              >
-                <Layers size={15} />
-                <span>Tầng Hầm B1</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedLevelId("lvl-b2")}
-                className={`pm-level-btn ${selectedLevelId === "lvl-b2" ? "active" : ""}`}
-              >
-                <Layers size={15} />
-                <span>Tầng Hầm B2</span>
-              </button>
-            </>
+            <span className="staff-muted staff-small">{loading ? "Đang tải tầng…" : "Chưa có tầng được cấu hình"}</span>
           )}
         </div>
       </div>
@@ -325,7 +312,7 @@ export default function LiveParkingView() {
             <Car size={16} color="var(--pm-teal)" />
           </div>
           <div className="pm-kpi-val-bold cyan">{occupiedCount}</div>
-          <div className="pm-kpi-desc-sm cyan-text">Cảm biến báo có vật cản</div>
+          <div className="pm-kpi-desc-sm cyan-text">Theo phiên đỗ thực tế</div>
         </div>
 
         {/* Card 4: Đặt trước / Giữ chỗ */}
@@ -335,7 +322,7 @@ export default function LiveParkingView() {
             <Clock size={16} color="#fbbf24" />
           </div>
           <div className="pm-kpi-val-bold yellow">{reservedCount}</div>
-          <div className="pm-kpi-desc-sm amber-text">Khách đang trên đường tới</div>
+          <div className="pm-kpi-desc-sm amber-text">Đang được giữ theo hệ thống</div>
         </div>
 
         {/* Card 5: Đang bảo trì */}
@@ -407,7 +394,7 @@ export default function LiveParkingView() {
             <div className="pm-grid-title-group">
               <Layers size={18} color="var(--pm-teal)" />
               <h2 className="pm-grid-title">
-                Mô hình 3D Bãi đỗ (Realtime: {hubStatus === "connected" ? "Đã kết nối SignalR" : hubStatus})
+                Mô hình 3D bãi đỗ · {hubStatus === "connected" ? "Đang nhận cập nhật trực tiếp" : "Đang tải lại định kỳ"}
               </h2>
             </div>
           </div>
@@ -507,24 +494,10 @@ export default function LiveParkingView() {
       </div>
 
       {/* ─── 5. Slot Detail Modal (Dark Theme Inspection) ──────────────────── */}
+      <details className="staff-panel"><summary>Chuyển ô cho đặt chỗ bị ảnh hưởng</summary><ReservationRelocation key={selectedLotId} lotId={selectedLotId ?? ""} onMoved={() => void loadData()} /></details>
       {activeSlot && (
-        <div className="staff-modal-backdrop" onClick={() => setActiveSlot(null)}>
-          <div className="staff-modal pm-dark-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="staff-modal-header pm-dark-modal-header">
-              <h3 className="staff-modal-title" style={{ display: "flex", alignItems: "center", gap: 10, color: "#ffffff" }}>
-                <Grid3X3 size={20} color="var(--pm-teal)" />
-                <span>Chi tiết Vị trí Ô đỗ: <strong>{activeSlot.slotCode}</strong></span>
-              </h3>
-              <button
-                type="button"
-                className="staff-btn-secondary pm-modal-close-btn"
-                onClick={() => setActiveSlot(null)}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="staff-modal-body pm-dark-modal-body">
+        <StaffDialog title={`Chi tiết ô đỗ ${activeSlot.slotCode}`} onClose={() => { if (!overrideLoading) setActiveSlot(null); }}>
+            <div className="staff-modal-body">
               {/* Slot Meta Grid */}
               <div className="pm-slot-info-grid">
                 <div className="pm-info-cell">
@@ -620,7 +593,7 @@ export default function LiveParkingView() {
                     onClick={() => handleUpdateStatus("Available")}
                     className="pm-override-btn green"
                   >
-                    <CheckCircle2 size={15} /> Kích hoạt (ACTIVE)
+                    <CheckCircle2 size={15} /> Kích hoạt
                   </button>
 
                   <button
@@ -629,7 +602,7 @@ export default function LiveParkingView() {
                     onClick={() => handleUpdateStatus("Maintenance")}
                     className="pm-override-btn amber"
                   >
-                    <Wrench size={15} /> Bảo trì (MAINTENANCE)
+                    <Wrench size={15} /> Bảo trì
                   </button>
 
                   <button
@@ -638,13 +611,13 @@ export default function LiveParkingView() {
                     onClick={() => handleUpdateStatus("Disabled")}
                     className="pm-override-btn red"
                   >
-                    <X size={15} /> Tạm khóa (DISABLED)
+                    <X size={15} /> Tạm khóa
                   </button>
                 </div>
               </div>
             </div>
 
-            <div className="staff-modal-footer pm-dark-modal-footer">
+            <div className="staff-modal-footer">
               <button
                 type="button"
                 className="staff-btn-secondary"
@@ -653,8 +626,7 @@ export default function LiveParkingView() {
                 Đóng
               </button>
             </div>
-          </div>
-        </div>
+        </StaffDialog>
       )}
     </div>
   );

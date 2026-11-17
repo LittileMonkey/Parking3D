@@ -72,7 +72,8 @@ public sealed class PaymentService(
         await using (var cached = db.CreateCommand("""
             SELECT p.id, a.lot_id, a.booking_id, p.amount, a.currency, 
                     p.method::text, p.status::text, p.version,
-                    (SELECT pa.payment_url FROM payment_attempts pa WHERE pa.payment_id=p.id ORDER BY pa.created_at DESC LIMIT 1)
+                    (SELECT pa.payment_url FROM payment_attempts pa WHERE pa.payment_id=p.id ORDER BY pa.requested_at DESC LIMIT 1),
+                    (SELECT pa.merchant_reference FROM payment_attempts pa WHERE pa.payment_id=p.id ORDER BY pa.requested_at DESC LIMIT 1)
             FROM payments p 
             JOIN billing_accounts a ON a.id = p.account_id
             WHERE p.idempotency_key = @key
@@ -85,7 +86,17 @@ public sealed class PaymentService(
                 var v = Read(r); 
                 if (v.BookingId != request.BookingId || v.Method != request.Method) 
                     throw new ServiceException(409, "Idempotency key reused"); 
-                return v with { PaymentUrl = r.IsDBNull(8) ? null : r.GetString(8) };
+                var cachedUrl = r.IsDBNull(8) ? null : r.GetString(8);
+                if (v.Method == "VNPAY" && (string.IsNullOrWhiteSpace(cachedUrl) || !cachedUrl.Contains("vnp_TmnCode=", StringComparison.OrdinalIgnoreCase)))
+                {
+                    var cachedRef = r.IsDBNull(9) ? v.Id.ToString("N") : r.GetString(9);
+                    cachedUrl = vnPayService.CreatePaymentUrl(
+                        cachedRef,
+                        v.Amount,
+                        $"Thanh toan giu cho {request.BookingId}",
+                        ipAddress ?? "127.0.0.1");
+                }
+                return v with { PaymentUrl = cachedUrl };
             }
         }
 
@@ -143,7 +154,7 @@ public sealed class PaymentService(
         // Nếu đã có 1 Payment PENDING cùng phương thức -> Tái sử dụng phiên đó
         await using (var checkPending = new NpgsqlCommand("""
             SELECT p.id, a.lot_id, a.booking_id, p.amount, a.currency, 
-                   p.method::text, p.status::text, p.version, pa.payment_url
+                   p.method::text, p.status::text, p.version, pa.payment_url, pa.merchant_reference
             FROM payments p 
             JOIN billing_accounts a ON a.id = p.account_id
             LEFT JOIN payment_attempts pa ON pa.payment_id = p.id AND pa.status = 'INITIATED'
@@ -154,7 +165,6 @@ public sealed class PaymentService(
 
         {
             checkPending.Parameters.AddWithValue("booking", request.BookingId);
-            checkPending.Parameters.AddWithValue("method", request.Method);
             await using var rPending = await checkPending.ExecuteReaderAsync(ct);
             if (await rPending.ReadAsync(ct))
             {
@@ -162,9 +172,18 @@ public sealed class PaymentService(
                 if(pendingView.Method!=request.Method)throw new ServiceException(409,"Another payment method is already pending. Complete or reconcile it before creating another payment.");
                 string? existingUrl = null;
                 // Nếu là VNPay: Tái tạo URL QR dựa trên mã giao dịch (merchant_reference) cũ còn hiệu lực
-                if (request.Method == "VNPAY" && !rPending.IsDBNull(8))
+                if (request.Method == "VNPAY")
                 {
-                    existingUrl = rPending.GetString(8);
+                    existingUrl = rPending.IsDBNull(8) ? null : rPending.GetString(8);
+                    var existingRef = rPending.IsDBNull(9) ? txnRef : rPending.GetString(9);
+                    if (string.IsNullOrWhiteSpace(existingUrl) || !existingUrl.Contains("vnp_TmnCode=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        existingUrl = vnPayService.CreatePaymentUrl(
+                            existingRef,
+                            pendingView.Amount,
+                            $"Thanh toan giu cho {request.BookingId}",
+                            ipAddress ?? "127.0.0.1");
+                    }
                 }
                 await rPending.DisposeAsync();
                 await tx.CommitAsync(ct);

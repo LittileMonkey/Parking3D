@@ -1,0 +1,20 @@
+$kind: http-request
+description: Validate the second lot with the shared layout tests, then assert that its level/zone/slot IDs do not occur in the primary lot.
+url: "{{baseUrl}}/api/v1/parking-lots/{{otherLotId}}/layout"
+method: GET
+headers:
+  Accept: application/json
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("HTTP 200", () => pm.response.to.have.status(200));
+      pm.test("Parking lots have separate level, zone and slot IDs", function () {
+          pm.expect(pm.response.json().result.lotId).to.not.equal(pm.variables.get("lotId"));
+          const saved = pm.collectionVariables.get("scrum80_primaryIds");
+          pm.expect(saved, "Run request 03 first").to.be.a("string");
+          const primaryIds = new Set(JSON.parse(saved));
+          const otherIds = JSON.parse(pm.collectionVariables.get("scrum80_currentIds"));
+          otherIds.forEach(id => pm.expect(primaryIds.has(id), "ID shared by two lots: " + id).to.equal(false));
+      });
+    language: text/javascript
+order: 5000

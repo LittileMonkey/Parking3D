@@ -1,6 +1,5 @@
 import MyAccount from "./pages/MyAccount";
 import PaymentReturn from "./pages/PaymentReturn";
-import GuestLogin from "./pages/GuestLogin";
 import SecurityPage from "./pages/SecurityPage";
 import { Route, Routes, Navigate, useLocation } from "react-router-dom";
 import Home from "./pages/Home";
@@ -33,6 +32,19 @@ import StaffShiftsPage from "./pages/manager/StaffShiftsPage";
 import IncidentsApprovalsPage from "./pages/manager/IncidentsApprovalsPage";
 import ReportsAuditPage from "./pages/manager/ReportsAuditPage";
 
+// System Admin Console Components
+import AdminLayout from "./components/admin/AdminLayout";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import Admin3DViewPage from "./pages/admin/Admin3DViewPage";
+import AdminSlotsPage from "./pages/admin/AdminSlotsPage";
+import AdminUsersPage from "./pages/admin/AdminUsersPage";
+import AdminFacilitiesPage from "./pages/admin/AdminFacilitiesPage";
+import AdminStaffAssignmentsPage from "./pages/admin/AdminStaffAssignmentsPage";
+import AdminServicesPage from "./pages/admin/AdminServicesPage";
+
+// Global AI Conversational Assistant
+import AiChatbotWidget from "./components/ai/AiChatbotWidget";
+
 const Booking = lazy(() => import("./pages/Booking"));
 
 function RequireRole({ roles, children }: { roles: string[]; children: ReactNode }) {
@@ -49,14 +61,16 @@ function SearchRedirect() {
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      <Routes>
       <Route path="/account" element={<MyAccount />} />
       <Route path="/payment-return" element={<PaymentReturn />} />
-      <Route path="/guest-login" element={<GuestLogin />} />
+      <Route path="/guest-login" element={<Navigate to="/login" replace />} />
       <Route path="/security" element={<SecurityPage />} />
       {/* Customer / Public Routes */}
       <Route path="/" element={<Home />} />
       <Route path="/booking" element={<Suspense fallback={<p role="status">Đang tải tìm kiếm và đặt chỗ…</p>}><Booking /></Suspense>} />
+      <Route path="/booking/:lotId" element={<Suspense fallback={<p role="status">Đang tải sơ đồ bãi đỗ…</p>}><Booking selection /></Suspense>} />
       <Route path="/login" element={<Login />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/register" element={<Register />} />
@@ -89,12 +103,23 @@ export default function App() {
         <Route path="reports-audit" element={<ReportsAuditPage />} />
       </Route>
 
-      {/* Admin Portal Route Aliases */}
-      <Route path="/admin" element={<Navigate to="/manager/dashboard" replace />} />
-      <Route path="/admin/dashboard" element={<Navigate to="/manager/dashboard" replace />} />
-      <Route path="/admin/*" element={<Navigate to="/manager/dashboard" replace />} />
+      {/* System Admin Portal Routes */}
+      <Route path="/admin" element={<RequireRole roles={["ADMIN"]}><AdminLayout /></RequireRole>}>
+        <Route index element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="dashboard" element={<AdminDashboard />} />
+        <Route path="map-3d" element={<Admin3DViewPage />} />
+        <Route path="map-3d/:lotId" element={<Admin3DViewPage />} />
+        <Route path="slots" element={<AdminSlotsPage />} />
+        <Route path="slots/:lotId" element={<AdminSlotsPage />} />
+        <Route path="users" element={<AdminUsersPage />} />
+        <Route path="facilities" element={<AdminFacilitiesPage />} />
+        <Route path="staff-assignments" element={<AdminStaffAssignmentsPage />} />
+        <Route path="services" element={<AdminServicesPage />} />
+      </Route>
 
       <Route path="*" element={<Home />} />
     </Routes>
+    <AiChatbotWidget />
+  </>
   );
 }

@@ -1,15 +1,14 @@
 import NotificationBell from "./NotificationBell";
+import CustomerAccountMenu from "./CustomerAccountMenu";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   ArrowRight,
   ChevronDown,
-  LogOut,
   Menu,
   Navigation,
   ParkingCircle,
   Search,
-  User,
   X,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
@@ -19,18 +18,25 @@ type CustomerLayoutProps = {
   children: ReactNode;
   topSlot?: ReactNode;
   onRequestLogout?: () => void;
+  landing?: boolean;
+  booking?: boolean;
 };
 
 export default function CustomerLayout({
   children,
   topSlot,
   onRequestLogout,
+  landing = false,
+  booking = false,
 }: CustomerLayoutProps) {
   const { user, isAuthenticated, logout } = useAuth();
   const { lang, setLang, t } = useLanguage();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [bookingMenuOpen, setBookingMenuOpen] = useState(false);
   const bookingMenuRef = useRef<HTMLDivElement>(null);
+  const [popover, setPopover] = useState<"account" | "notifications" | null>(null);
+  const location = useLocation();
+  useEffect(() => { setPopover(null); setMobileMenuOpen(false); setBookingMenuOpen(false); }, [location.pathname, location.search]);
 
   const userRoles = (user?.roles ?? (user?.role ? [user.role] : [])).map((r) => r.toUpperCase());
   const isStaff = userRoles.some((r) => r.includes("STAFF"));
@@ -61,6 +67,7 @@ export default function CustomerLayout({
   const closeMenus = () => {
     setBookingMenuOpen(false);
     setMobileMenuOpen(false);
+    setPopover(null);
   };
   const requestLogout = () => {
     closeMenus();
@@ -77,7 +84,8 @@ export default function CustomerLayout({
         <Link className="brand-pill" to="/" aria-label="ParkMatrix trang chủ" onClick={closeMenus}>
           <span className="brand-pill-logo"><ParkingCircle size={22} /></span>
           <span className="brand-pill-text">
-            <span className="brand-pill-title">Park<span className="brand-cyan">Matrix</span><span className="brand-pill-dot" /></span>
+            <span className="brand-pill-title">PARKMATRIX</span>
+            <small className="brand-pill-caption">Smart 3D Parking</small>
           </span>
         </Link>
 
@@ -111,25 +119,26 @@ export default function CustomerLayout({
                     <span className="dropdown-item-desc">{lang === "en" ? "Find nearest & cheapest with GPS" : "So sánh khoảng cách & ước tính giá gửi"}</span>
                   </span>
                 </Link>
-                <a href="/#gis-section" onClick={closeMenus} className="dropdown-menu-item">
+                <a href="/#parking-lots" onClick={closeMenus} className="dropdown-menu-item">
                   <span className="dropdown-item-icon bg-emerald"><Navigation size={18} /></span>
                   <span className="dropdown-item-content">
-                    <span className="dropdown-item-title">{lang === "en" ? "Live GIS Map & Directory" : "Sơ Đồ & Vị Trí Bãi Xe"}</span>
-                    <span className="dropdown-item-desc">{lang === "en" ? "Real-time citywide slot network" : "Bản đồ số GIS thời gian thực toàn thành phố"}</span>
+                    <span className="dropdown-item-title">{lang === "en" ? "Explore Parking Lots" : "Khám phá bãi đỗ"}</span>
+                    <span className="dropdown-item-desc">{lang === "en" ? "Find a location for your next visit" : "Chọn bãi phù hợp cho điểm đến của bạn"}</span>
                   </span>
                 </a>
               </div>
             )}
           </div>
           <Link to="/faq" onClick={closeMenus} className="nav-item-pill">FAQ</Link>
-          <a href="/#solutions" onClick={closeMenus} className="nav-item-pill">{t("nav.solutions")}</a>
-          <a href="/#about" onClick={closeMenus} className="nav-item-pill">{t("nav.infrastructure")}</a>
+          <a href="/#how-it-works" onClick={closeMenus} className="nav-item-pill">{lang === "en" ? "How it works" : "Cách đặt chỗ"}</a>
+          <a href="/#benefits" onClick={closeMenus} className="nav-item-pill">{lang === "en" ? "Why ParkMatrix" : "Lợi ích"}</a>
           <div className="mobile-nav-account">
             {isAuthenticated ? (
               <>
                 <span className="customer-nav-user">{user?.fullName || user?.userName} ({roleLabel})</span>
+                <Link to="/account" onClick={closeMenus} className="nav-item-pill">{lang === "en" ? "My account" : "Trang cá nhân"}</Link>
                 {portalPath && (
-                  <Link to={portalPath} onClick={closeMenus} className="nav-item-pill mobile-nav-portal-link" style={{ color: "#38bdf8", fontWeight: 700 }}>
+                  <Link to={portalPath} onClick={closeMenus} className="nav-item-pill mobile-nav-portal-link" style={{ color: "#0d4685", fontWeight: 700 }}>
                     {portalPath.includes("staff") ? "→ Vào Staff Portal" : "→ Vào Admin Dashboard"}
                   </Link>
                 )}
@@ -142,6 +151,7 @@ export default function CustomerLayout({
               </>
             )}
           </div>
+          <div className="customer-mobile-language"><span>Ngôn ngữ / Language</span><div className="lang-switcher-pill"><button type="button" className={`lang-btn-pill ${lang === "vi" ? "active" : ""}`} onClick={() => setLang("vi")}>VN</button><button type="button" className={`lang-btn-pill ${lang === "en" ? "active" : ""}`} onClick={() => setLang("en")}>EN</button></div></div>
         </nav>
 
         <div className="header-actions-pill">
@@ -152,38 +162,9 @@ export default function CustomerLayout({
             <button type="button" className={`lang-btn-pill ${lang === "en" ? "active" : ""}`}
               onClick={() => setLang("en")} title="English">EN</button>
           </div>
-          <NotificationBell />
-          {isAuthenticated && <><Link to="/account">Xe & đặt chỗ</Link><Link to="/security">Bảo mật</Link></>}
+          <NotificationBell open={popover === "notifications"} onOpenChange={open => setPopover(open ? "notifications" : null)} />
           {isAuthenticated ? (
-            <div className="user-profile-pill">
-              <span className="avatar-circle-pill"><User size={15} /></span>
-              <span className="user-info-pill">
-                <span className="user-name-pill">{user?.fullName || user?.userName}</span>
-                <span className="user-role-pill">{roleLabel}</span>
-              </span>
-              {portalPath && (
-                <Link
-                  to={portalPath}
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    padding: "4px 9px",
-                    borderRadius: "9999px",
-                    background: "rgba(56, 189, 248, 0.15)",
-                    color: "#38bdf8",
-                    border: "1px solid rgba(56, 189, 248, 0.3)",
-                    textDecoration: "none",
-                    whiteSpace: "nowrap",
-                  }}
-                  title={portalPath.includes("staff") ? "Vào trang Staff Operations" : "Vào trang Admin Dashboard"}
-                >
-                  {portalPath.includes("staff") ? "Staff" : "Admin"}
-                </Link>
-              )}
-              <button type="button" className="logout-btn-pill" title={t("nav.logout")} aria-label={t("nav.logout")} onClick={requestLogout}>
-                <LogOut size={14} />
-              </button>
-            </div>
+            <CustomerAccountMenu open={popover === "account"} onOpenChange={open => setPopover(open ? "account" : null)} onLogout={requestLogout} portalPath={portalPath} />
           ) : (
             <div className="auth-btns-pill">
               <Link className="auth-btn-pill-login" to="/login">{t("nav.login")}</Link>
@@ -198,7 +179,7 @@ export default function CustomerLayout({
             aria-label={mobileMenuOpen ? "Đóng menu" : "Mở menu"}
             aria-expanded={mobileMenuOpen}
             aria-controls="customer-main-nav"
-            onClick={() => setMobileMenuOpen(open => !open)}
+            onClick={() => { setMobileMenuOpen(open => !open); setPopover(null); }}
           >
             {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
@@ -208,7 +189,7 @@ export default function CustomerLayout({
   );
 
   return (
-    <div className="site-shell light-theme customer-public-shell">
+    <div className={`site-shell light-theme customer-public-shell${landing ? " customer-landing-shell" : ""}${booking ? " customer-booking-shell" : ""}`}>
       {topSlot}
       {header}
       {children}
@@ -218,49 +199,42 @@ export default function CustomerLayout({
             <Link className="brand footer-brand" to="/" aria-label="ParkMatrix trang chủ">
               <span className="brand-mark"><ParkingCircle size={22} /></span>
               <span className="brand-copy">
-                <strong>Park<span>Matrix</span></strong>
-                <small>SMART PARKING PLATFORM</small>
+                <strong>PARKMATRIX</strong>
+                <small>SMART 3D PARKING</small>
               </span>
             </Link>
-            {/* <p className="footer-desc mt-4">{t("footer.desc")}</p> */}
-            <p className="learning-product-notice">Đây là sản phẩm phục vụ học tập, không dùng cho hoạt động thực tế.</p>
+            <p className="learning-product-notice">{lang === "en" ? "A learning project, not intended for real-world operation." : "Đây là sản phẩm phục vụ học tập, không dùng cho hoạt động thực tế."}</p>
           </div>
           <div className="footer-col">
-            <h4 className="footer-col-title">{t("footer.support")}</h4>
+            <h4 className="footer-col-title">{lang === "en" ? "Explore" : "Khám phá"}</h4>
             <ul className="footer-links">
-              <li><a href="/#gis-section">{lang === "en" ? "Booking Guide" : "Hướng dẫn đặt chỗ"}</a></li>
-              <li><Link to="/terms">{lang === "en" ? "Parking Rules" : "Quy định bãi đỗ"}</Link></li>
-              <li><a href="/#solutions">{lang === "en" ? "EV Charging Station" : "Trạm sạc EV"}</a></li>
-              <li><a href="mailto:support@parkmatrix.vn">{lang === "en" ? "Report Incident 24/7" : "Báo sự cố 24/7"}</a></li>
-              <li><a href="/#gis-section">API Integration Docs</a></li>
+              <li><Link to="/booking">{lang === "en" ? "Find parking" : "Tìm bãi đỗ"}</Link></li>
+              <li><a href="/#parking-lots">{lang === "en" ? "Parking locations" : "Danh sách bãi đỗ"}</a></li>
+              <li><a href="/#how-it-works">{lang === "en" ? "How to book" : "Hướng dẫn đặt chỗ"}</a></li>
             </ul>
           </div>
           <div className="footer-col">
-            <h4 className="footer-col-title">{lang === "en" ? "Infrastructure Coverage" : "Độ Phủ Hạ Tầng"}</h4>
+            <h4 className="footer-col-title">{lang === "en" ? "Your account" : "Tài khoản"}</h4>
             <ul className="footer-links">
-              <li><a href="/#gis-section">{lang === "en" ? "Ho Chi Minh City (62 hubs)" : "TP. Hồ Chí Minh (62 bãi)"}</a></li>
-              <li><a href="/#gis-section">{lang === "en" ? "Hanoi (48 hubs)" : "Hà Nội (48 bãi)"}</a></li>
-              <li><a href="/#gis-section">{lang === "en" ? "Da Nang (24 hubs)" : "Đà Nẵng (24 bãi)"}</a></li>
-              <li><a href="/#gis-section">{lang === "en" ? "Binh Duong (18 hubs)" : "Bình Dương (18 bãi)"}</a></li>
-              <li><a href="/#gis-section">{lang === "en" ? "Hai Phong (12 hubs)" : "Hải Phòng (12 bãi)"}</a></li>
+              <li><Link to="/login">{t("nav.login")}</Link></li>
+              <li><Link to="/register">{t("nav.register")}</Link></li>
+              <li><Link to="/account">{lang === "en" ? "Vehicles & bookings" : "Xe & đặt chỗ"}</Link></li>
             </ul>
           </div>
           <div className="footer-col">
-            <h4 className="footer-col-title">{lang === "en" ? "For Enterprise" : "Dành Cho Doanh Nghiệp"}</h4>
+            <h4 className="footer-col-title">{lang === "en" ? "Help & information" : "Hỗ trợ & thông tin"}</h4>
             <ul className="footer-links">
-              <li><a href="/#solutions">{lang === "en" ? "Parking Lot Owners" : "Chủ bãi đỗ xe"}</a></li>
-              <li><a href="/#solutions">{lang === "en" ? "VMS Platform Integration" : "Tích hợp VMS Platform"}</a></li>
-              <li><a href="/#solutions">{lang === "en" ? "AI ANPR Camera Partner" : "Hợp tác Camera ANPR AI"}</a></li>
-              <li><Link to="/register">{lang === "en" ? "Partner Registration" : "Đăng ký Đối tác"}</Link></li>
+              <li><Link to="/faq">{lang === "en" ? "Help center" : "Trung tâm trợ giúp"}</Link></li>
+              <li><Link to="/terms">{t("footer.terms")}</Link></li>
+              <li><Link to="/privacy">{t("footer.privacy")}</Link></li>
             </ul>
           </div>
         </div>
         <div className="page-width footer-bottom-dark">
-          <span>{t("footer.rights")}</span>
+          <span>© ParkMatrix · {lang === "en" ? "A learning project" : "Dự án phục vụ học tập"}</span>
           <div className="footer-bottom-links">
             <Link to="/privacy">{t("footer.privacy")}</Link><span>•</span>
-            <Link to="/terms">{t("footer.terms")}</Link><span>•</span>
-            <a href="mailto:support@parkmatrix.vn">Support: support@parkmatrix.vn</a>
+            <Link to="/terms">{t("footer.terms")}</Link>
           </div>
         </div>
       </footer>

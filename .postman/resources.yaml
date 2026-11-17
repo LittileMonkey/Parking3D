@@ -1,5 +1,6 @@
 workspace:
   id: 0319daf9-1cd2-4659-8621-76f22c833f88
+
 localResources:
   specs:
     - ../docs/templates/Template.Infrastructure/GRPC/Protos/demo.proto
@@ -7,8 +8,12 @@ localResources:
     - ../src/Contracts/Parking.Contracts/Protos/v1/identity.proto
     - ../src/Contracts/Parking.Contracts/Protos/v1/parking_catalog.proto
     - ../src/Contracts/Parking.Contracts/Protos/v1/payment_events.proto
+
+# Each entry here maps a local resource to one or more corresponding objects in Postman Cloud
+
 cloudResources:
   collections:
     ../postman/collections/AI-Feature-Service: 49791222-71056777-640c-446a-b600-abfc985983d0
+    ../postman/collections/Han - SCRUM-80 - Multi-Parking Layout: bdc14477-10de-47a9-b17b-5bbeb10ea6ae
   environments:
     ../postman/environments/AI-Service-Local.environment.yaml: 49791222-df801f8e-8d0c-4b6d-84ab-849921175607

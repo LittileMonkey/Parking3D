@@ -1,0 +1,25 @@
+$kind: http-request
+description: Compare the complete result with request 03. Optionally assert HTTP responseTime < maxWarmResponseMs when checkPerformance=true. This measures one HTTP request. Verify actual Redis usage separately with TTL or cache logs.
+url: "{{baseUrl}}/api/v1/parking-lots/{{lotId}}/layout"
+method: GET
+headers:
+  Accept: application/json
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("HTTP 200", () => pm.response.to.have.status(200));
+      pm.test("Repeated layout matches the saved baseline", function () {
+          const saved = pm.collectionVariables.get("scrum80_primaryLayout");
+          pm.expect(saved, "Run request 03 first").to.be.a("string");
+          pm.expect(pm.response.json().result).to.deep.equal(JSON.parse(saved));
+      });
+      console.info("Warm HTTP response", pm.response.responseTime, "ms");
+      if (pm.variables.get("checkPerformance") === "true") {
+          pm.test("Warm response is below the configured threshold", function () {
+              const limit = Number(pm.variables.get("maxWarmResponseMs"));
+              pm.expect(limit).to.be.greaterThan(0);
+              pm.expect(pm.response.responseTime).to.be.below(limit);
+          });
+      }
+    language: text/javascript
+order: 4000

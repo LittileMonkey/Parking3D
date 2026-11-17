@@ -177,7 +177,8 @@ public class ParkingSearchAiService(
         {
             criteria = JsonSerializer.Deserialize<SmartSearchCriteriaDto>(cleanedJson, new JsonSerializerOptions
             {
-                PropertyNameCaseInsensitive = true
+                PropertyNameCaseInsensitive = true,
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
             });
         }
         catch (JsonException ex)

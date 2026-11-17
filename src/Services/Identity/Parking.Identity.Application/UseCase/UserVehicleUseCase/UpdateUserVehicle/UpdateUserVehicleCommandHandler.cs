@@ -1,4 +1,4 @@
-﻿using MediatR;
+using MediatR;
 using Parking.Identity.Application.Common.AppException;
 using Parking.Identity.Application.Common.Enum;
 using Parking.Identity.Application.Common.Interface;
@@ -63,6 +63,8 @@ namespace Parking.Identity.Application.UseCase.UserVehicleUseCase.UpdateUserVehi
             var normalizedPlate = request.LicensePlate
                 .Trim()
                 .Replace(" ", string.Empty)
+                .Replace("-", string.Empty)
+                .Replace(".", string.Empty)
                 .ToUpperInvariant();
 
             // 4. Check duplicate license plate, excluding this vehicle.

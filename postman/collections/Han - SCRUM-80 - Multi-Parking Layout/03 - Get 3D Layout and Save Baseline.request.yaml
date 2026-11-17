@@ -1,0 +1,15 @@
+$kind: http-request
+description: Shared collection tests validate the layout tree and 3D data. Save the result and its entity IDs for requests 04, 05 and 06.
+url: "{{baseUrl}}/api/v1/parking-lots/{{lotId}}/layout"
+method: GET
+headers:
+  Accept: application/json
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("HTTP 200", () => pm.response.to.have.status(200));
+      // Shared collection tests validate the layout before saving this baseline.
+      pm.collectionVariables.set("scrum80_primaryLayout", JSON.stringify(pm.response.json().result));
+      pm.collectionVariables.set("scrum80_primaryIds", pm.collectionVariables.get("scrum80_currentIds"));
+    language: text/javascript
+order: 3000

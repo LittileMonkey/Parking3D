@@ -1,3 +1,6 @@
+import { authStorage } from "./authStorage";
+import { createRegistrationRequest } from "./registration";
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
 export interface BuildingEnvironment {
@@ -51,6 +54,15 @@ export interface RegisterPayload {
   email: string;
   password: string;
   fullName: string;
+  phoneE164: string;
+}
+
+export interface RegistrationResult {
+  id: string;
+  fullName: string;
+  emailNormalized: string;
+  phoneE164: string;
+  roles: string[];
 }
 
 export interface EmailOtpResponse {
@@ -205,6 +217,28 @@ export interface Payment {
   version: number;
 }
 
+export interface BookingPaymentStatus {
+  bookingId: string;
+  paymentId: string;
+  paymentMethod: string;
+  paymentStatus: string;
+  bookingStatus: string;
+  sessionStatus: string;
+  totalAmount: number;
+  currency: string;
+  lastUpdatedAt: string;
+}
+
+export interface VnPayReturnResult {
+  isSuccess: boolean;
+  message: string;
+  txnRef: string;
+  amount: number;
+  bankCode: string;
+  transactionNo: string;
+  responseCode: string;
+}
+
 export interface ApprovedFaqAnswer {
   documentId: string;
   revision: number;
@@ -240,9 +274,9 @@ export class ApiError extends Error {
 
 let refreshInFlight: Promise<string | null> | null = null;
 
-async function tryRefreshAccessToken(): Promise<string | null> {
+export async function tryRefreshAccessToken(): Promise<string | null> {
   if (refreshInFlight) return refreshInFlight;
-  const currentRefresh = sessionStorage.getItem("parking.refreshToken");
+  const currentRefresh = authStorage.getItem("parking.refreshToken");
   if (!currentRefresh) return null;
 
   refreshInFlight = (async () => {
@@ -256,10 +290,10 @@ async function tryRefreshAccessToken(): Promise<string | null> {
       const body = (await response.json()) as ApiEnvelope<AuthTokens>;
       const tokens = body.result ?? (body as unknown as AuthTokens);
       const nextAccess = tokens?.accessToken ?? tokens?.token;
-      if (!nextAccess) return null;
-      sessionStorage.setItem("parking.accessToken", nextAccess);
+      if (!nextAccess || body.isSuccess === false || authStorage.getItem("parking.refreshToken") !== currentRefresh) return null;
+      authStorage.setItem("parking.accessToken", nextAccess);
       if (tokens?.refreshToken) {
-        sessionStorage.setItem("parking.refreshToken", tokens.refreshToken);
+        authStorage.setItem("parking.refreshToken", tokens.refreshToken);
       }
       return nextAccess;
     } catch {
@@ -279,7 +313,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
       headers.set("Content-Type", "application/json");
     }
 
-    const token = overrideToken ?? sessionStorage.getItem("parking.accessToken");
+    const token = overrideToken ?? authStorage.getItem("parking.accessToken");
     if (token) headers.set("Authorization", `Bearer ${token}`);
 
     try {
@@ -310,8 +344,9 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     }
   }
 
-  if (!response.ok || body.isSuccess === false) {
-    const serverMessage = [body.message, body.detail, body.title]
+  if (!response.ok || body.isSuccess === false || body.IsSuccess === false) {
+    // Identity's exception middleware serializes its envelope with PascalCase.
+    const serverMessage = [body.message, body.Message, body.detail, body.title]
       .find((value): value is string => typeof value === "string");
     const fallbackMessages: Record<number, string> = {
       401: path === "/api/v1/auth/login" ? "Email hoặc mật khẩu không đúng." : "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
@@ -324,11 +359,12 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
       ?? (response.status >= 500
         ? "Máy chủ API đang gặp lỗi hoặc chưa sẵn sàng. Kiểm tra backend tại localhost:8080 rồi thử lại."
         : fallbackMessages[response.status] ?? `Yêu cầu thất bại (${response.status}).`);
-    const errorCode = typeof body.errorCode === "string" ? body.errorCode : null;
+    const rawCode = body.errorCode ?? body.ErrorCode;
+    const errorCode = typeof rawCode === "string" ? rawCode : null;
     throw new ApiError(message, response.status, errorCode);
   }
 
-  return (body.result ?? body) as T;
+  return (body.result ?? body.Result ?? body) as T;
 }
 
 export const api = {
@@ -421,9 +457,10 @@ export const api = {
     lotId: string,
     startsAt: string,
     endsAt: string,
-    vehicleType: string,
+    vehicleType?: string,
   ): Promise<LotAvailability> {
-    const params = new URLSearchParams({ startTime: startsAt, endTime: endsAt, vehicleType });
+    const params = new URLSearchParams({ startTime: startsAt, endTime: endsAt });
+    if (vehicleType) params.set("vehicleType", vehicleType);
     return request<LotAvailability>(
       `/api/v1/parking-lots/${encodeURIComponent(lotId)}/availability?${params.toString()}`,
     );
@@ -443,8 +480,27 @@ export const api = {
     });
   },
 
-  async getBooking(bookingId: string): Promise<BookingDetail> {
-    return request<BookingDetail>(`/api/v1/bookings/${encodeURIComponent(bookingId)}`);
+  async getBooking(bookingId: string, signal?: AbortSignal): Promise<BookingDetail> {
+    return request<BookingDetail>(`/api/v1/bookings/${encodeURIComponent(bookingId)}`, { signal });
+  },
+
+  async getBookingPaymentStatus(bookingId: string, signal?: AbortSignal): Promise<BookingPaymentStatus> {
+    return request<BookingPaymentStatus>(`/api/v1/payments/${encodeURIComponent(bookingId)}/status`, { signal });
+  },
+
+  async verifyVnPayReturn(query: string, signal?: AbortSignal): Promise<VnPayReturnResult> {
+    // This anonymous endpoint returns a raw business result. Its isSuccess=false
+    // is a verified payment outcome, not an API envelope failure.
+    const response = await fetch(`${API_BASE_URL}/api/v1/payments/vnpay/return${query}`, {
+      headers: { Accept: "application/json" }, signal,
+    });
+    const body = await response.json();
+    if (!response.ok) throw new ApiError(body.message ?? "Không thể xác minh kết quả VNPay.", response.status);
+    const result = body.result ?? body;
+    if (typeof result.isSuccess !== "boolean" || typeof result.txnRef !== "string" || typeof result.responseCode !== "string") {
+      throw new Error("Kết quả VNPay chưa đầy đủ. Vui lòng kiểm tra lại trạng thái đặt chỗ.");
+    }
+    return result as VnPayReturnResult;
   },
 
   async getBookingCashRequest(bookingId: string, lotId: string): Promise<Payment> {
@@ -540,10 +596,10 @@ export const api = {
     });
   },
 
-  async register(payload: RegisterPayload): Promise<EmailOtpResponse> {
-    return request<EmailOtpResponse>("/api/v1/auth/register", {
+  async register(payload: RegisterPayload): Promise<RegistrationResult> {
+    return request<RegistrationResult>("/api/v1/auth/register", {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify(createRegistrationRequest(payload)),
     });
   },
 
@@ -562,7 +618,7 @@ export const api = {
   },
 
   async logout(): Promise<void> {
-    const refreshToken = sessionStorage.getItem("parking.refreshToken");
+    const refreshToken = authStorage.getItem("parking.refreshToken");
     if (refreshToken) await request<void>("/api/v1/auth/logout", { method: "POST", body: JSON.stringify({ refreshToken }) });
   },
 
@@ -758,7 +814,13 @@ export const api = {
       `/api/v1/parking-lots/${encodeURIComponent(lotId)}/plate-recognitions/${encodeURIComponent(recognitionId)}/review`,
       {
         method: "POST",
-        body: JSON.stringify({ correctedPlate, reviewNotes }),
+        body: JSON.stringify({
+          plate: correctedPlate,
+          correctedPlate,
+          version: 1,
+          reason: reviewNotes || "Nhân viên kiểm tra và đính chính biển số",
+          reviewNotes,
+        }),
       }
     );
   },
@@ -766,8 +828,8 @@ export const api = {
   /**
    * [REAL API PAYMENT] Tra cứu biên lai điện tử (E-Receipt) sau thanh toán (SCRUM-72)
    */
-  async getPaymentReceipt(paymentId: string): Promise<PaymentReceiptDto> {
-    return request<PaymentReceiptDto>(`/api/v1/payments/${encodeURIComponent(paymentId)}/receipt`);
+  async getPaymentReceipt(paymentId: string, signal?: AbortSignal): Promise<PaymentReceiptDto> {
+    return request<PaymentReceiptDto>(`/api/v1/payments/${encodeURIComponent(paymentId)}/receipt`, { signal });
   },
 
   /**
@@ -898,6 +960,10 @@ export const api = {
     return request<ShiftHandoverDto>(`/api/v1/parking-lots/${lotId}/shift-handovers/${handoverId}`);
   },
 
+  async getShiftHandoverHistory(lotId: string, handoverId: string, page = 1, pageSize = 10): Promise<{ items: ShiftHandoverHistoryItemDto[]; totalCount: number }> {
+    return request<{ items: ShiftHandoverHistoryItemDto[]; totalCount: number }>(`/api/v1/parking-lots/${encodeURIComponent(lotId)}/shift-handovers/${encodeURIComponent(handoverId)}/history?page=${page}&pageSize=${pageSize}`);
+  },
+
   async createShiftHandover(lotId: string, payload: CreateShiftHandoverApiPayload, idempotencyKey?: string): Promise<ShiftHandoverDto> {
     const headers: Record<string, string> = {};
     if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
@@ -965,6 +1031,13 @@ export const api = {
     });
   },
 
+  async createUserVehicle(payload: { licensePlate: string; vehicleType: string; isDefault: boolean }): Promise<UserVehicle> {
+    return request<UserVehicle>("/api/v1/user-vehicles", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
   async getUserVehicleById(vehicleId: string): Promise<UserVehicle> {
     return request<UserVehicle>(`/api/v1/user-vehicles/${encodeURIComponent(vehicleId)}`);
   },
@@ -985,9 +1058,82 @@ export const api = {
     });
   },
 
+  async getMyBookings(): Promise<Array<{ id: string; code: string; status: string; startsAt: string; endsAt: string; estimatedAmount: number; lotName: string }>> {
+    return request<Array<{ id: string; code: string; status: string; startsAt: string; endsAt: string; estimatedAmount: number; lotName: string }>>("/api/v1/bookings/mine");
+  },
+
+  async getLotStaffAssignments(lotId: string): Promise<StaffAssignmentItem[]> {
+    return request<StaffAssignmentItem[]>(`/api/v1/staff-assignments?lotId=${encodeURIComponent(lotId)}`);
+  },
+
+  async getMfaStatus(signal?: AbortSignal): Promise<{ enabled: boolean }> {
+    return request<{ enabled: boolean }>("/api/v1/auth/mfa", { signal });
+  },
+
+  async setupMfa(password: string): Promise<{ secret: string; qrCodeUri?: string; manualEntryKey?: string }> {
+    return request<{ secret: string; qrCodeUri?: string; manualEntryKey?: string }>("/api/v1/auth/mfa/setup", {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    });
+  },
+
+  async enableMfa(password: string, code: string): Promise<{ enabled: boolean }> {
+    return request<{ enabled: boolean }>("/api/v1/auth/mfa/enable", {
+      method: "POST",
+      body: JSON.stringify({ password, code }),
+    });
+  },
+
+  async disableMfa(password: string, code: string): Promise<{ enabled: boolean }> {
+    return request<{ enabled: boolean }>("/api/v1/auth/mfa/disable", {
+      method: "POST",
+      body: JSON.stringify({ password, code }),
+    });
+  },
+
   async issueCheckOutQr(sessionId: string): Promise<BookingQrResponse> {
     return request<BookingQrResponse>(`/api/v1/check-out/${encodeURIComponent(sessionId)}/qr`, {
       method: "POST",
+    });
+  },
+
+  /**
+   * [REAL API PAYMENT] Sinh mã VietQR / VNPay-QR động theo đơn đặt xe (SCRUM-72)
+   */
+  async createVnPayPaymentQr(bookingId: string, idempotencyKey?: string): Promise<PaymentQrResult> {
+    const headers: Record<string, string> = {};
+    if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+    return request<PaymentQrResult>("/api/v1/payments/vnpay/create-qr", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ bookingId }),
+    });
+  },
+
+  /**
+   * [REAL API PARKING] Gửi sự kiện quét biển số từ thiết bị barrier cổng bãi xe lên Parking Service
+   */
+  async uploadLotPlateRecognition(
+    lotId: string,
+    payload: LotPlateRecognitionUpload,
+    idempotencyKey?: string
+  ): Promise<LotPlateRecognitionResult> {
+    const headers: Record<string, string> = {};
+    if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+    return request<LotPlateRecognitionResult>(`/api/v1/parking-lots/${encodeURIComponent(lotId)}/plate-recognitions`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * [REAL API IDENTITY] Gửi yêu cầu mã OTP đăng nhập khách hàng qua email
+   */
+  async requestGuestOtp(email: string): Promise<{ message: string }> {
+    return request<{ message: string }>("/api/v1/auth/guest/request-otp", {
+      method: "POST",
+      body: JSON.stringify({ email }),
     });
   },
 
@@ -1066,7 +1212,8 @@ export const api = {
 export interface PaymentReceiptDto {
   receiptNumber: string;
   paymentId: string;
-  bookingId: string;
+  bookingId: string | null;
+  sessionId?: string | null;
   lotName: string;
   plateNumber: string;
   paymentMethod: string;
@@ -1104,6 +1251,7 @@ export interface AccountUserDto {
   fullName: string;
   status: string;
   roles?: string[];
+  membershipTier?: string | null;
 }
 
 export interface PlateRecognitionResult {
@@ -1190,7 +1338,7 @@ export interface IncidentSummaryDto {
   title: string;
   type: string;
   severity: "Low" | "Medium" | "High" | "Critical";
-  status: "Open" | "InProgress" | "Resolved" | "Escalated";
+  status: "Open" | "InProgress" | "Resolved" | "Escalated" | "Cancelled";
   description?: string;
   relatedPlate?: string | null;
   relatedSessionId?: string | null;
@@ -1231,6 +1379,18 @@ export interface CreateIncidentApiPayload {
   relatedGate?: string;
   relatedSessionId?: string;
   evidence?: IncidentEvidenceDto[];
+}
+
+export interface ShiftHandoverHistoryItemDto {
+  id: string;
+  handoverId: string;
+  lotId: string;
+  action: string;
+  oldReceiverUserId?: string | null;
+  newReceiverUserId?: string | null;
+  performedByUserId: string;
+  reason?: string | null;
+  performedAt: string;
 }
 
 export interface ShiftHandoverSummaryDto {
@@ -1451,4 +1611,28 @@ export interface AiParkingRecommendation {
   summaryExplanation?: string;
   processingTimeMs?: number;
   isFallback?: boolean;
+}
+
+export interface PaymentQrResult {
+  paymentId: string;
+  bookingId: string;
+  amount: number;
+  currency: string;
+  merchantTxnRef: string;
+  paymentUrl: string;
+  qrPayload: string;
+  expiresAt: string;
+}
+
+export interface LotPlateRecognitionUpload {
+  imageBase64: string;
+  contentType: string;
+}
+
+export interface LotPlateRecognitionResult {
+  recognitionId?: string;
+  licensePlate?: string;
+  confidence?: number;
+  status?: string;
+  [key: string]: unknown;
 }

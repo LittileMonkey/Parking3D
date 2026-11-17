@@ -1,0 +1,411 @@
+{
+  "info": {
+    "name": "Hàn - SCRUM-80 - DEMO Mentor",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Demo SCRUM-80 theo 7 bước.\n\nImport cùng Han-Scrum80-DEMO.postman_environment.json. Chọn environment Hàn - SCRUM-80 DEMO. Chạy request 01 đến 07 hoặc Run collection với 1 iteration, delay 100 ms. API mặc định http://localhost:8080.\n\nRequest 01 tự lưu hai ID bãi. Request 02 và 03 đối chiếu thông tin bãi, cây tầng/khu/ô và tọa độ. Sau Send, chọn Body > Visualize để trình bày bảng dữ liệu.\n\nRequest 04 tự đo 10 lượt HTTP, hiển thị thời gian từng lượt, trung bình và p95. checkPerformance=false mặc định. Đặt true để kiểm tra p95 dưới maxWarmResponseMs, mặc định 20 ms. Thời gian gồm BE, Gateway và mạng.\n\nRequest 05 kiểm tra cô lập hai bãi. Request 06 và 07 phải trả HTTP 404 với assertion PASS.\n\nKiểm tra Redis\nSau khi gọi layout, lấy lotId trong environment, thay LOT_ID trong lệnh sau.\n\ndocker compose -f compose.microservices.yml exec -T redis redis-cli TTL \"parking:lot_layout_LOT_ID\"\n\nTTL gần 43200 giây ngay sau khi tạo mới và giảm dần. Request 04 đo HTTP và so sánh dữ liệu. Redis hit cần đối chiếu key/TTL hoặc log CACHE HIT của Parking. Request layout có thể đã có cache từ trước.\n\nDữ liệu demo cần ít nhất hai bãi có tầng, khu, ô. requirePublishedCoordinates=true yêu cầu bãi chính có ít nhất một slot với đầy đủ transform từ bản đồ PUBLISHED."
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "item": [
+    {
+      "name": "01 - Chọn hai bãi để demo",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots",
+        "description": "Chạy trước các request khác. Tự ưu tiên DEMO-Q1 và DEMO-BT. Mở Body > Visualize để xem bảng bãi xe."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200 và envelope thành công\", function () {",
+              "    pm.response.to.have.status(200);",
+              "    const envelope = pm.response.json();",
+              "    pm.expect(envelope.isSuccess).to.equal(true);",
+              "    pm.expect(envelope.statusCode).to.equal(200);",
+              "    pm.expect(envelope.message).to.be.a(\"string\");",
+              "});",
+              "const lots = pm.response.json().result;",
+              "pm.test(\"Có ít nhất hai bãi để demo Multi-Parking\", function () {",
+              "    pm.expect(lots).to.be.an(\"array\");",
+              "    pm.expect(new Set(lots.map(lot => lot.id)).size).to.be.at.least(2);",
+              "});",
+              "if (Array.isArray(lots) && lots.length >= 2) {",
+              "    const configured = pm.environment.get(\"lotId\");",
+              "    const first = configured ? lots.find(lot => lot.id === configured) : lots.find(lot => lot.code === \"DEMO-Q1\") || lots[0];",
+              "    pm.test(\"Bãi chính được chọn tồn tại\", function () { pm.expect(first).to.exist; });",
+              "    if (first) {",
+              "        const other = pm.environment.get(\"otherLotId\");",
+              "        const second = other ? lots.find(lot => lot.id === other && lot.id !== first.id)",
+              "            : lots.find(lot => lot.code === \"DEMO-BT\" && lot.id !== first.id) || lots.find(lot => lot.id !== first.id);",
+              "        pm.test(\"Bãi đối chiếu tồn tại và khác bãi chính\", function () { pm.expect(second).to.exist; });",
+              "        pm.environment.set(\"lotId\", first.id);",
+              "        if (second) pm.environment.set(\"otherLotId\", second.id);",
+              "    }",
+              "}",
+              "[\"demoLotDetail\", \"demoLayoutSnapshot\", \"demoPrimaryIds\", \"demoWarmP95Ms\"].forEach(key => pm.collectionVariables.unset(key));",
+              "pm.visualizer.set(\"<style>\\nbody{font-family:Arial,sans-serif;color:#172033;background:#f4f6f8;margin:0;padding:24px}\\nh1{font-size:22px;margin:0 0 8px}p{line-height:1.5}.summary{display:flex;gap:24px;flex-wrap:wrap;background:white;padding:18px;border-radius:8px;margin:18px 0}\\n.summary strong{display:block;font-size:24px}table{width:100%;border-collapse:collapse;background:white}\\nth,td{text-align:left;padding:10px;border-bottom:1px solid #e2e8f0}th{background:#e8edf2}.ok{color:#146b40}.warn{color:#a44900}code{font-family:monospace}\\n</style>\\n<h1>{{title}}</h1><p>{{subtitle}}</p>\\n<div class=\\\"summary\\\">{{#each metrics}}<div><strong>{{value}}</strong>{{label}}</div>{{/each}}</div>\\n<table><thead><tr>{{#each columns}}<th>{{this}}</th>{{/each}}</tr></thead>\\n<tbody>{{#each rows}}<tr>{{#each this}}<td>{{this}}</td>{{/each}}</tr>{{/each}}</tbody></table>\\n<p>{{note}}</p>\", { title: \"Các bãi xe dùng cho demo\", subtitle: \"Request 01 tự lưu lotId và otherLotId trong environment.\",",
+              "metrics: [{ label: \"bãi xe\", value: lots.length }], columns: [\"Mã bãi\", \"Tên bãi\", \"ID\"],",
+              "rows: lots.map(lot => [lot.code, lot.name, lot.id]), note: \"Tiếp tục request 02 để xem thông tin bãi chính.\" });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "02 - Đối chiếu thông tin bãi với layout",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{lotId}}",
+        "description": "Lưu code và name từ API chi tiết để kiểm tra metadata trong response layout ở request 03."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200 và envelope thành công\", function () {",
+              "    pm.response.to.have.status(200);",
+              "    const envelope = pm.response.json();",
+              "    pm.expect(envelope.isSuccess).to.equal(true);",
+              "    pm.expect(envelope.statusCode).to.equal(200);",
+              "    pm.expect(envelope.message).to.be.a(\"string\");",
+              "});",
+              "const detail = pm.response.json().result;",
+              "pm.test(\"Chi tiết thuộc đúng bãi và có thông tin địa lý\", function () {",
+              "    pm.expect(detail.id).to.equal(pm.variables.get(\"lotId\"));",
+              "    pm.expect(detail.latitude).to.be.a(\"number\");",
+              "    pm.expect(detail.longitude).to.be.a(\"number\");",
+              "    pm.expect(detail.timezone).to.be.a(\"string\");",
+              "});",
+              "pm.collectionVariables.set(\"demoLotDetail\", JSON.stringify(detail));",
+              "pm.visualizer.set(\"<style>\\nbody{font-family:Arial,sans-serif;color:#172033;background:#f4f6f8;margin:0;padding:24px}\\nh1{font-size:22px;margin:0 0 8px}p{line-height:1.5}.summary{display:flex;gap:24px;flex-wrap:wrap;background:white;padding:18px;border-radius:8px;margin:18px 0}\\n.summary strong{display:block;font-size:24px}table{width:100%;border-collapse:collapse;background:white}\\nth,td{text-align:left;padding:10px;border-bottom:1px solid #e2e8f0}th{background:#e8edf2}.ok{color:#146b40}.warn{color:#a44900}code{font-family:monospace}\\n</style>\\n<h1>{{title}}</h1><p>{{subtitle}}</p>\\n<div class=\\\"summary\\\">{{#each metrics}}<div><strong>{{value}}</strong>{{label}}</div>{{/each}}</div>\\n<table><thead><tr>{{#each columns}}<th>{{this}}</th>{{/each}}</tr></thead>\\n<tbody>{{#each rows}}<tr>{{#each this}}<td>{{this}}</td>{{/each}}</tr>{{/each}}</tbody></table>\\n<p>{{note}}</p>\", { title: detail.name, subtitle: detail.address,",
+              "metrics: [{ label: \"mã bãi\", value: detail.code }, { label: \"múi giờ\", value: detail.timezone }],",
+              "columns: [\"Thuộc tính\", \"Giá trị\"], rows: [[\"Latitude\", detail.latitude], [\"Longitude\", detail.longitude], [\"Trạng thái\", detail.status]],",
+              "note: \"Request 03 sẽ so sánh code và name của layout với dữ liệu này.\" });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "03 - Kiểm tra tọa độ và kích thước toàn bộ ô",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{lotId}}/layout",
+        "description": "Kiểm tra metadata, ID không trùng, cấu trúc đa tầng và các transform. Có thể yêu cầu ít nhất một ô có đủ position/rotationY/size bằng requirePublishedCoordinates=true."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200 và envelope thành công\", function () {",
+              "    pm.response.to.have.status(200);",
+              "    const envelope = pm.response.json();",
+              "    pm.expect(envelope.isSuccess).to.equal(true);",
+              "    pm.expect(envelope.statusCode).to.equal(200);",
+              "    pm.expect(envelope.message).to.be.a(\"string\");",
+              "});",
+              "function flattenLayout(value) {",
+              "    return value.levels.flatMap(level => level.zones.flatMap(zone =>",
+              "        zone.slots.map(slot => ({ level, zone, slot }))));",
+              "}",
+              "const layout = pm.response.json().result;",
+              "const detailText = pm.collectionVariables.get(\"demoLotDetail\");",
+              "pm.test(\"Metadata layout khớp API chi tiết bãi\", function () {",
+              "    pm.expect(detailText, \"Chạy request 02 trước\").to.be.a(\"string\");",
+              "    const detail = JSON.parse(detailText);",
+              "    pm.expect(layout.lotId).to.equal(detail.id);",
+              "    pm.expect(layout.code).to.equal(detail.code);",
+              "    pm.expect(layout.name).to.equal(detail.name);",
+              "});",
+              "pm.test(\"Cấu trúc có tầng, khu, ô và ID duy nhất\", function () {",
+              "    pm.expect(layout.levels).to.be.an(\"array\").that.is.not.empty;",
+              "    const ids = [];",
+              "    layout.levels.forEach(level => {",
+              "        ids.push(level.id);",
+              "        pm.expect(level.zones).to.be.an(\"array\");",
+              "        pm.expect(level.elevationM).to.be.a(\"number\");",
+              "        level.zones.forEach(zone => {",
+              "            ids.push(zone.id);",
+              "            pm.expect(zone.slots).to.be.an(\"array\");",
+              "            zone.slots.forEach(slot => ids.push(slot.id));",
+              "        });",
+              "    });",
+              "    pm.expect(new Set(ids).size).to.equal(ids.length);",
+              "    pm.collectionVariables.set(\"demoPrimaryIds\", JSON.stringify(ids));",
+              "});",
+              "const rows = flattenLayout(layout);",
+              "pm.test(\"Các transform có kiểu số và kích thước hợp lệ\", function () {",
+              "    pm.expect(rows.length, \"Bãi cần có ô đỗ\").to.be.greaterThan(0);",
+              "    rows.forEach(({slot}) => {",
+              "        pm.expect(slot.code).to.be.a(\"string\");",
+              "        pm.expect(slot.operationalStatus).to.be.a(\"string\");",
+              "        if (slot.position !== null) {",
+              "            [\"x\", \"y\", \"z\"].forEach(axis => pm.expect(slot.position[axis]).to.be.a(\"number\"));",
+              "        }",
+              "        if (slot.rotationY !== null) pm.expect(slot.rotationY).to.be.a(\"number\");",
+              "        if (slot.size !== null) {",
+              "            [\"x\", \"y\", \"z\"].forEach(axis => {",
+              "                pm.expect(slot.size[axis]).to.be.a(\"number\");",
+              "                pm.expect(slot.size[axis]).to.be.greaterThan(0);",
+              "            });",
+              "        }",
+              "    });",
+              "});",
+              "pm.test(\"Bản đồ có tọa độ PUBLISHED khi yêu cầu\", function () {",
+              "    if (pm.variables.get(\"requirePublishedCoordinates\") === \"true\") {",
+              "        pm.expect(rows.some(({slot}) => slot.position !== null && slot.rotationY !== null && slot.size !== null),",
+              "            \"Cần seed bản đồ PUBLISHED hoặc chọn bãi có tọa độ\").to.equal(true);",
+              "    }",
+              "});",
+              "pm.collectionVariables.set(\"demoLayoutSnapshot\", JSON.stringify(layout));",
+              "const zones = layout.levels.reduce((total, level) => total + level.zones.length, 0);",
+              "pm.visualizer.set(\"<style>\\nbody{font-family:Arial,sans-serif;color:#172033;background:#f4f6f8;margin:0;padding:24px}\\nh1{font-size:22px;margin:0 0 8px}p{line-height:1.5}.summary{display:flex;gap:24px;flex-wrap:wrap;background:white;padding:18px;border-radius:8px;margin:18px 0}\\n.summary strong{display:block;font-size:24px}table{width:100%;border-collapse:collapse;background:white}\\nth,td{text-align:left;padding:10px;border-bottom:1px solid #e2e8f0}th{background:#e8edf2}.ok{color:#146b40}.warn{color:#a44900}code{font-family:monospace}\\n</style>\\n<h1>{{title}}</h1><p>{{subtitle}}</p>\\n<div class=\\\"summary\\\">{{#each metrics}}<div><strong>{{value}}</strong>{{label}}</div>{{/each}}</div>\\n<table><thead><tr>{{#each columns}}<th>{{this}}</th>{{/each}}</tr></thead>\\n<tbody>{{#each rows}}<tr>{{#each this}}<td>{{this}}</td>{{/each}}</tr>{{/each}}</tbody></table>\\n<p>{{note}}</p>\", { title: \"Layout 3D · \" + layout.name, subtitle: \"Tọa độ và kích thước trả về từ API cấu trúc bãi.\",",
+              "metrics: [{ label: \"tầng\", value: layout.levels.length }, { label: \"khu\", value: zones }, { label: \"ô đỗ\", value: rows.length }],",
+              "columns: [\"Tầng\", \"Khu\", \"Ô\", \"Position x / y / z\", \"Rotation Y\", \"Size x / y / z\"],",
+              "rows: rows.slice(0, 30).map(({level, zone, slot}) => [level.code, zone.code, slot.code,",
+              "slot.position ? [slot.position.x, slot.position.y, slot.position.z].join(\" / \") : \"Chưa có tọa độ\",",
+              "slot.rotationY === null ? \"—\" : slot.rotationY,",
+              "slot.size ? [slot.size.x, slot.size.y, slot.size.z].join(\" / \") : \"—\"]),",
+              "note: \"Bảng hiển thị tối đa 30 ô. Assertion kiểm tra toàn bộ ô trong response. Rotation Y theo contract của BE.\" });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "04 - Demo 10 lượt gọi layout và đo p95",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{lotId}}/layout",
+        "description": "Gửi một request warm-up rồi tự gọi lặp warmSamples lần, tối đa 30. So sánh dữ liệu từng lượt và hiển thị bảng thời gian trong Visualize. checkPerformance=true sẽ assert p95 < maxWarmResponseMs. Thời gian đo là HTTP qua baseUrl. Dữ liệu ổn định và thời gian HTTP cần được đối chiếu thêm với TTL/log Redis để xác nhận Redis hit."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200 và envelope thành công\", function () {",
+              "    pm.response.to.have.status(200);",
+              "    const envelope = pm.response.json();",
+              "    pm.expect(envelope.isSuccess).to.equal(true);",
+              "    pm.expect(envelope.statusCode).to.equal(200);",
+              "    pm.expect(envelope.message).to.be.a(\"string\");",
+              "});",
+              "const expectedText = pm.collectionVariables.get(\"demoLayoutSnapshot\");",
+              "pm.test(\"Đã có layout chuẩn từ request 03\", function () {",
+              "    pm.expect(expectedText, \"Chạy request 03 trước\").to.be.a(\"string\");",
+              "});",
+              "const requestedSamples = Number(pm.variables.get(\"warmSamples\"));",
+              "const count = Math.max(1, Math.min(30, Number.isInteger(requestedSamples) ? requestedSamples : 10));",
+              "const samples = [];",
+              "const target = pm.variables.replaceIn(pm.request.url.toString());",
+              "function finishMeasurements() {",
+              "    if (!samples.length) return;",
+              "    const sorted = samples.map(sample => sample.ms).sort((left, right) => left - right);",
+              "    const p95 = sorted[Math.ceil(sorted.length * 0.95) - 1];",
+              "    const average = sorted.reduce((total, value) => total + value, 0) / sorted.length;",
+              "    const threshold = Number(pm.variables.get(\"maxWarmResponseMs\"));",
+              "    pm.collectionVariables.set(\"demoWarmP95Ms\", String(p95));",
+              "    if (pm.variables.get(\"checkPerformance\") === \"true\") {",
+              "        pm.test(\"HTTP p95 sau warm-up dưới ngưỡng đã cấu hình\", function () {",
+              "            pm.expect(threshold).to.be.greaterThan(0);",
+              "            pm.expect(p95).to.be.below(threshold);",
+              "        });",
+              "    }",
+              "    console.info(\"SCRUM-80 HTTP measurements\", { samples: samples.length, averageMs: average, p95Ms: p95, thresholdMs: threshold });",
+              "    pm.visualizer.set(\"<style>\\nbody{font-family:Arial,sans-serif;color:#172033;background:#f4f6f8;margin:0;padding:24px}\\nh1{font-size:22px;margin:0 0 8px}p{line-height:1.5}.summary{display:flex;gap:24px;flex-wrap:wrap;background:white;padding:18px;border-radius:8px;margin:18px 0}\\n.summary strong{display:block;font-size:24px}table{width:100%;border-collapse:collapse;background:white}\\nth,td{text-align:left;padding:10px;border-bottom:1px solid #e2e8f0}th{background:#e8edf2}.ok{color:#146b40}.warn{color:#a44900}code{font-family:monospace}\\n</style>\\n<h1>{{title}}</h1><p>{{subtitle}}</p>\\n<div class=\\\"summary\\\">{{#each metrics}}<div><strong>{{value}}</strong>{{label}}</div>{{/each}}</div>\\n<table><thead><tr>{{#each columns}}<th>{{this}}</th>{{/each}}</tr></thead>\\n<tbody>{{#each rows}}<tr>{{#each this}}<td>{{this}}</td>{{/each}}</tr>{{/each}}</tbody></table>\\n<p>{{note}}</p>\", { title: \"Thời gian gọi layout sau warm-up\", subtitle: \"Đo \" + samples.length + \" lượt HTTP tới \" + target,",
+              "metrics: [{ label: \"trung bình (ms)\", value: average.toFixed(2) }, { label: \"p95 (ms)\", value: p95 },",
+              "{ label: \"ngưỡng (ms)\", value: threshold }],",
+              "columns: [\"Lượt\", \"HTTP\", \"Thời gian (ms)\"], rows: samples.map((sample, index) => [index + 1, sample.status, sample.ms]),",
+              "note: (pm.variables.get(\"checkPerformance\") === \"true\" ? \"Đã bật assertion p95.\" : \"Đang đo và hiển thị p95. Bật checkPerformance=true để assertion theo ngưỡng.\") +",
+              "\" Redis TTL 12 giờ được kiểm tra bằng redis-cli theo hướng dẫn trong mô tả collection.\" });",
+              "}",
+              "function measureNext() {",
+              "    const index = samples.length + 1;",
+              "    pm.sendRequest({ url: target, method: \"GET\", header: { Accept: \"application/json\" } }, function (error, response) {",
+              "        pm.test(\"Lượt \" + index + \" gọi API thành công\", function () {",
+              "            pm.expect(error).to.not.exist;",
+              "            pm.expect(response.code).to.equal(200);",
+              "        });",
+              "        if (error || !response) return;",
+              "        pm.test(\"Lượt \" + index + \" giữ đúng layout của bãi\", function () {",
+              "            pm.expect(response.json().result).to.deep.equal(JSON.parse(expectedText));",
+              "        });",
+              "        samples.push({ ms: response.responseTime, status: response.code });",
+              "        if (samples.length < count) measureNext();",
+              "        else finishMeasurements();",
+              "    });",
+              "}",
+              "if (expectedText) measureNext();"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "05 - Đổi bãi và kiểm tra cô lập cây dữ liệu",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{otherLotId}}/layout",
+        "description": "Kiểm tra bãi thứ hai và ID level/zone/slot thuộc riêng từng bãi."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200 và envelope thành công\", function () {",
+              "    pm.response.to.have.status(200);",
+              "    const envelope = pm.response.json();",
+              "    pm.expect(envelope.isSuccess).to.equal(true);",
+              "    pm.expect(envelope.statusCode).to.equal(200);",
+              "    pm.expect(envelope.message).to.be.a(\"string\");",
+              "});",
+              "function flattenLayout(value) {",
+              "    return value.levels.flatMap(level => level.zones.flatMap(zone =>",
+              "        zone.slots.map(slot => ({ level, zone, slot }))));",
+              "}",
+              "const layout = pm.response.json().result;",
+              "pm.test(\"Response thuộc đúng bãi đối chiếu\", function () {",
+              "    pm.expect(layout.lotId).to.equal(pm.variables.get(\"otherLotId\"));",
+              "    pm.expect(layout.lotId).to.not.equal(pm.variables.get(\"lotId\"));",
+              "    pm.expect(layout.levels).to.be.an(\"array\").that.is.not.empty;",
+              "});",
+              "const otherIds = layout.levels.flatMap(level => [level.id, ...level.zones.flatMap(zone => [zone.id, ...zone.slots.map(slot => slot.id)])]);",
+              "pm.test(\"Hai bãi không dùng chung ID tầng, khu hoặc ô\", function () {",
+              "    const stored = pm.collectionVariables.get(\"demoPrimaryIds\");",
+              "    pm.expect(stored, \"Chạy request 03 trước\").to.be.a(\"string\");",
+              "    const primary = new Set(JSON.parse(stored));",
+              "    otherIds.forEach(id => pm.expect(primary.has(id), \"ID trùng giữa hai bãi \" + id).to.equal(false));",
+              "});",
+              "const rows = flattenLayout(layout);",
+              "pm.visualizer.set(\"<style>\\nbody{font-family:Arial,sans-serif;color:#172033;background:#f4f6f8;margin:0;padding:24px}\\nh1{font-size:22px;margin:0 0 8px}p{line-height:1.5}.summary{display:flex;gap:24px;flex-wrap:wrap;background:white;padding:18px;border-radius:8px;margin:18px 0}\\n.summary strong{display:block;font-size:24px}table{width:100%;border-collapse:collapse;background:white}\\nth,td{text-align:left;padding:10px;border-bottom:1px solid #e2e8f0}th{background:#e8edf2}.ok{color:#146b40}.warn{color:#a44900}code{font-family:monospace}\\n</style>\\n<h1>{{title}}</h1><p>{{subtitle}}</p>\\n<div class=\\\"summary\\\">{{#each metrics}}<div><strong>{{value}}</strong>{{label}}</div>{{/each}}</div>\\n<table><thead><tr>{{#each columns}}<th>{{this}}</th>{{/each}}</tr></thead>\\n<tbody>{{#each rows}}<tr>{{#each this}}<td>{{this}}</td>{{/each}}</tr>{{/each}}</tbody></table>\\n<p>{{note}}</p>\", { title: \"Bãi đối chiếu · \" + layout.name, subtitle: \"Cấu trúc của bãi thứ hai.\",",
+              "metrics: [{ label: \"mã bãi\", value: layout.code }, { label: \"tầng\", value: layout.levels.length }, { label: \"ô\", value: rows.length }],",
+              "columns: [\"Tầng\", \"Khu\", \"Ô\"], rows: rows.slice(0, 30).map(({level, zone, slot}) => [level.code, zone.code, slot.code]),",
+              "note: \"Assertion so sánh toàn bộ ID với bãi chính để phát hiện trộn dữ liệu đa bãi.\" });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "06 - UUID hợp lệ nhưng không có bãi",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots/{{$guid}}/layout",
+        "description": "UUID ngẫu nhiên không tồn tại phải trả 404."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 404 và envelope lỗi chuẩn\", function () {",
+              "    pm.response.to.have.status(404);",
+              "    const envelope = pm.response.json();",
+              "    pm.expect(envelope.isSuccess).to.equal(false);",
+              "    pm.expect(envelope.statusCode).to.equal(404);",
+              "    pm.expect(envelope.result).to.equal(null);",
+              "    pm.expect(envelope.message).to.be.a(\"string\");",
+              "});",
+              "pm.visualizer.set(\"<style>\\nbody{font-family:Arial,sans-serif;color:#172033;background:#f4f6f8;margin:0;padding:24px}\\nh1{font-size:22px;margin:0 0 8px}p{line-height:1.5}.summary{display:flex;gap:24px;flex-wrap:wrap;background:white;padding:18px;border-radius:8px;margin:18px 0}\\n.summary strong{display:block;font-size:24px}table{width:100%;border-collapse:collapse;background:white}\\nth,td{text-align:left;padding:10px;border-bottom:1px solid #e2e8f0}th{background:#e8edf2}.ok{color:#146b40}.warn{color:#a44900}code{font-family:monospace}\\n</style>\\n<h1>{{title}}</h1><p>{{subtitle}}</p>\\n<div class=\\\"summary\\\">{{#each metrics}}<div><strong>{{value}}</strong>{{label}}</div>{{/each}}</div>\\n<table><thead><tr>{{#each columns}}<th>{{this}}</th>{{/each}}</tr></thead>\\n<tbody>{{#each rows}}<tr>{{#each this}}<td>{{this}}</td>{{/each}}</tr>{{/each}}</tbody></table>\\n<p>{{note}}</p>\", { title: \"Xử lý ID không hợp lệ hoặc không tồn tại\", subtitle: \"HTTP 404 là kết quả mong đợi của request này.\",",
+              "metrics: [{ label: \"HTTP\", value: pm.response.code }], columns: [\"Trường\", \"Giá trị\"],",
+              "rows: [[\"isSuccess\", pm.response.json().isSuccess], [\"message\", pm.response.json().message]],",
+              "note: \"Xem Test Results để kiểm tra các assertion.\" });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "07 - lotId sai định dạng UUID",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/parking-lots/not-a-guid/layout",
+        "description": "Route có ràng buộc guid. Giá trị sai định dạng không khớp route và phải trả envelope 404."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 404 và envelope lỗi chuẩn\", function () {",
+              "    pm.response.to.have.status(404);",
+              "    const envelope = pm.response.json();",
+              "    pm.expect(envelope.isSuccess).to.equal(false);",
+              "    pm.expect(envelope.statusCode).to.equal(404);",
+              "    pm.expect(envelope.result).to.equal(null);",
+              "    pm.expect(envelope.message).to.be.a(\"string\");",
+              "});",
+              "pm.visualizer.set(\"<style>\\nbody{font-family:Arial,sans-serif;color:#172033;background:#f4f6f8;margin:0;padding:24px}\\nh1{font-size:22px;margin:0 0 8px}p{line-height:1.5}.summary{display:flex;gap:24px;flex-wrap:wrap;background:white;padding:18px;border-radius:8px;margin:18px 0}\\n.summary strong{display:block;font-size:24px}table{width:100%;border-collapse:collapse;background:white}\\nth,td{text-align:left;padding:10px;border-bottom:1px solid #e2e8f0}th{background:#e8edf2}.ok{color:#146b40}.warn{color:#a44900}code{font-family:monospace}\\n</style>\\n<h1>{{title}}</h1><p>{{subtitle}}</p>\\n<div class=\\\"summary\\\">{{#each metrics}}<div><strong>{{value}}</strong>{{label}}</div>{{/each}}</div>\\n<table><thead><tr>{{#each columns}}<th>{{this}}</th>{{/each}}</tr></thead>\\n<tbody>{{#each rows}}<tr>{{#each this}}<td>{{this}}</td>{{/each}}</tr>{{/each}}</tbody></table>\\n<p>{{note}}</p>\", { title: \"Xử lý ID không hợp lệ hoặc không tồn tại\", subtitle: \"HTTP 404 là kết quả mong đợi của request này.\",",
+              "metrics: [{ label: \"HTTP\", value: pm.response.code }], columns: [\"Trường\", \"Giá trị\"],",
+              "rows: [[\"isSuccess\", pm.response.json().isSuccess], [\"message\", pm.response.json().message]],",
+              "note: \"Xem Test Results để kiểm tra các assertion.\" });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    }
+  ]
+}

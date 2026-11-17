@@ -11,7 +11,7 @@ builder.Services.AddRateLimiter(options=>
 {
     options.GlobalLimiter=PartitionedRateLimiter.Create<HttpContext,string>(context=>
         RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString()??"unknown",_=>new FixedWindowRateLimiterOptions
-        {PermitLimit=builder.Configuration.GetValue("RateLimit:PermitLimit",20),Window=TimeSpan.FromMinutes(1),QueueLimit=0,AutoReplenishment=true}));
+        {PermitLimit=builder.Configuration.GetValue("RateLimit:PermitLimit",10000),Window=TimeSpan.FromMinutes(1),QueueLimit=1000,AutoReplenishment=true}));
     options.OnRejected=async(context,ct)=>
     {
         context.HttpContext.Response.StatusCode=429;

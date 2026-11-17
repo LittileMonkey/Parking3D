@@ -49,6 +49,29 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+try
+{
+    var db = app.Services.GetRequiredService<NpgsqlDataSource>();
+    await using var schemaCmd = db.CreateCommand("""
+        ALTER TABLE public.billing_accounts
+            ADD COLUMN IF NOT EXISTS customer_id uuid,
+            ADD COLUMN IF NOT EXISTS lot_name varchar(255),
+            ADD COLUMN IF NOT EXISTS plate_number varchar(30);
+        ALTER TABLE public.refunds
+            ADD COLUMN IF NOT EXISTS provider_payload jsonb,
+            ADD COLUMN IF NOT EXISTS last_error text,
+            ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+        ALTER TABLE public.payment_attempts
+            ADD COLUMN IF NOT EXISTS provider_created_date text,
+            ADD COLUMN IF NOT EXISTS payment_url text;
+        """);
+    await schemaCmd.ExecuteNonQueryAsync();
+}
+catch (Exception ex)
+{
+    app.Logger.LogWarning(ex, "Could not auto-apply payment schema compatibility migrations on startup.");
+}
+
 app.UseParkingDefaults("payment");
 Parking.Payment.Api.ReportingEndpoints.MapPaymentReports(app);
 Parking.Payment.Api.RefundEndpoints.MapRefunds(app);
@@ -118,15 +141,36 @@ app.MapGet("/api/v1/payments/vnpay/ipn", async (HttpContext context, IPaymentSer
 
 // Endpoint ReturnUrl VNPay — trình duyệt khách hàng bị redirect về đây sau khi thanh toán
 // Frontend sẽ đọc IsSuccess để hiển thị trang "Thanh toán thành công" hay "Thất bại"
-app.MapGet("/api/v1/payments/vnpay/return", async (HttpContext context, IPaymentService service, CancellationToken ct) =>
+app.MapGet("/api/v1/payments/vnpay/return", async (HttpContext context, IPaymentService service, CheckoutPaymentService checkout, CancellationToken ct) =>
 {
-    if(context.Request.Headers.Accept.ToString().Contains("text/html",StringComparison.OrdinalIgnoreCase))
-    {
-        var frontend=app.Configuration["Frontend:BaseUrl"]??"http://localhost:3000";
-        return Results.Redirect(frontend.TrimEnd('/')+"/payment-return"+context.Request.QueryString);
-    }
     var queryParams = context.Request.Query
         .ToDictionary(kv => kv.Key, kv => kv.Value.ToString());
+
+    if (queryParams.TryGetValue("vnp_ResponseCode", out var code) && code == "00" &&
+        queryParams.TryGetValue("vnp_TransactionStatus", out var status) && status == "00")
+    {
+        try
+        {
+            if (queryParams.TryGetValue("vnp_TxnRef", out var reference) && reference.StartsWith("CO", StringComparison.Ordinal))
+            {
+                await checkout.HandleIpnAsync(queryParams, ct);
+            }
+            else
+            {
+                await service.HandleVnPayIpnAsync(queryParams, ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex, "Failed to auto-process VNPay return IPN");
+        }
+    }
+
+    if(context.Request.Headers.Accept.ToString().Contains("text/html",StringComparison.OrdinalIgnoreCase))
+    {
+        var frontend=app.Configuration["Frontend:BaseUrl"]??"http://localhost:5173";
+        return Results.Redirect(frontend.TrimEnd('/')+"/payment-return"+context.Request.QueryString);
+    }
     var result = await service.HandleVnPayReturnAsync(queryParams, ct);
     return Results.Ok(result);
 });

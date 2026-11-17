@@ -165,6 +165,16 @@ ALTER TABLE public.payments ADD COLUMN version int NOT NULL DEFAULT 1 CHECK(vers
 COMMIT;
 
 BEGIN;
+ALTER TABLE public.billing_accounts
+    ADD COLUMN IF NOT EXISTS customer_id uuid,
+    ADD COLUMN IF NOT EXISTS lot_name varchar(255),
+    ADD COLUMN IF NOT EXISTS plate_number varchar(30);
+CREATE INDEX IF NOT EXISTS ix_billing_accounts_customer_id
+    ON public.billing_accounts(customer_id)
+    WHERE customer_id IS NOT NULL;
+INSERT INTO public.service_schema_versions(version, applied_at)
+VALUES (2, now())
+ON CONFLICT (version) DO NOTHING;
 ALTER TABLE refunds ADD COLUMN IF NOT EXISTS provider_payload jsonb;
 ALTER TABLE refunds ADD COLUMN IF NOT EXISTS last_error text;
 ALTER TABLE refunds ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
