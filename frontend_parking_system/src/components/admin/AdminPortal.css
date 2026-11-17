@@ -1,64 +1,122 @@
 /* ═════════════════════════════════════════════════════════════════════════════
-   PARKMATRIX SYSTEM ADMIN CONSOLE — ENTERPRISE LIGHT DESIGN SYSTEM
-   Compact, High-Density Executive Layout
-   Accent: Deep Royal Navy (#072d59) + Platform Royal Indigo (#4338ca, #6366f1)
+   PARKMATRIX SYSTEM ADMIN CONSOLE — HARMONIZED STAFF DESIGN SYSTEM
+   Standardized with Staff Portal Design Tokens:
+   • Font Family: "Plus Jakarta Sans", "Segoe UI", sans-serif
+   • Canvas Background: #edf7fd (Ice Blue)
+   • Text Ink: #072d59 (Deep Royal Navy)
+   • Text Muted: #536e8f (Muted Slate Navy)
+   • Border Lines: #d9e4f0 (Clean Subtle Slate Border)
+   • Sidebar: #ffffff (Pure Crisp White, Border-right 1px solid #d9e4f0)
+   • Active State: #072d59 (Solid Ink) with white text
+   • Card Panels: #ffffff (Pure White, 18px radius, 0 5px 22px rgba(7,45,89,0.04))
    ═════════════════════════════════════════════════════════════════════════════ */
 
 :root {
+  --adm-ink: #072d59;
   --adm-navy: #072d59;
   --adm-navy-dark: #041c38;
   --adm-blue: #0d4685;
-  --adm-indigo: #4338ca;
-  --adm-indigo-light: #6366f1;
-  --adm-indigo-soft: #eef2ff;
-  --adm-cyan: #0891b2;
-  --adm-cyan-bright: #06b6d4;
-  --adm-cyan-soft: #ecfeff;
   --adm-muted: #536e8f;
-  --adm-border: rgba(7, 45, 89, 0.12);
-  --adm-border-subtle: rgba(7, 45, 89, 0.06);
-  --adm-emerald: #10b981;
-  --adm-emerald-soft: #ecfdf5;
-  --adm-amber: #f59e0b;
-  --adm-amber-soft: #fffbeb;
-  --adm-rose: #ef4444;
-  --adm-rose-soft: #fef2f2;
-  --adm-canvas: #f8fafc;
+  --adm-line: #d9e4f0;
+  --adm-border: #d9e4f0;
+  --adm-border-subtle: #e6eef6;
+  --adm-canvas: #edf7fd;
   --adm-card-bg: #ffffff;
+  --adm-input-border: #cddbea;
+  --adm-focus-ring: #dbf2fc;
+
+  /* Status Colors Harmonized with Staff */
+  --adm-emerald: #086548;
+  --adm-emerald-soft: #ecfdf5;
+  --adm-emerald-border: #bbebd6;
+
+  --adm-amber: #875808;
+  --adm-amber-soft: #fff6df;
+  --adm-amber-border: #fde68a;
+
+  --adm-rose: #b42337;
+  --adm-rose-soft: #fff1f2;
+  --adm-rose-border: #fecdd3;
+
+  --adm-indigo: #0d4685;
+  --adm-indigo-soft: #dbf2fc;
+  --adm-cyan: #0284c7;
+  --adm-cyan-soft: #e0f2fe;
 }
 
-/* ── 1. Shell & Fixed Sidebar (Luôn giữ nguyên khi cuộn trang) ── */
+/* ── 1. Shell & Fixed Sidebar (Đồng bộ tuyệt đối với Staff Workspace) ── */
 .adm-shell {
   display: flex;
   min-height: 100vh;
   width: 100%;
   position: relative;
-  background: linear-gradient(135deg, #f8fafc 0%, #edf7fd 50%, #f4f6fb 100%);
-  color: var(--adm-navy);
-  font-family: "Be Vietnam Pro", "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--adm-canvas);
+  color: var(--adm-ink);
+  font-family: "Plus Jakarta Sans", "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
   overflow-x: hidden;
 }
 
+.adm-shell *,
+.adm-shell *::before,
+.adm-shell *::after {
+  box-sizing: border-box;
+}
+
+.adm-shell * {
+  text-shadow: none;
+}
+
+.adm-shell :is(button, input, select, textarea) {
+  font: inherit;
+}
+
+.adm-shell :is(button, a, input, select, textarea):focus-visible {
+  outline: 3px solid #7ab3df;
+  outline-offset: 3px;
+}
+
+.adm-shell button {
+  cursor: pointer;
+}
+
+.adm-shell button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.adm-shell :is(h1, h2, h3, h4, p) {
+  overflow-wrap: anywhere;
+}
+
+.adm-shell :is(h1, h2, h3, h4) {
+  color: var(--adm-ink);
+  line-height: 1.35;
+}
+
+/* ── 2. White Sidebar (Đồng bộ phong cách thanh lịch của Staff) ── */
 .adm-sidebar {
-  width: 270px;
-  min-width: 270px;
+  width: 248px;
+  min-width: 248px;
   height: 100vh;
   position: fixed;
   top: 0;
   left: 0;
   bottom: 0;
-  background: linear-gradient(180deg, #072d59 0%, #062347 60%, #041830 100%);
-  color: #ffffff;
+  background: #ffffff;
+  color: var(--adm-ink);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  z-index: 100;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 4px 0 24px rgba(4, 28, 56, 0.2);
+  z-index: 50;
+  border-right: 1px solid var(--adm-line);
+  box-shadow: none;
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  padding: 24px 16px 16px;
 }
 
 .adm-sidebar::-webkit-scrollbar {
@@ -70,30 +128,32 @@
   flex-direction: column;
 }
 
-.adm-sidebar-brand {
+/* Brand Wordmark */
+.adm-sidebar-brand,
+.adm-wordmark {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 16px 18px;
+  color: var(--adm-ink);
   text-decoration: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.6px;
+  padding: 0 8px;
+  margin-bottom: 22px;
   transition: opacity 0.2s ease;
 }
 
-.adm-sidebar-brand:hover {
-  opacity: 0.94;
+.adm-sidebar-brand:hover,
+.adm-wordmark:hover {
+  opacity: 0.9;
 }
 
 .adm-sidebar-logo-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #4338ca 0%, #06b6d4 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(67, 56, 202, 0.4);
+  color: var(--adm-ink);
   flex-shrink: 0;
 }
 
@@ -103,66 +163,67 @@
 }
 
 .adm-brand-name {
-  font-size: 1.08rem;
+  font-size: 18px;
   font-weight: 800;
-  letter-spacing: -0.02em;
-  color: #ffffff;
+  letter-spacing: -0.5px;
+  color: var(--adm-ink);
   line-height: 1.15;
 }
 
 .adm-brand-subtitle {
-  font-size: 0.65rem;
+  display: block;
+  font-size: 8px;
+  letter-spacing: 1.15px;
+  margin-top: 2px;
+  color: #8295ac;
   font-weight: 700;
-  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #38bdf8;
-  display: flex;
-  align-items: center;
-  gap: 4px;
 }
 
 .adm-super-badge {
   display: inline-block;
   padding: 1px 5px;
-  background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%);
-  color: #ffffff;
-  font-size: 0.58rem;
+  background: #dbf2fc;
+  color: #0d4685;
+  font-size: 8px;
   font-weight: 800;
-  border-radius: 3px;
-  letter-spacing: 0.05em;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
+  margin-left: 4px;
+  vertical-align: middle;
 }
 
-/* ── Scope Indicator ── */
+/* Scope Indicator Card */
 .adm-scope-card {
-  margin: 10px 14px 4px;
-  padding: 9px 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  margin: 0 4px 18px;
+  padding: 10px 14px;
+  background: #f4f9fd;
+  border: 1px solid var(--adm-line);
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
 .adm-scope-label {
-  font-size: 0.65rem;
+  font-size: 10px;
   font-weight: 700;
-  color: #94a3b8;
+  color: var(--adm-muted);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.adm-scope-value {
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: #ffffff;
+  letter-spacing: 0.8px;
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.adm-scope-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--adm-ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .adm-pulse-dot {
@@ -172,6 +233,7 @@
   background: #10b981;
   box-shadow: 0 0 8px #10b981;
   animation: admPulse 2s infinite;
+  flex-shrink: 0;
 }
 
 @keyframes admPulse {
@@ -180,141 +242,155 @@
   100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
 }
 
-/* ── Navigation Links ── */
-.adm-nav-group {
-  padding: 8px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
+/* Sidebar Nav */
+.adm-sidebar-caption,
 .adm-nav-heading {
-  font-size: 0.62rem;
+  font-size: 10px;
   font-weight: 700;
-  color: #64748b;
+  color: #8295ac;
+  letter-spacing: 1.2px;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: 6px 10px 2px;
+  margin: 0 10px 10px;
+  padding: 0;
 }
 
-.adm-nav-item {
+.adm-nav-group {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+}
+
+.adm-nav-item,
+.adm-workspace-link {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  color: #cbd5e1;
-  text-decoration: none;
-  font-size: 0.82rem;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 12px;
+  color: var(--adm-muted);
   font-weight: 600;
-  border-radius: 8px;
+  font-size: 13.5px;
+  text-decoration: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
   transition: all 0.15s ease;
 }
 
-.adm-nav-item:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: #ffffff;
-  transform: translateX(2px);
+.adm-nav-item:hover,
+.adm-workspace-link:hover {
+  background: #edf7fd;
+  color: var(--adm-ink);
 }
 
-.adm-nav-item.active {
-  background: linear-gradient(90deg, rgba(79, 70, 229, 0.35) 0%, rgba(6, 182, 212, 0.22) 100%);
+.adm-nav-item.active,
+.adm-workspace-link.active {
+  background: var(--adm-ink);
   color: #ffffff;
+  box-shadow: 0 6px 14px rgba(7, 45, 89, 0.15);
   font-weight: 700;
-  border-left: 3px solid #38bdf8;
 }
 
 .adm-nav-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.85;
-}
-
-.adm-nav-item.active .adm-nav-icon {
-  opacity: 1;
-  color: #38bdf8;
-}
-
-/* ── Sidebar Footer (Rất gọn gàng, không có nút Manager switch) ── */
-.adm-sidebar-footer {
-  padding: 12px 14px 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.adm-user-profile {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  overflow: hidden;
-  flex: 1;
-}
-
-.adm-avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
-  color: #ffffff;
-  font-weight: 700;
-  font-size: 0.82rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   flex-shrink: 0;
+}
+
+.adm-nav-item.active .adm-nav-icon,
+.adm-workspace-link.active .adm-nav-icon {
+  color: #ffffff;
+}
+
+/* Sidebar Footer & User Profile */
+.adm-sidebar-footer {
+  padding: 16px 6px 8px;
+  border-top: 1px solid var(--adm-line);
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.adm-user-profile,
+.adm-sidebar-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.adm-avatar,
+.adm-profile-initial {
+  display: grid;
+  place-items: center;
+  background: #dbf2fc;
+  color: #0d4685;
+  border-radius: 12px;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  font-weight: 800;
+  font-size: 13px;
 }
 
 .adm-user-meta {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   overflow: hidden;
 }
 
 .adm-user-name {
-  font-size: 0.8rem;
+  font-size: 12px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--adm-ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: block;
 }
 
 .adm-user-role-tag {
-  font-size: 0.64rem;
+  color: var(--adm-muted);
+  font-size: 10px;
   font-weight: 600;
-  color: #38bdf8;
+  display: block;
 }
 
-.adm-btn-logout {
-  display: inline-flex;
+.adm-btn-logout,
+.adm-logout-link {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 7px 10px;
-  border-radius: 8px;
-  font-size: 0.75rem;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--adm-line);
+  border-radius: 10px;
+  color: var(--adm-muted);
   font-weight: 600;
+  font-size: 13px;
+  text-decoration: none;
+  background: #ffffff;
+  width: 100%;
   cursor: pointer;
-  background: rgba(239, 68, 68, 0.15);
-  color: #fca5a5;
-  border: 1px solid rgba(239, 68, 68, 0.25);
-  transition: all 0.2s ease;
-  flex-shrink: 0;
+  transition: all 0.15s ease;
+  justify-content: flex-start;
 }
 
-.adm-btn-logout:hover {
-  background: rgba(239, 68, 68, 0.3);
-  color: #ffffff;
+.adm-btn-logout:hover,
+.adm-logout-link:hover {
+  background: #fff1f2;
+  color: #b42337;
+  border-color: #fecdd3;
 }
 
-/* ── 2. Content Area & Topbar (margin-left: 270px) ── */
+/* ── 3. Content Area & Topbar ── */
 .adm-main {
   flex: 1;
-  margin-left: 270px;
-  width: calc(100% - 270px);
+  margin-left: 248px;
+  width: calc(100% - 248px);
   min-width: 0;
   min-height: 100vh;
   display: flex;
@@ -325,67 +401,100 @@
   position: sticky;
   top: 0;
   z-index: 40;
+  min-height: 84px;
+  padding: 18px 36px;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--adm-line);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 24px;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--adm-border);
+  gap: 20px;
 }
 
 .adm-topbar-left {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.adm-topbar-title-wrap {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.adm-topbar-eyebrow {
+  display: block;
+  color: #6c84a0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .adm-page-title {
-  font-size: 1.15rem;
+  font-size: clamp(15px, 1.8vw, 22px);
   font-weight: 800;
-  color: var(--adm-navy);
-  letter-spacing: -0.01em;
+  color: var(--adm-ink);
+  letter-spacing: -0.5px;
   margin: 0;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .adm-topbar-right {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .adm-status-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-  color: #166534;
+  gap: 7px;
+  padding: 6px 14px;
+  background: #e7f7ef;
+  border: 1px solid #bbebd6;
+  color: #086548;
   border-radius: 999px;
-  font-size: 0.74rem;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .adm-btn-refresh {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
+  gap: 7px;
+  padding: 9px 14px;
   background: #ffffff;
-  border: 1px solid var(--adm-border);
-  color: var(--adm-navy);
-  border-radius: 8px;
-  font-size: 0.78rem;
-  font-weight: 600;
+  border: 1px solid var(--adm-line);
+  color: var(--adm-ink);
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .adm-btn-refresh:hover {
-  background: #f8fafc;
-  border-color: var(--adm-blue);
+  background: #edf7fd;
+  border-color: #cddbea;
   color: var(--adm-blue);
 }
 
@@ -397,37 +506,40 @@
   100% { transform: rotate(360deg); }
 }
 
-/* ── Content View Wrapper ── */
+/* Content View Wrapper */
 .adm-content-wrapper {
-  padding: 20px 24px 48px;
-  flex: 1;
+  padding: 32px 36px 48px;
+  max-width: 1600px;
+  margin: 0 auto;
+  width: 100%;
+  min-width: 0;
 }
 
-/* ── KPI Grid (Gọn gàng & Tối ưu) ── */
+/* ── 4. KPI Grid & Metric Cards (Đồng bộ Staff Metrics) ── */
 .adm-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 14px;
-  margin-bottom: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 16px;
+  margin-bottom: 22px;
 }
 
 .adm-kpi-card {
   background: #ffffff;
-  border: 1px solid var(--adm-border);
-  border-radius: 12px;
-  padding: 14px 16px;
+  border: 1px solid var(--adm-line);
+  border-radius: 16px;
+  padding: 20px 22px;
+  box-shadow: 0 5px 22px rgba(7, 45, 89, 0.04);
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  box-shadow: 0 2px 10px rgba(7, 45, 89, 0.03);
+  gap: 8px;
   position: relative;
   overflow: hidden;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .adm-kpi-card:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(7, 45, 89, 0.06);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(7, 45, 89, 0.07);
 }
 
 .adm-kpi-card::before {
@@ -439,10 +551,10 @@
   height: 3px;
 }
 
-.adm-kpi-indigo::before { background: linear-gradient(90deg, #4338ca, #6366f1); }
-.adm-kpi-cyan::before { background: linear-gradient(90deg, #0891b2, #06b6d4); }
-.adm-kpi-emerald::before { background: linear-gradient(90deg, #059669, #10b981); }
-.adm-kpi-amber::before { background: linear-gradient(90deg, #d97706, #f59e0b); }
+.adm-kpi-indigo::before { background: #072d59; }
+.adm-kpi-cyan::before { background: #0284c7; }
+.adm-kpi-emerald::before { background: #087456; }
+.adm-kpi-amber::before { background: #94620b; }
 
 .adm-kpi-header {
   display: flex;
@@ -451,53 +563,57 @@
 }
 
 .adm-kpi-title {
-  font-size: 0.72rem;
+  font-size: 11px;
   font-weight: 700;
   color: var(--adm-muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.5px;
 }
 
 .adm-kpi-icon-wrap {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: #dbf2fc;
+  color: #0d4685;
+  flex-shrink: 0;
 }
 
-.adm-kpi-indigo .adm-kpi-icon-wrap { background: var(--adm-indigo-soft); color: var(--adm-indigo); }
-.adm-kpi-cyan .adm-kpi-icon-wrap { background: var(--adm-cyan-soft); color: var(--adm-cyan); }
-.adm-kpi-emerald .adm-kpi-icon-wrap { background: var(--adm-emerald-soft); color: var(--adm-emerald); }
-.adm-kpi-amber .adm-kpi-icon-wrap { background: var(--adm-amber-soft); color: var(--adm-amber); }
+.adm-kpi-indigo .adm-kpi-icon-wrap { background: #dbf2fc; color: #0d4685; }
+.adm-kpi-cyan .adm-kpi-icon-wrap { background: #e0f2fe; color: #0284c7; }
+.adm-kpi-emerald .adm-kpi-icon-wrap { background: #e7f7ef; color: #087456; }
+.adm-kpi-amber .adm-kpi-icon-wrap { background: #fff6df; color: #94620b; }
 
 .adm-kpi-body {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 10px;
 }
 
 .adm-kpi-number {
-  font-size: 1.55rem;
+  font-size: 30px;
   font-weight: 800;
-  color: var(--adm-navy);
-  letter-spacing: -0.02em;
-  line-height: 1.1;
+  color: var(--adm-ink);
+  letter-spacing: -0.8px;
+  line-height: 1.15;
+  margin: 4px 0 2px;
 }
 
 .adm-kpi-tag {
-  font-size: 0.68rem;
+  font-size: 11px;
   font-weight: 700;
-  padding: 2px 6px;
-  border-radius: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
 }
 
-.adm-tag-positive { background: #dcfce7; color: #15803d; }
-.adm-tag-neutral { background: #f1f5f9; color: #475569; }
+.adm-tag-positive { background: #e7f7ef; color: #086548; }
+.adm-tag-neutral { background: #f1f3f7; color: #536e8f; }
 
 .adm-kpi-footer {
-  font-size: 0.72rem;
+  font-size: 11.5px;
   color: var(--adm-muted);
   display: flex;
   align-items: center;
@@ -505,71 +621,101 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-weight: 500;
 }
 
-/* ── Section Cards (Gọn hơn & Tinh tế) ── */
+/* ── 5. Standard Card Panels (Đồng bộ .staff-panel) ── */
+.adm-alert {
+  border: 1px solid #b8d4ef;
+  background: #edf7fd;
+  color: #0d4685;
+  border-radius: 12px;
+  padding: 13px 16px;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.adm-alert.error {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: #a52636;
+}
+
+.adm-alert.success {
+  background: #ecfdf5;
+  border-color: #bbebd6;
+  color: #086548;
+}
+
 .adm-card {
   background: #ffffff;
-  border: 1px solid var(--adm-border);
-  border-radius: 14px;
-  padding: 18px 20px;
-  box-shadow: 0 2px 12px rgba(7, 45, 89, 0.03);
-  margin-bottom: 18px;
+  border: 1px solid var(--adm-line);
+  border-radius: 18px;
+  padding: 24px;
+  box-shadow: 0 5px 22px rgba(7, 45, 89, 0.04);
+  margin-bottom: 22px;
+  min-width: 0;
 }
 
 .adm-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 14px;
-  padding-bottom: 10px;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
   border-bottom: 1px solid var(--adm-border-subtle);
+  flex-wrap: wrap;
 }
 
 .adm-card-title-group {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .adm-card-title {
-  font-size: 0.98rem;
+  font-size: 17px;
   font-weight: 800;
-  color: var(--adm-navy);
+  color: var(--adm-ink);
+  letter-spacing: -0.3px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   margin: 0;
 }
 
 .adm-card-desc {
-  font-size: 0.76rem;
+  font-size: 13.5px;
   color: var(--adm-muted);
   margin: 0;
+  font-weight: 400;
 }
 
-/* ── Microservices Compact Strip ── */
+/* ── 6. Microservices Compact Grid ── */
 .adm-services-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
 }
 
 .adm-service-item {
-  background: #f8fafc;
-  border: 1px solid var(--adm-border);
-  border-radius: 10px;
-  padding: 12px 14px;
+  background: #f8fbfe;
+  border: 1px solid var(--adm-line);
+  border-radius: 14px;
+  padding: 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   transition: all 0.15s ease;
 }
 
 .adm-service-item:hover {
   background: #ffffff;
-  border-color: var(--adm-indigo-light);
-  box-shadow: 0 3px 10px rgba(99, 102, 241, 0.08);
+  border-color: var(--adm-blue);
+  box-shadow: 0 6px 18px rgba(7, 45, 89, 0.06);
+  transform: translateY(-1px);
 }
 
 .adm-service-top {
@@ -579,43 +725,43 @@
 }
 
 .adm-service-name {
-  font-size: 0.85rem;
+  font-size: 14px;
   font-weight: 700;
-  color: var(--adm-navy);
+  color: var(--adm-ink);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .adm-service-badge-ready {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.68rem;
+  font-size: 11px;
   font-weight: 700;
-  padding: 2px 6px;
-  background: #dcfce7;
-  color: #15803d;
-  border-radius: 999px;
+  padding: 3px 8px;
+  background: #e7f7ef;
+  color: #086548;
+  border-radius: 6px;
 }
 
 .adm-service-badge-error {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.68rem;
+  font-size: 11px;
   font-weight: 700;
-  padding: 2px 6px;
-  background: #fee2e2;
-  color: #b91c1c;
-  border-radius: 999px;
+  padding: 3px 8px;
+  background: #fff1f2;
+  color: #b42337;
+  border-radius: 6px;
 }
 
 .adm-service-details {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  font-size: 0.72rem;
+  gap: 4px;
+  font-size: 12.5px;
   color: var(--adm-muted);
 }
 
@@ -624,57 +770,68 @@
   justify-content: space-between;
 }
 
-/* ── Standard Table Design (Gọn gàng) ── */
+/* ── 7. Standard Table Design (Đồng bộ .staff-table) ── */
 .adm-table-wrap {
   width: 100%;
+  min-width: 0;
   overflow-x: auto;
+  border: 1px solid var(--adm-line);
+  border-radius: 14px;
+  background: #ffffff;
+  margin-top: 10px;
 }
 
 .adm-table {
   width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  font-size: 0.84rem;
+  border-collapse: collapse;
+  font-size: 13px;
 }
 
 .adm-table th {
-  background: #f8fafc;
-  color: var(--adm-muted);
-  font-weight: 700;
-  text-transform: uppercase;
-  font-size: 0.68rem;
-  letter-spacing: 0.06em;
-  padding: 9px 12px;
-  border-bottom: 1px solid var(--adm-border);
   text-align: left;
+  font-size: 10.5px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--adm-muted);
+  background: #f4f9fd;
+  padding: 13px 16px;
+  font-weight: 700;
+  border-bottom: 1px solid var(--adm-line);
+  white-space: nowrap;
 }
 
 .adm-table td {
-  padding: 10px 12px;
+  padding: 15px 16px;
   border-bottom: 1px solid var(--adm-border-subtle);
-  color: var(--adm-navy);
   vertical-align: middle;
+  color: var(--adm-ink);
+  font-size: 13px;
 }
 
 .adm-table tbody tr:hover {
-  background: rgba(241, 245, 249, 0.6);
+  background: #f8fbfe;
 }
 
-/* ── Role Badges ── */
+.adm-table td strong {
+  display: block;
+}
+
+/* ── 8. Role Badges (Đồng bộ .staff-status) ── */
 .adm-role-badge {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 2px 7px;
-  border-radius: 6px;
-  font-size: 0.68rem;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 7px;
+  font-size: 11px;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .adm-role-admin {
-  background: linear-gradient(135deg, rgba(79, 70, 229, 0.15) 0%, rgba(6, 182, 212, 0.15) 100%);
-  color: #4338ca;
-  border: 1px solid rgba(67, 56, 202, 0.3);
+  background: #dbf2fc;
+  color: #0d4685;
+  border: 1px solid #b8d4ef;
 }
 
 .adm-role-manager {
@@ -684,172 +841,254 @@
 }
 
 .adm-role-staff {
-  background: #fef3c7;
-  color: #b45309;
+  background: #fff6df;
+  color: #875808;
   border: 1px solid #fde68a;
 }
 
 .adm-role-customer {
-  background: #f1f5f9;
-  color: #475569;
-  border: 1px solid #e2e8f0;
+  background: #f1f3f7;
+  color: #536e8f;
+  border: 1px solid var(--adm-line);
 }
 
-/* ── Controls, Inputs, Filter Bar ── */
+/* ── 9. Controls, Inputs, Filter Bar ── */
 .adm-filter-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 14px;
+  gap: 12px;
+  margin-bottom: 16px;
   flex-wrap: wrap;
 }
 
 .adm-search-input-wrap {
   position: relative;
   flex: 1;
-  min-width: 220px;
+  min-width: 240px;
 }
 
 .adm-search-input {
   width: 100%;
-  padding: 7px 12px 7px 32px;
-  border-radius: 8px;
-  border: 1px solid var(--adm-border);
+  padding: 10px 14px 10px 36px;
+  border-radius: 10px;
+  border: 1px solid var(--adm-input-border);
   background: #ffffff;
-  color: var(--adm-navy);
-  font-size: 0.8rem;
+  color: var(--adm-ink);
+  font-size: 13.5px;
+  font-family: inherit;
+  font-weight: 500;
   transition: all 0.15s ease;
 }
 
 .adm-search-input:focus {
   outline: none;
-  border-color: var(--adm-indigo-light);
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.12);
+  border-color: var(--adm-blue);
+  box-shadow: 0 0 0 3px var(--adm-focus-ring);
 }
 
 .adm-search-icon {
   position: absolute;
-  left: 10px;
+  left: 12px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--adm-muted);
 }
 
 .adm-select {
-  padding: 7px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--adm-border);
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--adm-input-border);
   background: #ffffff;
-  color: var(--adm-navy);
-  font-size: 0.8rem;
+  color: var(--adm-ink);
+  font-size: 13px;
   font-weight: 600;
   outline: none;
   cursor: pointer;
-}
-
-.adm-btn-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-  color: #ffffff;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.8rem;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.25);
   transition: all 0.15s ease;
 }
 
+.adm-select:focus {
+  border-color: var(--adm-blue);
+  box-shadow: 0 0 0 3px var(--adm-focus-ring);
+}
+
+/* Buttons (Đồng bộ .staff-button & .staff-primary) */
+.adm-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--adm-ink);
+  color: #ffffff;
+  border: 1px solid var(--adm-ink);
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
 .adm-btn-primary:hover {
-  background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
+  background: var(--adm-blue);
+  border-color: var(--adm-blue);
+  box-shadow: 0 4px 14px rgba(7, 45, 89, 0.15);
 }
 
 .adm-btn-secondary {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 11px;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
   background: #ffffff;
-  border: 1px solid var(--adm-border);
-  color: var(--adm-navy);
-  border-radius: 8px;
-  font-size: 0.76rem;
-  font-weight: 600;
+  border: 1px solid var(--adm-line);
+  color: var(--adm-ink);
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
   text-decoration: none;
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
 .adm-btn-secondary:hover {
-  background: #f8fafc;
-  border-color: #0284c7;
-  color: #0284c7;
+  background: #edf7fd;
+  border-color: var(--adm-input-border);
+  color: var(--adm-ink);
 }
 
-/* ── Revoke & Danger Button ── */
+/* Revoke & Danger Button */
 .adm-btn-revoke {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 12px;
-  border-radius: 8px;
-  font-size: 0.78rem;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 9px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
-  background: #fef2f2;
-  color: #dc2626;
-  border: 1.5px solid #fca5a5;
+  background: #fff1f2;
+  color: #b42337;
+  border: 1px solid #fecdd3;
   transition: all 0.15s ease;
 }
 
 .adm-btn-revoke:hover {
-  background: #dc2626;
+  background: #b42337;
   color: #ffffff;
-  border-color: #dc2626;
-  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.25);
+  border-color: #b42337;
 }
 
-/* ── Level Switcher Button ── */
+/* Level Switcher Button (Compact & Refined) */
 .adm-level-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   padding: 4px 10px;
-  font-size: 0.74rem;
-  font-weight: 700;
+  font-size: 11.5px;
+  font-weight: 600;
   border-radius: 7px;
   cursor: pointer;
   transition: all 0.15s ease;
   background: #ffffff;
-  color: var(--adm-navy);
-  border: 1px solid var(--adm-border);
+  color: var(--adm-muted);
+  border: 1px solid var(--adm-line);
+  line-height: 1.35;
+  box-shadow: 0 1px 2px rgba(7, 45, 89, 0.03);
 }
 
 .adm-level-btn:hover {
-  background: #f0f9ff;
-  border-color: #38bdf8;
-  color: #0284c7;
+  background: #edf7fd;
+  color: var(--adm-ink);
+  border-color: #cddbea;
 }
 
 .adm-level-btn.active {
-  background: #e0f2fe;
-  color: #0369a1;
-  border: 1.5px solid #38bdf8;
-  box-shadow: 0 1px 4px rgba(2, 132, 199, 0.18);
+  background: #072d59;
+  color: #ffffff;
+  border-color: #072d59;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(7, 45, 89, 0.15);
 }
 
-/* ── Modal Dialog ── */
+/* Language Switcher */
+.adm-lang-switch {
+  display: inline-flex;
+  align-items: center;
+  background: #f1f5f9;
+  border: 1px solid var(--adm-line);
+  border-radius: 9px;
+  padding: 2px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.adm-lang-pill {
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: var(--adm-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.3;
+}
+
+.adm-lang-pill:hover {
+  color: var(--adm-ink);
+}
+
+.adm-lang-pill.active {
+  background: #ffffff;
+  color: var(--adm-ink);
+  box-shadow: 0 1px 3px rgba(7, 45, 89, 0.1);
+}
+
+/* Mobile Menu Button & Backdrop */
+.adm-menu-button {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  background: #ffffff;
+  border: 1px solid var(--adm-line);
+  border-radius: 10px;
+  color: var(--adm-ink);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.adm-menu-button:hover {
+  background: #edf7fd;
+}
+
+.adm-menu-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(7, 45, 89, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 95;
+  border: none;
+  cursor: pointer;
+}
+
+/* ── 10. Modal Dialog (Đồng bộ .staff-dialog) ── */
 .adm-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(7, 45, 89, 0.5);
+  background: rgba(7, 45, 89, 0.45);
   backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   z-index: 200;
   display: flex;
   align-items: center;
@@ -859,26 +1098,27 @@
 
 .adm-modal {
   background: #ffffff;
-  border-radius: 14px;
+  border-radius: 18px;
   width: 100%;
-  max-width: 480px;
-  box-shadow: 0 16px 36px rgba(7, 45, 89, 0.2);
+  max-width: 520px;
+  box-shadow: 0 24px 90px rgba(7, 45, 89, 0.2);
   overflow: hidden;
-  border: 1px solid var(--adm-border);
+  border: 1px solid var(--adm-line);
+  color: var(--adm-ink);
 }
 
 .adm-modal-header {
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--adm-border-subtle);
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--adm-line);
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
 .adm-modal-title {
-  font-size: 1rem;
+  font-size: 17px;
   font-weight: 800;
-  color: var(--adm-navy);
+  color: var(--adm-ink);
   margin: 0;
 }
 
@@ -887,39 +1127,47 @@
   border: none;
   color: var(--adm-muted);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 6px;
+  padding: 6px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  transition: all 0.15s ease;
+}
+
+.adm-modal-close:hover {
+  background: #edf7fd;
+  color: var(--adm-ink);
 }
 
 .adm-modal-body {
-  padding: 18px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+  font-size: 13.5px;
 }
 
 .adm-modal-footer {
-  padding: 12px 18px;
-  background: #f8fafc;
-  border-top: 1px solid var(--adm-border-subtle);
+  padding: 16px 24px;
+  background: #f8fbfe;
+  border-top: 1px solid var(--adm-line);
   display: flex;
   justify-content: flex-end;
   gap: 10px;
 }
 
-/* ── 3D Viewer & Slot Control Container Styles ── */
+/* ── 11. 3D Viewer & Slot Control Container ── */
 .adm-viewer-container {
   height: 600px;
   width: 100%;
   position: relative;
   background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
-  border-radius: 12px;
+  border-radius: 16px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.5);
 }
 
-/* Hide conflicting/overlapping cross-section label inside 3D viewer */
 .adm-viewer-container .booking-cross-section {
   display: none !important;
 }
@@ -940,7 +1188,7 @@
   padding: 6px 12px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  font-size: 0.75rem;
+  font-size: 12px;
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -964,8 +1212,8 @@
 .adm-legend-item {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 0.72rem;
+  gap: 6px;
+  font-size: 12px;
   font-weight: 600;
   color: #cbd5e1;
 }
@@ -976,62 +1224,2811 @@
   border-radius: 50%;
 }
 
-/* ── Slots Grid Control ── */
+/* ── 12. Slots Grid Control (Dạng Lưới Vẽ 3D Nổi Khối) ── */
 .adm-slots-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
-.adm-slot-card {
-  background: #ffffff;
-  border: 1.5px solid var(--adm-border);
-  border-radius: 10px;
-  padding: 10px 12px;
+/* 3D Architectural Parking Bay Slab */
+.adm-slot-3d-bay {
+  position: relative;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 1.5px solid #cbd5e1;
+  border-bottom: 4px solid #94a3b8;
+  box-shadow: 0 4px 12px rgba(7, 45, 89, 0.06), 0 1px 3px rgba(0, 0, 0, 0.05);
+  padding: 8px 10px 10px;
   display: flex;
   flex-direction: column;
   gap: 6px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  user-select: none;
+}
+
+.adm-slot-3d-bay:hover {
+  transform: translateY(-3px);
+  border-color: #0284c7;
+  border-bottom-color: #0369a1;
+  box-shadow: 0 10px 20px -4px rgba(7, 45, 89, 0.14), 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+/* Bay Status Tint Variations */
+.adm-slot-3d-bay.status-available {
+  background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
+  border-color: #86efac;
+  border-bottom-color: #22c55e;
+}
+.adm-slot-3d-bay.status-available:hover {
+  border-color: #16a34a;
+  border-bottom-color: #15803d;
+  box-shadow: 0 10px 20px -4px rgba(22, 163, 74, 0.2);
+}
+
+.adm-slot-3d-bay.status-occupied {
+  background: linear-gradient(180deg, #ffffff 0%, #fef2f2 100%);
+  border-color: #fca5a5;
+  border-bottom-color: #ef4444;
+}
+.adm-slot-3d-bay.status-occupied:hover {
+  border-color: #dc2626;
+  border-bottom-color: #b91c1c;
+  box-shadow: 0 10px 20px -4px rgba(220, 38, 38, 0.2);
+}
+
+.adm-slot-3d-bay.status-reserved {
+  background: linear-gradient(180deg, #ffffff 0%, #fefce8 100%);
+  border-color: #fde047;
+  border-bottom-color: #eab308;
+}
+
+.adm-slot-3d-bay.status-maintenance {
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border-color: #cbd5e1;
+  border-bottom-color: #64748b;
+  opacity: 0.85;
+}
+
+/* 3D Overhead Smart Sensor Header */
+.adm-3d-sensor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.adm-3d-sensor-led {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 6px currentColor;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.adm-3d-sensor-led.sensor-available {
+  background: #10b981;
+  color: #10b981;
+  box-shadow: 0 0 8px #10b981, inset 0 1px 2px #ecfdf5;
+}
+
+.adm-3d-sensor-led.sensor-occupied {
+  background: #ef4444;
+  color: #ef4444;
+  box-shadow: 0 0 8px #ef4444, inset 0 1px 2px #fef2f2;
+}
+
+.adm-3d-sensor-led.sensor-reserved {
+  background: #f59e0b;
+  color: #f59e0b;
+  box-shadow: 0 0 8px #f59e0b, inset 0 1px 2px #fffbeb;
+}
+
+.adm-3d-sensor-led.sensor-maintenance {
+  background: #64748b;
+  color: #64748b;
+  box-shadow: 0 0 4px #64748b;
+}
+
+.adm-3d-zone-tag {
+  font-size: 10px;
+  font-weight: 700;
+  color: #475569;
+  background: rgba(226, 232, 240, 0.6);
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.2px;
+}
+
+.adm-3d-vehicle-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 3D Parking Bay Floor Surface (Nền Đường Nhựa Asphalt Phối Cảnh 3D) */
+.adm-3d-bay-surface {
+  position: relative;
+  height: 98px;
+  border-radius: 8px;
+  background: #141c28;
+  border: 1px solid #1e293b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.adm-3d-svg-stall {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ── Zone Section Headers & Styling (Phân khu Ô tô & Xe máy) ── */
+.adm-zone-section-header {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--adm-line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  background: #f8fafc;
+}
+
+.adm-zone-icon-box {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.adm-zone-icon-box.car {
+  background: #e0f2fe;
+  color: #0284c7;
+}
+
+.adm-zone-icon-box.bike {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.adm-zone-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--adm-navy);
+  letter-spacing: -0.2px;
+}
+
+.adm-zone-subtitle {
+  font-size: 10.5px;
+  color: var(--adm-muted);
+  font-weight: 500;
+  display: block;
+  margin-top: 1px;
+}
+
+.adm-zone-stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adm-zone-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.adm-zone-badge.available {
+  background: #e7f7ef;
+  color: #086548;
+}
+
+.adm-zone-badge.occupied {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   14. TACTICAL 3D DIGITAL TWIN PARKING MAP (LIGHT MODE COMMAND CENTER)
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* Digital Twin Canvas Container (Light Mode) */
+.adm-dt-canvas {
+  position: relative;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1.5px solid #d9e4f0;
+  box-shadow: 0 4px 24px rgba(7, 45, 89, 0.06);
+  padding: 24px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  user-select: none;
+  min-height: 700px;
+}
+
+.adm-dt-canvas::-webkit-scrollbar {
+  height: 8px;
+}
+
+.adm-dt-canvas::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.adm-dt-canvas::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.adm-dt-canvas::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Background Architectural Blueprint Grid (Light Mode) */
+.adm-dt-grid-overlay {
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(2, 132, 199, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(2, 132, 199, 0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 2.5D Orthographic Stage (Phẳng trực diện, không nghiêng) */
+.adm-dt-stage {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+}
+
+/* Top Bar: Gate ANPR Scanner & EV Green Island */
+.adm-dt-top-row {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+/* Gate 01 ANPR Scanner Box (Light Mode) */
+.adm-dt-gate-box {
+  background: #f0f9ff;
+  border: 1.5px solid #bae6fd;
+  border-radius: 12px;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.06);
+}
+
+.adm-dt-gate-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #0369a1;
+  letter-spacing: 0.8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adm-dt-gate-sub {
+  font-size: 10px;
+  color: #64748b;
+  display: block;
+  margin-top: 2px;
+}
+
+.adm-dt-barrier-badge {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  background: #e7f7ef;
+  color: #065f46;
+  border: 1px solid #10b981;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.adm-dt-laser-ticker {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #854d0e;
+  background: #fef9c3;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px dashed #ca8a04;
+}
+
+/* Island Box (Light Mode Surface) */
+.adm-dt-island {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: 0 2px 8px rgba(7, 45, 89, 0.04);
   position: relative;
 }
 
-.adm-slot-card:hover {
-  border-color: var(--adm-indigo);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(67, 56, 202, 0.12);
+.adm-dt-island-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
 }
 
-.adm-slot-card.status-available { border-color: #86efac; background: #f0fdf4; }
-.adm-slot-card.status-occupied { border-color: #fca5a5; background: #fef2f2; }
-.adm-slot-card.status-reserved { border-color: #fde047; background: #fefce8; }
-.adm-slot-card.status-maintenance { border-color: #cbd5e1; background: #f8fafc; opacity: 0.8; }
-.adm-slot-card.status-disabled { border-color: #fda4af; background: #fff1f2; opacity: 0.6; }
+.adm-dt-island-title {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--adm-navy);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: 0.2px;
+}
 
-/* ── Responsive Rules ── */
+.adm-dt-island-tag {
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: #072d59;
+  color: #ffffff;
+  letter-spacing: 0.5px;
+}
+
+.adm-dt-island-stats {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.adm-dt-island-stats strong {
+  color: #0284c7;
+}
+
+/* Double-sided stalls aisle container */
+.adm-dt-double-aisle {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.adm-dt-stalls-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 8px;
+}
+
+/* Individual Slot Capsule (Light Mode 2.5D Pill) */
+.adm-dt-capsule {
+  position: relative;
+  height: 124px;
+  border-radius: 14px;
+  border: 1.5px solid #cbd5e1;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 6px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(7, 45, 89, 0.04);
+}
+
+.adm-dt-capsule:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(7, 45, 89, 0.1);
+  z-index: 10;
+}
+
+.adm-dt-capsule.is-selected {
+  outline: 2.5px solid #0284c7;
+  outline-offset: 2px;
+  box-shadow: 0 0 16px rgba(2, 132, 199, 0.35);
+}
+
+/* Available State (Light Fresh Emerald) */
+.adm-dt-capsule.status-available {
+  background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
+  border-color: #86efac;
+}
+
+.adm-dt-capsule.status-available:hover {
+  border-color: #10b981;
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.2);
+}
+
+/* Occupied State (Light Soft Rose/Red) */
+.adm-dt-capsule.status-occupied {
+  background: linear-gradient(180deg, #ffffff 0%, #fef2f2 100%);
+  border-color: #fca5a5;
+}
+
+.adm-dt-capsule.status-occupied:hover {
+  border-color: #ef4444;
+  box-shadow: 0 6px 16px rgba(239, 68, 68, 0.2);
+}
+
+/* Reserved State (Light Soft Amber) */
+.adm-dt-capsule.status-reserved {
+  background: linear-gradient(180deg, #ffffff 0%, #fefce8 100%);
+  border-color: #fde047;
+}
+
+.adm-dt-capsule.status-reserved:hover {
+  border-color: #f59e0b;
+  box-shadow: 0 6px 16px rgba(245, 158, 11, 0.2);
+}
+
+/* Maintenance State (Light Muted Slate) */
+.adm-dt-capsule.status-maintenance {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  opacity: 0.85;
+}
+
+/* Capsule Text Elements */
+.adm-dt-capsule-code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  color: #334155;
+}
+
+.status-available .adm-dt-capsule-code { color: #065f46; }
+.status-occupied .adm-dt-capsule-code { color: #991b1b; }
+.status-reserved .adm-dt-capsule-code { color: #92400e; }
+.status-maintenance .adm-dt-capsule-code { color: #475569; }
+
+.adm-dt-capsule-icon-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 1;
+}
+
+.adm-dt-capsule-target-circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.5px dashed #10b981;
+  background: #e7f7ef;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #065f46;
+}
+
+.adm-dt-capsule-label {
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  color: #065f46;
+  text-transform: uppercase;
+}
+
+.status-occupied .adm-dt-capsule-label {
+  color: #b91c1c;
+  font-size: 7.5px;
+  font-family: monospace;
+}
+
+.adm-dt-capsule-sensor-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-top: 2px;
+}
+
+/* Roadway Divider (Làn Lưu Thông Chính Lane-01) */
+.adm-dt-roadway {
+  margin: 16px 0;
+  background: #334155;
+  border: 1px solid #475569;
+  border-radius: 8px;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.adm-dt-roadway-line {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: repeating-linear-gradient(90deg, #facc15 0, #facc15 14px, transparent 14px, transparent 28px);
+  transform: translateY(-50%);
+  opacity: 0.85;
+}
+
+.adm-dt-roadway-text {
+  position: relative;
+  z-index: 2;
+  font-size: 10px;
+  font-weight: 800;
+  color: #38bdf8;
+  letter-spacing: 1px;
+  background: #0f172a;
+  padding: 3px 12px;
+  border-radius: 999px;
+  border: 1px solid #0284c7;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.adm-dt-crosswalk {
+  display: flex;
+  gap: 3px;
+  position: relative;
+  z-index: 2;
+}
+
+.adm-dt-crosswalk-stripe {
+  width: 5px;
+  height: 18px;
+  background: #f1f5f9;
+  border-radius: 1px;
+  opacity: 0.85;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   14B. SPATIAL DIGITAL TWIN BLUEPRINT (100% 3D OVERVIEW SPATIAL ALIGNMENT)
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* Filtered-out state & Placeholder */
+.adm-dt-capsule.is-filtered-out {
+  opacity: 0.22;
+  filter: grayscale(100%);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.adm-dt-capsule.is-placeholder {
+  opacity: 0.45;
+  border-style: dashed;
+}
+
+/* Courtyard Main Envelope */
+.adm-dt-courtyard-envelope {
+  position: relative;
+  background: #ffffff;
+  border: 2px solid #cbd5e1;
+  border-radius: 16px;
+  padding: 24px 20px 20px;
+  box-shadow: 0 4px 20px rgba(7, 45, 89, 0.05);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* 4 Corner Floodlights */
+.adm-dt-floodlight {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.adm-dt-floodlight.top-left {
+  top: 8px;
+  left: 10px;
+}
+
+.adm-dt-floodlight.top-right {
+  top: 8px;
+  right: 10px;
+  flex-direction: row-reverse;
+}
+
+.adm-dt-floodlight.bottom-left {
+  bottom: 8px;
+  left: 10px;
+}
+
+.adm-dt-floodlight.bottom-right {
+  bottom: 8px;
+  right: 10px;
+  flex-direction: row-reverse;
+}
+
+.adm-dt-lamp-head {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #facc15;
+  border: 2px solid #ca8a04;
+  box-shadow: 0 0 10px #facc15;
+}
+
+.adm-dt-lamp-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* NORTH ZONE: Outdoor Motorbike Area & EV Kiosk */
+.adm-dt-north-zone {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  margin-bottom: 20px;
+  margin-top: 6px;
+}
+
+.adm-dt-moto-sector {
+  flex: 1;
+  background: #f0f9ff;
+  border: 1.5px solid #bae6fd;
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow: 0 2px 8px rgba(7, 45, 89, 0.05);
+}
+
+.adm-dt-moto-billboard {
+  background: linear-gradient(135deg, #072D59 0%, #0369a1 100%);
+  border: 1.5px solid #7dd3fc;
+  border-radius: 8px;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(7, 45, 89, 0.15);
+}
+
+.adm-dt-moto-billboard-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.adm-dt-moto-billboard-title {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.4px;
+}
+
+.adm-dt-moto-billboard-sub {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #bae6fd;
+  margin-top: 1px;
+}
+
+.adm-dt-moto-billboard-tag {
+  font-size: 9px;
+  font-weight: 800;
+  background: #ffffff;
+  color: #072D59;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid #bae6fd;
+  white-space: nowrap;
+}
+
+.adm-dt-moto-grid-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.adm-dt-moto-row {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 6px;
+}
+
+/* EV Kiosk */
+.adm-dt-ev-kiosk {
+  width: 250px;
+  min-width: 240px;
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.adm-dt-ev-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+
+.adm-dt-ev-cell {
+  background: #ffffff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  padding: 6px 4px;
+  text-align: center;
+}
+
+.adm-dt-ev-cell.active {
+  background: #dcfce7;
+  border: 1px solid #86efac;
+}
+
+.adm-dt-ev-code {
+  font-size: 10px;
+  font-weight: 800;
+  color: #065f46;
+}
+
+.adm-dt-ev-plate {
+  font-size: 8px;
+  color: #047857;
+  margin-top: 2px;
+  font-weight: 600;
+}
+
+.adm-dt-ev-status {
+  font-size: 7.5px;
+  font-weight: 700;
+  margin-top: 1px;
+}
+
+.adm-dt-ev-status.charge {
+  color: #b45309;
+}
+
+.adm-dt-ev-status.ready {
+  color: #10b981;
+}
+
+/* MAIN COURTYARD BODY (Left Wing | Central Spine | Right Wing) */
+.adm-dt-courtyard-body {
+  display: grid;
+  grid-template-columns: 1fr 170px 1fr;
+  gap: 16px;
+  align-items: stretch;
+  margin-bottom: 20px;
+}
+
+/* Wings (Khu A & Khu B) */
+.adm-dt-wing {
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+}
+
+.adm-dt-wing-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.adm-dt-wing-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--adm-navy);
+}
+
+.adm-dt-wing-count {
+  font-size: 10.5px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.adm-dt-wing-count strong {
+  color: #086548;
+}
+
+.adm-dt-wing-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  flex: 1;
+}
+
+.adm-dt-wing-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.adm-dt-col-sublabel {
+  font-size: 9px;
+  font-weight: 800;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: center;
+  padding-bottom: 2px;
+}
+
+.adm-dt-col-stalls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Entrance & Exit Lane Portals */
+.adm-dt-lane-portal {
+  margin-top: 10px;
+  background: #1e293b;
+  border: 1.5px solid #475569;
+  border-radius: 10px;
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+.adm-dt-lane-direction-badge {
+  font-size: 9.5px;
+  font-weight: 800;
+  color: #10b981;
+  background: #064e3b;
+  border: 1px solid #059669;
+  padding: 2px 8px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.adm-dt-lane-direction-badge.exit {
+  color: #fb923c;
+  background: #7c2d12;
+  border-color: #ea580c;
+}
+
+.adm-dt-lane-marking-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.adm-dt-lane-stop-line {
+  font-family: monospace;
+  font-size: 9px;
+  font-weight: 900;
+  color: #f8fafc;
+  background: #475569;
+  padding: 2px 10px;
+  border-radius: 3px;
+  letter-spacing: 1px;
+}
+
+.adm-dt-gate-barrier-unit {
+  width: 100%;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.adm-dt-barrier-pillar {
+  width: 14px;
+  height: 10px;
+  border-radius: 3px 3px 0 0;
+}
+
+.adm-dt-barrier-pillar.green {
+  background: #10b981;
+}
+
+.adm-dt-barrier-pillar.orange {
+  background: #f97316;
+}
+
+.adm-dt-barrier-arm {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px;
+  background: #ffffff;
+  border-radius: 2px;
+  border: 1px solid #94a3b8;
+}
+
+.adm-dt-barrier-stripe {
+  width: 8px;
+  height: 6px;
+}
+
+.adm-dt-barrier-stripe.red {
+  background: #ef4444;
+}
+
+.adm-dt-barrier-stripe.white {
+  background: #ffffff;
+}
+
+.adm-dt-barrier-sign {
+  font-size: 8.5px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.adm-dt-barrier-sign.green {
+  background: #064e3b;
+  color: #34d399;
+}
+
+.adm-dt-barrier-sign.orange {
+  background: #7c2d12;
+  color: #fed7aa;
+}
+
+.adm-dt-lane-surface-marking {
+  font-size: 7.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+
+.adm-dt-lane-surface-marking.green {
+  color: #34d399;
+}
+
+.adm-dt-lane-surface-marking.orange {
+  color: #fb923c;
+}
+
+/* CENTRAL ROADWAY SPINE (North-South Drive Corridor) */
+.adm-dt-central-spine {
+  background: #334155;
+  border: 1.5px solid #475569;
+  border-radius: 12px;
+  padding: 10px 6px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.adm-dt-spine-header,
+.adm-dt-spine-footer {
+  font-size: 8px;
+  font-weight: 800;
+  color: #94a3b8;
+  letter-spacing: 0.8px;
+  text-align: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #1e293b;
+}
+
+.adm-dt-spine-corridor {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  width: 100%;
+  flex: 1;
+  padding: 10px 0;
+}
+
+.adm-dt-spine-left-lane,
+.adm-dt-spine-right-lane {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.adm-dt-lane-indicator {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  color: #94a3b8;
+}
+
+.adm-dt-spine-right-lane .adm-dt-lane-indicator {
+  transform: none;
+}
+
+.adm-dt-spine-centerline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-around;
+  width: 12px;
+}
+
+.adm-dt-dashed-stripe {
+  width: 3px;
+  height: 18px;
+  background: #facc15;
+  border-radius: 1px;
+}
+
+.adm-dt-spine-speed-sign {
+  background: #0f172a;
+  border: 1px solid #0284c7;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 8px;
+  font-weight: 800;
+  color: #38bdf8;
+  letter-spacing: 0.5px;
+  text-align: center;
+  margin: 8px 0;
+}
+
+/* Security Booth Hub */
+.adm-dt-security-booth-hub {
+  width: 100%;
+  background: #1e3a8a;
+  border: 1.5px solid #3b82f6;
+  border-radius: 8px;
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 4px 10px rgba(30, 58, 138, 0.4);
+}
+
+.adm-dt-booth-roof {
+  width: 80%;
+  height: 3px;
+  background: #0f172a;
+  border-radius: 2px;
+}
+
+.adm-dt-booth-body {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adm-dt-booth-glass-window {
+  width: 24px;
+  height: 24px;
+  background: #bfdbfe;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.adm-dt-booth-meta {
+  text-align: left;
+}
+
+.adm-dt-booth-name {
+  font-size: 9px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.adm-dt-booth-sub {
+  font-size: 7.5px;
+  color: #93c5fd;
+  display: block;
+}
+
+.adm-dt-booth-platform {
+  font-size: 7px;
+  font-weight: 700;
+  color: #cbd5e1;
+  background: #0f172a;
+  padding: 1px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.3px;
+}
+
+/* South Footer Row */
+.adm-dt-south-footer-row {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.adm-dt-gate-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #0284c7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.adm-dt-gate-icon.toll {
+  background: #ea580c;
+}
+
+/* INDOOR MULTI-STORY ENVELOPE (For DEMO-Q1 & DEMO-Q7 Tầng 1, 2, 3 - Đồng Bộ Chuẩn Phong Cách Demo Bình Thạnh) */
+.adm-dt-indoor-envelope {
+  position: relative;
+  background: #ffffff;
+  border: 2px solid #cbd5e1;
+  border-radius: 16px;
+  padding: 24px 20px 20px;
+  box-shadow: 0 4px 20px rgba(7, 45, 89, 0.05);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.adm-dt-indoor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1.5px solid #e2e8f0;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.adm-dt-indoor-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.adm-dt-indoor-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--adm-navy);
+}
+
+.adm-dt-indoor-subtitle {
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.adm-dt-ramp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  padding: 4px 10px;
+  border-radius: 7px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.adm-dt-indoor-rows-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.adm-dt-indoor-row-box {
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: 0 2px 6px rgba(7, 45, 89, 0.04);
+}
+
+.adm-dt-indoor-row-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.adm-dt-indoor-row-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--adm-navy);
+}
+
+.adm-dt-indoor-row-count {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.adm-dt-indoor-row-stalls {
+  display: grid;
+  grid-template-columns: repeat(20, minmax(42px, 1fr));
+  gap: 4px;
+}
+
+/* Compact Capsule Styling Specific to 20-Slot Indoor Rows */
+.adm-dt-indoor-row-stalls .adm-dt-capsule {
+  height: 108px;
+  padding: 5px 2px;
+  min-width: 0;
+  border-radius: 8px;
+}
+
+.adm-dt-indoor-row-stalls .adm-dt-capsule-code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+}
+
+.adm-dt-indoor-row-stalls .adm-dt-capsule-target-circle {
+  width: 22px;
+  height: 22px;
+}
+
+.adm-dt-indoor-row-stalls .adm-dt-capsule-label {
+  font-size: 7.5px;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+}
+
+.adm-dt-indoor-row-stalls .adm-dt-capsule-sensor-dot {
+  width: 5px;
+  height: 5px;
+}
+
+.adm-dt-indoor-aisle {
+  background: #334155;
+  border-radius: 6px;
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #facc15;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+/* Floating Inspector Card (Thẻ Popover Tác Vụ Chuẩn Ảnh Mẫu) */
+.adm-dt-inspector-card {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  width: 330px;
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.1);
+  padding: 16px;
+  z-index: 50;
+  border: 1px solid #cbd5e1;
+  animation: admInspectSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes admInspectSlideIn {
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.adm-dt-inspector-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f1f5f9;
+  margin-bottom: 12px;
+}
+
+.adm-dt-inspector-cust-name {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--adm-ink);
+  line-height: 1.25;
+}
+
+.adm-dt-inspector-member-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  color: #0284c7;
+  margin-top: 2px;
+}
+
+.adm-dt-inspector-time-box {
+  text-align: right;
+}
+
+.adm-dt-inspector-time {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--adm-navy);
+}
+
+.adm-dt-inspector-eta {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #d97706;
+  background: #fef3c7;
+  padding: 1px 6px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-top: 2px;
+}
+
+.adm-dt-inspector-meta {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 14px;
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.adm-dt-inspector-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.adm-dt-inspector-meta-label {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.adm-dt-inspector-meta-val {
+  font-weight: 800;
+  color: #0f172a;
+  font-family: monospace;
+}
+
+.adm-dt-btn-confirm-entry {
+  width: 100%;
+  padding: 10px;
+  background: #0f172a;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-bottom: 8px;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.25);
+}
+
+.adm-dt-btn-confirm-entry:hover {
+  background: #1e293b;
+  transform: translateY(-1px);
+}
+
+.adm-dt-inspector-actions-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+
+.adm-dt-btn-action {
+  padding: 7px 6px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.adm-dt-btn-action:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.adm-dt-btn-action.cancel {
+  background: #fff1f2;
+  color: #b91c1c;
+  border-color: #fecdd3;
+}
+
+.adm-dt-btn-action.cancel:hover {
+  background: #fee2e2;
+}
+
+/* Stencil Slot Code Painted on Pavement */
+.adm-3d-slot-stencil {
+  position: absolute;
+  top: 5px;
+  left: 7px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  color: #0d4685;
+  z-index: 2;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+}
+
+.status-occupied .adm-3d-slot-stencil {
+  color: #991b1b;
+}
+
+.status-available .adm-3d-slot-stencil {
+  color: #065f46;
+}
+
+/* 3D Illustrated Vehicle / Marking Graphic */
+.adm-3d-vehicle-graphic {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.adm-3d-svg-vehicle {
+  width: 58px;
+  height: 82px;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.12));
+  transition: transform 0.2s ease;
+}
+
+.adm-slot-3d-bay:hover .adm-3d-svg-vehicle {
+  transform: scale(1.05);
+}
+
+/* 3D Bay Footer / Status Badge */
+.adm-3d-bay-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.adm-3d-status-pill {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.2;
+}
+
+.adm-3d-status-pill.status-available {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.adm-3d-status-pill.status-occupied {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.adm-3d-status-pill.status-reserved {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.adm-3d-status-pill.status-maintenance {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.adm-3d-op-badge {
+  font-size: 9px;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 0.3px;
+}
+
+/* ── AI Knowledge Management Action Buttons ── */
+.adm-btn-publish {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #086548;
+  color: #ffffff;
+  border: 1px solid #064e3b;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  box-shadow: 0 2px 6px rgba(8, 101, 72, 0.2);
+}
+
+.adm-btn-publish:hover:not(:disabled) {
+  background: #064e3b;
+  border-color: #04382a;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(8, 101, 72, 0.3);
+}
+
+.adm-btn-publish:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.adm-published-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: #e7f7ef;
+  color: #086548;
+  border: 1px solid #bbebd6;
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+/* ── Clean Entrance & Exit Lane Simple Badges (Làn vào xanh, Làn ra đỏ) ── */
+.adm-dt-lane-simple {
+  margin-top: 8px;
+  border-radius: 12px;
+  padding: 18px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  flex: 1;
+  min-height: 180px;
+  text-align: center;
+}
+
+.adm-dt-lane-simple.entry {
+  background: linear-gradient(180deg, #047857 0%, #059669 50%, #10b981 100%);
+  border: 2px solid #065f46;
+  color: #ffffff;
+}
+
+.adm-dt-lane-simple.exit {
+  background: linear-gradient(180deg, #b91c1c 0%, #dc2626 50%, #ef4444 100%);
+  border: 2px solid #991b1b;
+  color: #ffffff;
+}
+
+.adm-dt-lane-icon-circle {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  color: #ffffff;
+  margin-bottom: 2px;
+}
+
+.adm-dt-lane-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.adm-dt-lane-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.adm-dt-lane-simple-arrow {
+  font-size: 17px;
+  line-height: 1;
+}
+
+.adm-dt-lane-simple-text {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 1.2px;
+}
+
+.adm-dt-lane-caption {
+  font-size: 11px;
+  font-weight: 800;
+  opacity: 0.95;
+  letter-spacing: 0.8px;
+  color: #ffffff;
+}
+
+/* ── Indoor Floor 1 Layout (West Ramp + Moto Sector) ── */
+.adm-dt-indoor-f1-layout {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.adm-dt-indoor-ramp-bay {
+  width: 175px;
+  background: #1e293b;
+  border: 1.5px solid #334155;
+  border-radius: 14px;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.adm-dt-indoor-ramp-header,
+.adm-dt-indoor-ramp-footer {
+  font-size: 8.5px;
+  font-weight: 800;
+  color: #94a3b8;
+  letter-spacing: 0.6px;
+  text-align: center;
+  padding: 3px 6px;
+  background: #0f172a;
+  border-radius: 4px;
+  border: 1px solid #334155;
+}
+
+.adm-dt-indoor-ramp-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+}
+
+.adm-dt-indoor-ramp-lane {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.adm-dt-indoor-ramp-lane.up {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid #059669;
+  color: #34d399;
+}
+
+.adm-dt-indoor-ramp-lane.down {
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid #2563eb;
+  color: #60a5fa;
+}
+
+.adm-dt-indoor-ramp-arrow {
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.adm-dt-indoor-ramp-text {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.adm-dt-indoor-ramp-text strong {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+}
+
+.adm-dt-indoor-ramp-text span {
+  font-size: 8px;
+  opacity: 0.85;
+}
+
+.adm-dt-indoor-ramp-divider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── Modal Chi Tiết Ô Đỗ & Thao Tác Quản Trị (Hiển thị chi tiết trước, thao tác khi bấm nút) ── */
+.adm-slot-detail-modal {
+  max-width: 540px;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.18);
+}
+
+.adm-slot-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.adm-slot-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.adm-slot-detail-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #64748b;
+}
+
+.adm-slot-detail-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.adm-slot-detail-value.code {
+  font-family: monospace;
+  font-size: 15px;
+  font-weight: 800;
+  color: #0284c7;
+}
+
+.adm-slot-detail-card-section {
+  border-radius: 12px;
+  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+}
+
+.adm-slot-detail-card-section.available {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.adm-slot-detail-card-section.occupied {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.adm-slot-detail-card-section.reserved {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.adm-slot-detail-card-section.maintenance {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.adm-slot-detail-card-title {
+  font-size: 11.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  color: #334155;
+}
+
+.adm-slot-detail-card-section.available .adm-slot-detail-card-title {
+  color: #166534;
+}
+
+.adm-slot-detail-card-section.occupied .adm-slot-detail-card-title {
+  color: #991b1b;
+}
+
+.adm-slot-detail-card-section.reserved .adm-slot-detail-card-title {
+  color: #92400e;
+}
+
+.adm-slot-detail-card-section.maintenance .adm-slot-detail-card-title {
+  color: #475569;
+}
+
+.adm-slot-detail-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.adm-slot-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12.5px;
+  gap: 8px;
+}
+
+.adm-slot-actions-panel {
+  padding-top: 12px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.adm-slot-actions-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.adm-slot-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+/* ── 15. Slots Page Responsive Controls & Toolbar (Base Rules) ── */
+.adm-slots-control-card {
+  padding: 10px 16px;
+  margin-bottom: 12px;
+}
+
+.adm-slots-control-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.adm-slots-facility-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 260px;
+  max-width: 480px;
+}
+
+.adm-slots-field-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--adm-navy);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.adm-slots-facility-select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  text-overflow: ellipsis;
+}
+
+.adm-slots-level-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.adm-slots-level-pills {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.adm-slots-action-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.adm-slots-refresh-btn {
+  padding: 6px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Stats Strip */
+.adm-slots-stats-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.adm-slots-stat-card {
+  background: #ffffff;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--adm-line);
+  min-width: 0;
+}
+
+.adm-slots-stat-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.adm-slots-stat-num {
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.2;
+  margin-top: 2px;
+}
+
+/* Filter Card */
+.adm-slots-filter-card {
+  padding: 10px 16px;
+  margin-bottom: 14px;
+}
+
+.adm-slots-filter-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.adm-slots-filter-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.adm-slots-filter-select {
+  font-size: 13px;
+  max-width: 100%;
+}
+
+.adm-slots-filter-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Canvas Toolbar */
+.adm-dt-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  position: relative;
+  z-index: 10;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.adm-dt-toolbar-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.adm-dt-toolbar-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--adm-navy);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adm-dt-toolbar-sub {
+  font-size: 11px;
+  color: var(--adm-muted);
+  font-weight: 500;
+}
+
+.adm-dt-toolbar-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8fafc;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--adm-line);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--adm-navy);
+  white-space: nowrap;
+}
+
+/* Gate info and meta */
+.adm-dt-gate-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.adm-dt-gate-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── 13. Responsive Rules (Desktop / Tablet / Mobile) ── */
 @media (max-width: 1024px) {
-  .adm-sidebar {
-    width: 240px;
-    min-width: 240px;
+  .adm-menu-button {
+    display: inline-flex;
   }
-  .adm-main {
-    margin-left: 240px;
-    width: calc(100% - 240px);
+  .adm-menu-backdrop {
+    display: block;
   }
-}
-
-@media (max-width: 768px) {
   .adm-sidebar {
-    position: relative;
-    width: 100%;
-    min-width: 100%;
-    height: auto;
+    position: fixed;
+    top: 0;
+    left: -280px;
+    bottom: 0;
+    width: 260px;
+    min-width: 260px;
+    z-index: 100;
+    transition: left 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: none;
+    border-right: 1px solid var(--adm-line);
+  }
+  .adm-sidebar.is-open {
+    left: 0;
+    box-shadow: 0 10px 40px rgba(7, 45, 89, 0.25);
   }
   .adm-main {
     margin-left: 0;
     width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+  .adm-topbar {
+    padding: 14px 20px;
+    min-height: 72px;
   }
   .adm-content-wrapper {
+    padding: 18px 16px 40px;
+    overflow-x: hidden;
+    max-width: 100%;
+  }
+  .adm-viewer-container {
+    height: 480px;
+  }
+  .adm-dt-indoor-envelope {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    padding: 14px 16px;
+  }
+  .adm-dt-indoor-row-stalls {
+    grid-template-columns: repeat(10, minmax(46px, 1fr));
+    gap: 4px;
+  }
+  .adm-dt-indoor-row-stalls .adm-dt-capsule {
+    height: 104px;
+    padding: 5px 2px;
+  }
+  .adm-dt-courtyard-envelope,
+  .adm-dt-indoor-envelope {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    padding: 16px 14px;
+  }
+  .adm-dt-courtyard-body {
+    grid-template-columns: 1fr 140px 1fr;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 768px) {
+  .adm-topbar {
+    padding: 10px 14px;
+    min-height: 64px;
+    gap: 8px;
+  }
+  .adm-topbar-left {
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .adm-topbar-title-wrap {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+  .adm-page-title {
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .adm-topbar-eyebrow {
+    font-size: 8px;
+  }
+  .adm-topbar-right {
+    gap: 6px;
+    flex-shrink: 0;
+    justify-content: flex-end;
+  }
+  .adm-status-chip {
+    display: none;
+  }
+  .adm-content-wrapper {
+    padding: 12px 10px 36px;
+  }
+  .adm-kpi-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .adm-kpi-card {
+    padding: 16px 18px;
+  }
+  .adm-kpi-number {
+    font-size: 26px;
+  }
+  .adm-card {
+    padding: 12px 12px;
+    border-radius: 12px;
+    margin-bottom: 12px;
+  }
+  .adm-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .adm-services-grid {
+    grid-template-columns: 1fr;
+  }
+  .adm-filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .adm-search-input-wrap {
+    min-width: 100%;
+  }
+  .adm-viewer-container {
+    height: 360px;
+  }
+  .adm-viewer-hud {
+    top: 8px;
+    left: 8px;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .adm-viewer-badge {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+  .adm-viewer-legend {
+    bottom: 8px;
+    right: 8px;
+    padding: 6px 10px;
+    gap: 8px;
+    font-size: 10px;
+  }
+  .adm-slots-grid {
+    grid-template-columns: repeat(auto-fill, minmax(115px, 1fr));
+    gap: 8px;
+  }
+  .adm-slot-3d-bay {
+    padding: 6px 8px 8px;
+  }
+  .adm-3d-bay-surface {
+    height: 80px;
+  }
+  .adm-3d-svg-vehicle {
+    width: 48px;
+    height: 68px;
+  }
+  .adm-modal {
+    width: calc(100% - 20px);
+    margin: 10px;
+  }
+  .adm-modal-body {
+    padding: 16px;
+  }
+  .adm-modal-footer {
+    padding: 12px 16px;
+  }
+
+  /* Digital Twin & Slots Responsive (Tablet & Small) */
+  .adm-dt-inspector-card {
+    position: fixed;
+    top: auto;
+    bottom: 12px;
+    left: 10px;
+    right: 10px;
+    width: auto;
+    max-width: calc(100% - 20px);
+    z-index: 150;
+    box-shadow: 0 12px 40px rgba(7, 45, 89, 0.25);
+    border-radius: 14px;
     padding: 14px;
+  }
+  .adm-dt-top-row {
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .adm-dt-gate-box {
+    width: 100%;
+    min-width: 0;
+  }
+  .adm-dt-island {
+    width: 100%;
+    min-width: 0;
+  }
+  .adm-slots-filter-inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .adm-slots-filter-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    width: 100%;
+  }
+  .adm-slots-filter-select {
+    width: 100%;
+  }
+  .adm-slots-filter-meta {
+    justify-content: space-between;
+    width: 100%;
+  }
+  .adm-dt-indoor-envelope {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    padding: 14px 12px;
+  }
+  .adm-dt-indoor-row-stalls {
+    grid-template-columns: repeat(10, minmax(42px, 1fr));
+    gap: 4px;
+  }
+  .adm-dt-indoor-f1-layout {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .adm-dt-indoor-ramp-bay {
+    width: 100%;
+  }
+  .adm-dt-indoor-ramp-body {
+    flex-direction: row;
+    justify-content: space-around;
+    padding: 8px 0;
+  }
+  .adm-dt-moto-row {
+    grid-template-columns: repeat(10, minmax(42px, 1fr));
+    gap: 4px;
+  }
+}
+
+/* ── Mobile Devices (<= 640px) ── */
+@media (max-width: 640px) {
+  .adm-slots-control-inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .adm-slots-facility-group {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+  .adm-slots-facility-select {
+    width: 100%;
+  }
+  .adm-slots-level-group {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+    width: 100%;
+  }
+  .adm-slots-level-pills {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .adm-slots-level-pill {
+    flex: 1 1 auto;
+    text-align: center;
+    padding: 6px 8px;
+    font-size: 11px;
+    min-width: 75px;
+  }
+  .adm-slots-action-group {
+    width: 100%;
+    display: flex;
+    justify-content: flex-end;
+  }
+  .adm-slots-stats-strip {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .adm-slots-stats-strip > *:last-child:nth-child(odd) {
+    grid-column: span 2;
+  }
+  .adm-slots-stat-card {
+    padding: 8px 10px;
+  }
+  .adm-slots-stat-title {
+    font-size: 8.5px;
+  }
+  .adm-slots-stat-num {
+    font-size: 18px;
+  }
+  .adm-dt-canvas {
+    padding: 10px 8px;
+    border-radius: 12px;
+    min-height: auto;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .adm-dt-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .adm-dt-toolbar-title {
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  .adm-dt-gate-box {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px;
+  }
+  .adm-dt-ev-kiosk {
+    width: 100%;
+    min-width: 0;
+  }
+  .adm-dt-gate-meta {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .adm-dt-roadway {
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+  }
+  .adm-dt-roadway-text {
+    font-size: 8.5px;
+    padding: 2px 8px;
+    text-align: center;
+    white-space: normal;
+    letter-spacing: 0.3px;
+  }
+  .adm-dt-stalls-row {
+    grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+    gap: 6px;
+  }
+  .adm-dt-capsule {
+    height: 108px;
+    padding: 5px 3px;
+    border-radius: 8px;
+  }
+  .adm-slot-detail-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .adm-slot-detail-modal {
+    max-width: calc(100% - 16px);
+    margin: 8px;
+    border-radius: 14px;
+  }
+  .adm-slot-detail-row {
+    font-size: 11.5px;
+  }
+  .adm-slot-action-btn {
+    padding: 8px 10px;
+    font-size: 11.5px;
+  }
+
+  /* Indoor 100-Slot Blueprint on Mobile: 5 columns x 4 rows per Hàng */
+  .adm-dt-indoor-envelope {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    padding: 10px 8px;
+  }
+  .adm-dt-indoor-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .adm-dt-indoor-title {
+    font-size: 11.5px;
+  }
+  .adm-dt-indoor-subtitle {
+    font-size: 9.5px;
+    line-height: 1.35;
+  }
+  .adm-dt-ramp-badge {
+    align-self: flex-start;
+    font-size: 9.5px;
+    padding: 3px 8px;
+  }
+  .adm-dt-indoor-row-box {
+    padding: 6px 8px;
+  }
+  .adm-dt-indoor-row-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .adm-dt-indoor-row-title {
+    font-size: 10px;
+  }
+  .adm-dt-indoor-row-count {
+    font-size: 9.5px;
+  }
+  .adm-dt-indoor-row-stalls {
+    grid-template-columns: repeat(5, minmax(44px, 1fr));
+    gap: 4px;
+  }
+  .adm-dt-indoor-row-stalls .adm-dt-capsule {
+    height: 98px;
+    padding: 4px 2px;
+    border-radius: 7px;
+  }
+  .adm-dt-indoor-row-stalls .adm-dt-capsule-code {
+    font-size: 8.5px;
+  }
+  .adm-dt-indoor-row-stalls .adm-dt-capsule-target-circle {
+    width: 20px;
+    height: 20px;
+  }
+  .adm-dt-indoor-row-stalls .adm-dt-capsule-label {
+    font-size: 7px;
+  }
+
+  /* Blueprint Envelopes on Mobile */
+  .adm-dt-courtyard-envelope,
+  .adm-dt-indoor-envelope {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    padding: 12px 10px 10px;
+  }
+  .adm-dt-courtyard-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .adm-dt-lane-simple {
+    padding: 10px 6px;
+    min-height: 120px;
+  }
+  .adm-dt-lane-simple-text {
+    font-size: 11px;
+  }
+
+  /* Moto Rows on Mobile (5 columns x 2 rows) */
+  .adm-dt-moto-row {
+    grid-template-columns: repeat(5, minmax(42px, 1fr));
+    gap: 4px;
+  }
+  .adm-dt-moto-sector {
+    width: 100%;
+  }
+  .adm-dt-moto-billboard {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 8px 10px;
+  }
+  .adm-dt-moto-billboard-title {
+    font-size: 10px;
+  }
+  .adm-dt-moto-billboard-sub {
+    font-size: 8.5px;
+  }
+  .adm-dt-moto-billboard-tag {
+    align-self: flex-start;
+    font-size: 8px;
+  }
+}
+
+/* ── Small Mobile (<= 480px) ── */
+@media (max-width: 480px) {
+  .adm-topbar {
+    padding: 8px 10px;
+    min-height: 52px;
+    gap: 8px;
+  }
+  .adm-topbar-left {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    gap: 8px;
+  }
+  .adm-page-title {
+    font-size: 12.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .adm-topbar-eyebrow {
+    display: none;
+  }
+  .adm-topbar-right {
+    flex-shrink: 0;
+    margin-left: auto;
+    gap: 6px;
+  }
+  .adm-lang-pill {
+    padding: 3px 6px;
+    font-size: 9.5px;
+  }
+  .adm-btn-refresh {
+    padding: 5px 8px;
+    font-size: 10.5px;
+  }
+  .adm-btn-refresh-text {
+    display: none;
+  }
+  .adm-content-wrapper {
+    padding: 8px 6px 32px;
+    overflow-x: hidden;
+  }
+  .adm-card {
+    padding: 10px 10px;
+    border-radius: 10px;
+  }
+  .adm-dt-canvas {
+    padding: 8px 6px;
+  }
+  .adm-dt-indoor-envelope {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    padding: 8px 6px;
+  }
+  .adm-dt-indoor-row-stalls {
+    grid-template-columns: repeat(5, minmax(40px, 1fr));
+    gap: 3px;
+  }
+  .adm-dt-indoor-row-stalls .adm-dt-capsule {
+    height: 94px;
+    padding: 4px 1px;
+    border-radius: 6px;
+  }
+  .adm-dt-indoor-row-stalls .adm-dt-capsule-code {
+    font-size: 8px;
+  }
+  .adm-dt-indoor-row-stalls .adm-dt-capsule-target-circle {
+    width: 18px;
+    height: 18px;
+  }
+  .adm-dt-indoor-row-stalls .adm-dt-capsule-label {
+    font-size: 6.5px;
+  }
+  .adm-dt-courtyard-envelope,
+  .adm-dt-indoor-envelope {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    padding: 8px 6px;
+  }
+  .adm-dt-moto-row {
+    grid-template-columns: repeat(5, minmax(38px, 1fr));
+    gap: 3px;
+  }
+}
+
+/* ── Mobile S / Super Compact (<= 360px down to 320px) ── */
+@media (max-width: 360px) {
+  .adm-topbar {
+    padding: 6px 6px;
+    min-height: 48px;
+    gap: 6px;
+  }
+  .adm-topbar-left {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    gap: 6px;
+  }
+  .adm-page-title {
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .adm-topbar-right {
+    flex-shrink: 0;
+    margin-left: auto;
+    gap: 4px;
+  }
+  .adm-menu-button {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+  }
+  .adm-lang-pill {
+    padding: 2px 5px;
+    font-size: 9px;
+  }
+  .adm-btn-refresh {
+    padding: 4px 6px;
+    font-size: 10px;
+  }
+  .adm-content-wrapper {
+    padding: 6px 4px 24px;
+    overflow-x: hidden;
+  }
+  .adm-slots-stats-strip {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 4px;
+  }
+  .adm-slots-stat-card {
+    padding: 6px 6px;
+  }
+  .adm-slots-stat-title {
+    font-size: 7.5px;
+  }
+  .adm-slots-stat-num {
+    font-size: 15px;
+  }
+  .adm-dt-canvas {
+    padding: 6px 4px;
+  }
+  .adm-dt-indoor-envelope {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    padding: 6px 4px;
+    border-radius: 8px;
+  }
+  .adm-dt-indoor-title {
+    font-size: 10.5px;
+  }
+  .adm-dt-indoor-subtitle {
+    font-size: 8.5px;
+    line-height: 1.3;
+  }
+  .adm-dt-indoor-row-box {
+    padding: 5px 4px;
+    border-radius: 6px;
+  }
+  .adm-dt-indoor-row-title {
+    font-size: 9px;
+  }
+  .adm-dt-indoor-row-count {
+    font-size: 8.5px;
+  }
+  .adm-dt-indoor-row-stalls {
+    grid-template-columns: repeat(5, minmax(34px, 1fr));
+    gap: 2.5px;
+  }
+  .adm-dt-indoor-row-stalls .adm-dt-capsule {
+    height: 86px;
+    padding: 3px 1px;
+    border-radius: 5px;
+  }
+  .adm-dt-indoor-row-stalls .adm-dt-capsule-code {
+    font-size: 7.5px;
+    letter-spacing: -0.4px;
+  }
+  .adm-dt-indoor-row-stalls .adm-dt-capsule-target-circle {
+    width: 16px;
+    height: 16px;
+  }
+  .adm-dt-indoor-row-stalls .adm-dt-capsule-label {
+    font-size: 6px;
+  }
+  .adm-dt-indoor-row-stalls .adm-dt-capsule-sensor-dot {
+    width: 3.5px;
+    height: 3.5px;
+  }
+  .adm-dt-roadway {
+    padding: 4px 6px;
+    margin: 6px 0;
+  }
+  .adm-dt-roadway-text {
+    font-size: 7.5px;
+    padding: 2px 4px;
+  }
+  .adm-dt-courtyard-envelope,
+  .adm-dt-indoor-envelope {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    padding: 6px 4px;
+  }
+  .adm-dt-moto-row {
+    grid-template-columns: repeat(5, minmax(34px, 1fr));
+    gap: 2.5px;
   }
 }

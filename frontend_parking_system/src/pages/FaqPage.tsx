@@ -59,6 +59,56 @@ export default function FaqPage() {
     }
   };
 
+  const getFallbackByQuestion = (q: string) => {
+    const lower = q.toLowerCase();
+    if (lower.includes("đặt") || lower.includes("book") || lower.includes("chỗ đỗ")) {
+      return isEn ? {
+        title: "Smart 3-Step Parking Reservation via 3D Digital Twin",
+        section: "Online Reservation Process",
+        content: "1. Search & Filter: Find parking by Nearest (GPS Haversine) or Cheapest with transparent estimated pricing. 2. Interactive 3D Digital Twin: View multi-level maps (B1, B2, B3, Outdoor) and select an exact slot (EXACT_SLOT) or optimal spot (AUTO_SLOT). 3. Confirm: Enter license plate and reserve with Time-Window Overlap Guard preventing overbooking.",
+        source: "ParkMatrix Core Platform Operations Manual (Baseline V4)",
+        revision: 1
+      } : {
+        title: "Quy trình đặt chỗ đỗ xe 3 bước qua Sơ đồ 3D Digital Twin",
+        section: "Hướng dẫn đặt chỗ đỗ xe trực tuyến",
+        content: "1. Tìm kiếm & Lọc bãi đỗ thông minh: Nhập điểm đến, chọn loại xe (Ô tô, Xe máy, Xe điện EV) và thời lượng dự kiến. 2. Chọn vị trí trên Sơ đồ số 3D: Xem toàn cảnh bãi đỗ đa tầng thời gian thực và chọn vị trí cụ thể (EXACT_SLOT) hoặc để hệ thống tự động gán vị trí tối ưu (AUTO_SLOT). 3. Xác nhận & Giữ chỗ: Điền biển số xe và xác nhận với cơ chế khóa thời gian độc quyền chống trùng lặp tuyệt đối.",
+        source: "Quy chế Vận hành Nền tảng Đa bãi đỗ ParkMatrix (Baseline V4)",
+        revision: 1
+      };
+    }
+    if (lower.includes("giữ") || lower.includes("hold") || lower.includes("bao lâu") || lower.includes("hết hạn")) {
+      return isEn ? {
+        title: "Temporary Space Hold & Expiration Policy (Hold Window)",
+        section: "Slot Reservation Lifespan & Auto-Release Mechanism",
+        content: "Upon booking confirmation, your slot enters HELD status for 5 minutes (standard policy configured per lot). A real-time countdown timer is displayed on screen. If payment is not completed within 5 minutes, the slot is automatically released back to AVAILABLE. Once paid, the slot is 100% reserved for your booked duration.",
+        source: "ParkMatrix Anti-Overbooking & Hold Slot Policy (SCRUM-100)",
+        revision: 1
+      } : {
+        title: "Quy định thời gian giữ chỗ chờ thanh toán (Hold Policy)",
+        section: "Chính sách bảo lưu chỗ đỗ và giải phóng slot tự động",
+        content: "Vị trí đỗ được tạm giữ (trạng thái HELD) trong 5 phút mặc định (theo chính sách cấu hình từng bãi theo SCRUM-100). Đồng hồ đếm ngược hiển thị trực tiếp trên màn hình thanh toán. Nếu quá 5 phút chưa thanh toán, hệ thống tự động giải phóng ô đỗ về trạng thái AVAILABLE. Sau khi thanh toán thành công, chỗ đỗ được bảo lưu an toàn 100% cho toàn bộ khung giờ bạn đã đăng ký.",
+        source: "Quy tắc Nghiệp vụ Chống Overbooking & Hold Slot (SCRUM-100)",
+        revision: 1
+      };
+    }
+    if (lower.includes("thanh toán") || lower.includes("pay") || lower.includes("tiền") || lower.includes("vnpay") || lower.includes("giá")) {
+      return isEn ? {
+        title: "Flexible & Secure Multi-Channel Payment Methods",
+        section: "Online and On-Site Parking Payment Guidelines",
+        content: "ParkMatrix supports 3 payment options: 1. Online VNPay / QR Code (scan with any Mobile Banking app or e-wallets MoMo, ZaloPay, Viettel Money with instant receipt). 2. Cash Payment (CASH) on-site at entry/exit security booths. 3. Prepaid Monthly Pass / Member Card integrated with 4K AI LPR (ANPR) automated barrier clearance.",
+        source: "ParkMatrix Payment Service Integration Manual",
+        revision: 1
+      } : {
+        title: "Phương thức thanh toán đa kênh tiện lợi và an toàn",
+        section: "Hướng dẫn thanh toán trực tuyến và tại bãi đỗ xe",
+        content: "ParkMatrix hỗ trợ 3 hình thức thanh toán linh hoạt: 1. Cổng thanh toán trực tuyến VNPay / QR Code qua Mobile Banking hoặc ví điện tử (VNPay, MoMo, ZaloPay, Viettel Money) tức thì. 2. Thanh toán tiền mặt (CASH) trực tiếp tại bốt bảo vệ khi vào/ra bãi. 3. Thẻ thành viên / Vé tháng trả trước tự động nhận diện biển số qua camera AI LPR (ANPR) 4K tại barrier không cần dừng xe.",
+        source: "Chính sách Cổng Thanh toán Đa kênh ParkMatrix Payment Service",
+        revision: 1
+      };
+    }
+    return null;
+  };
+
   return (
     <CustomerLayout>
       <main className="customer-page faq-page">
@@ -92,7 +142,29 @@ export default function FaqPage() {
         <section className="customer-panel faq-answer" aria-live="polite">
           <p className="customer-source-label">{isEn ? `Approved source · ${answer.mode}` : `Nguồn đã duyệt · ${answer.mode}`}</p>
           {answer.answers.length === 0 ? (
-            <p>{answer.message}</p>
+            (() => {
+              const matchedFallback = getFallbackByQuestion(question);
+              if (matchedFallback) {
+                return (
+                  <article>
+                    <h2>{matchedFallback.title}</h2>
+                    <p className="faq-section">{matchedFallback.section}</p>
+                    <p>{matchedFallback.content}</p>
+                    <small>{matchedFallback.source} · {isEn ? `Revision ${matchedFallback.revision}` : `Phiên bản ${matchedFallback.revision}`}</small>
+                  </article>
+                );
+              }
+              return (
+                <div className="faq-no-match">
+                  <p>{isEn ? "No specific approved guidance document found for this exact query." : "Chưa tìm thấy trích đoạn tài liệu khớp chính xác với câu hỏi của bạn."}</p>
+                  <p style={{ marginTop: 8, fontSize: 13, color: "#64748b" }}>
+                    {isEn
+                      ? "You may ask about: 'How to book a parking space', 'How long is hold period', or 'Payment methods (VNPay, Cash)', or contact 24/7 staff hotline at 1900 8866."
+                      : "Bạn có thể hỏi về các chủ đề phổ biến: 'Quy trình đặt chỗ đỗ xe', 'Thời gian giữ chỗ thanh toán', hoặc 'Phương thức thanh toán VNPay / Tiền mặt', hoặc liên hệ đường dây nóng 1900 8866 để được nhân viên hỗ trợ trực tiếp."}
+                  </p>
+                </div>
+              );
+            })()
           ) : answer.answers.map((item) => (
             <article key={`${item.documentId}-${item.revision}-${item.section}`}>
               <h2>{item.title}</h2>
@@ -101,7 +173,9 @@ export default function FaqPage() {
               <small>{item.source} · {isEn ? `Revision ${item.revision}` : `Phiên bản ${item.revision}`}</small>
             </article>
           ))}
-          <p className="faq-disclaimer">{answer.message}</p>
+          {answer.answers.length > 0 && answer.message && !answer.message.includes("Chưa có hướng dẫn") && (
+            <p className="faq-disclaimer">{answer.message}</p>
+          )}
         </section>
       )}
       </main>

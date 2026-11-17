@@ -223,23 +223,29 @@ export default function Admin3DViewPage() {
           </div>
 
           {/* Level Switcher */}
-          <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <span style={{ fontSize: "0.74rem", fontWeight: 700, color: "var(--adm-muted)", marginRight: "2px" }}>
               Tầng:
             </span>
-            {levels.map((lvl) => {
-              const isSelected = lvl.levelId === selectedLevelId;
-              return (
-                <button
-                  key={lvl.levelId}
-                  onClick={() => setSelectedLevelId(lvl.levelId)}
-                  className={`adm-level-btn ${isSelected ? "active" : ""}`}
-                  title={`Chuyển góc nhìn mặt cắt ${lvl.levelName}`}
-                >
-                  {lvl.levelName} ({lvl.availableSlots}/{lvl.totalSlots})
-                </button>
-              );
-            })}
+            <div style={{ display: "inline-flex", gap: "4px", flexWrap: "wrap", alignItems: "center" }}>
+              {levels.map((lvl) => {
+                const isSelected = lvl.levelId === selectedLevelId;
+                return (
+                  <button
+                    key={lvl.levelId}
+                    type="button"
+                    onClick={() => setSelectedLevelId(lvl.levelId)}
+                    className={`adm-level-btn ${isSelected ? "active" : ""}`}
+                    title={`Chuyển góc nhìn mặt cắt ${lvl.levelName}`}
+                  >
+                    <span>{lvl.levelName}</span>
+                    <span style={{ opacity: 0.85, fontSize: "10.5px", fontWeight: 500 }}>
+                      ({lvl.availableSlots}/{lvl.totalSlots})
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Action: Switch to Slot Management */}
@@ -260,7 +266,7 @@ export default function Admin3DViewPage() {
       </div>
 
       {error && (
-        <div style={{ padding: "8px 12px", background: "#fee2e2", color: "#b91c1c", borderRadius: "8px", fontSize: "0.78rem", marginBottom: "12px" }}>
+        <div className="adm-alert error" role="alert" style={{ marginBottom: "12px" }}>
           {error}
         </div>
       )}
