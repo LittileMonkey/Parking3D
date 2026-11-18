@@ -5,13 +5,7 @@ import {
   Building2,
   Server,
   ShieldCheck,
-  CheckCircle2,
-  AlertCircle,
   ArrowRight,
-  TrendingUp,
-  Cpu,
-  Layers,
-  Database,
   Eye,
   Sliders,
 } from "lucide-react";
@@ -29,17 +23,6 @@ export default function AdminDashboard() {
   const [facilities, setFacilities] = useState<ParkingLot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [servicesReady, setServicesReady] = useState<{
-    identity: boolean;
-    parking: boolean;
-    payment: boolean;
-    ai: boolean;
-  }>({
-    identity: true,
-    parking: true,
-    payment: true,
-    ai: true,
-  });
 
   useEffect(() => {
     let mounted = true;
@@ -47,10 +30,9 @@ export default function AdminDashboard() {
       setLoading(true);
       setError("");
       try {
-        const [accs, facs, healthRes] = await Promise.allSettled([
+        const [accs, facs] = await Promise.allSettled([
           api.getAllAccounts(),
           api.getParkingLots(),
-          fetch("/health/ready").then((r) => r.json()),
         ]);
 
         if (!mounted) return;
@@ -67,9 +49,7 @@ export default function AdminDashboard() {
           console.warn("Could not fetch facilities:", facs.reason);
         }
 
-        if (healthRes.status === "fulfilled" && healthRes.value?.result?.dependencies) {
-          setServicesReady(healthRes.value.result.dependencies);
-        }
+
       } catch (err) {
         if (mounted) {
           setError(err instanceof Error ? err.message : "Lỗi khi tải dữ liệu tổng quan.");
@@ -93,7 +73,7 @@ export default function AdminDashboard() {
   return (
     <div>
       {error && (
-        <div style={{ padding: "10px 14px", background: "#fee2e2", color: "#b91c1c", borderRadius: "8px", fontSize: "0.82rem", marginBottom: "14px" }}>
+        <div className="adm-alert error" role="alert">
           {error}
         </div>
       )}
@@ -165,123 +145,6 @@ export default function AdminDashboard() {
           </div>
           <div className="adm-kpi-footer">
             <span>Advisory Lock • Hold 5p • JWT Bearer</span>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Microservices Live Health Status (Gọn & Hiện Đại) ── */}
-      <section className="adm-card">
-        <div className="adm-card-header">
-          <div className="adm-card-title-group">
-            <h2 className="adm-card-title">
-              <Cpu size={17} color="#4338ca" />
-              Tình Trạng Cụm Dịch Vụ Microservices (Real-time Health Check)
-            </h2>
-            <p className="adm-card-desc">
-              Trạng thái sẵn sàng kết nối qua cổng Gateway http://127.0.0.1:8080/health/ready
-            </p>
-          </div>
-          <Link to="/admin/services" className="adm-btn-secondary">
-            <span>Chi tiết dịch vụ</span>
-            <ArrowRight size={13} />
-          </Link>
-        </div>
-
-        <div className="adm-services-grid">
-          {/* Service: Identity */}
-          <div className="adm-service-item">
-            <div className="adm-service-top">
-              <span className="adm-service-name">
-                <Database size={15} color="#4338ca" />
-                Identity Service
-              </span>
-              <span className={servicesReady.identity ? "adm-service-badge-ready" : "adm-service-badge-error"}>
-                {servicesReady.identity ? <CheckCircle2 size={11} /> : <AlertCircle size={11} />}
-                {servicesReady.identity ? "Sẵn sàng" : "Mất kết nối"}
-              </span>
-            </div>
-            <div className="adm-service-details">
-              <div className="adm-service-row">
-                <span>Cổng:</span>
-                <strong>HTTP 5041 | gRPC 5042</strong>
-              </div>
-              <div className="adm-service-row">
-                <span>CSDL:</span>
-                <span>parking_identity (PG)</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Service: Parking */}
-          <div className="adm-service-item">
-            <div className="adm-service-top">
-              <span className="adm-service-name">
-                <Layers size={15} color="#0891b2" />
-                Parking Service
-              </span>
-              <span className={servicesReady.parking ? "adm-service-badge-ready" : "adm-service-badge-error"}>
-                {servicesReady.parking ? <CheckCircle2 size={11} /> : <AlertCircle size={11} />}
-                {servicesReady.parking ? "Sẵn sàng" : "Mất kết nối"}
-              </span>
-            </div>
-            <div className="adm-service-details">
-              <div className="adm-service-row">
-                <span>Cổng:</span>
-                <strong>HTTP 8082 | gRPC 8083</strong>
-              </div>
-              <div className="adm-service-row">
-                <span>CSDL:</span>
-                <span>parking_parking (PG)</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Service: Payment */}
-          <div className="adm-service-item">
-            <div className="adm-service-top">
-              <span className="adm-service-name">
-                <TrendingUp size={15} color="#059669" />
-                Payment Service
-              </span>
-              <span className={servicesReady.payment ? "adm-service-badge-ready" : "adm-service-badge-error"}>
-                {servicesReady.payment ? <CheckCircle2 size={11} /> : <AlertCircle size={11} />}
-                {servicesReady.payment ? "Sẵn sàng" : "Mất kết nối"}
-              </span>
-            </div>
-            <div className="adm-service-details">
-              <div className="adm-service-row">
-                <span>Cổng:</span>
-                <strong>HTTP 8084 | gRPC 8085</strong>
-              </div>
-              <div className="adm-service-row">
-                <span>CSDL:</span>
-                <span>parking_payment (PG)</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Service: AI */}
-          <div className="adm-service-item">
-            <div className="adm-service-top">
-              <span className="adm-service-name">
-                <Cpu size={15} color="#d97706" />
-                AI Vision Service
-              </span>
-              <span className={servicesReady.ai ? "adm-service-badge-ready" : "adm-service-badge-error"}>
-                {servicesReady.ai ? <CheckCircle2 size={11} /> : <AlertCircle size={11} />}
-                {servicesReady.ai ? "Sẵn sàng" : "Mất kết nối"}
-              </span>
-            </div>
-            <div className="adm-service-details">
-              <div className="adm-service-row">
-                <span>Cổng:</span>
-                <strong>HTTP 5004 | gRPC 5005</strong>
-              </div>
-              <div className="adm-service-row">
-                <span>CSDL:</span>
-                <span>parking_ai (PG)</span>
-              </div>
-            </div>
           </div>
         </div>
       </section>

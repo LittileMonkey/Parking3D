@@ -195,9 +195,9 @@ export default function AdminUsersPage() {
           style={{
             margin: "0 0 16px 0",
             padding: "12px 16px",
-            background: "#f8fafc",
-            borderRadius: 10,
-            border: "1px dashed var(--adm-indigo-soft, #c7d2fe)",
+            background: "#f4f9fd",
+            borderRadius: 12,
+            border: "1px dashed #b8d4ef",
             display: "grid",
             gap: 10,
           }}
@@ -207,7 +207,7 @@ export default function AdminUsersPage() {
             style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 260 }}>
-              <Mail size={16} color="#4338ca" />
+              <Mail size={16} color="#0d4685" />
               <input
                 type="email"
                 placeholder="Tra cứu chính xác tài khoản qua Server bằng Email..."
@@ -219,8 +219,7 @@ export default function AdminUsersPage() {
             </div>
             <button
               type="submit"
-              className="adm-btn-secondary"
-              style={{ background: "#4338ca", color: "#fff", borderColor: "#4338ca" }}
+              className="adm-btn-primary"
               disabled={serverEmailLoading || !serverEmailQuery.trim()}
             >
               {serverEmailLoading ? "Đang tra cứu..." : "Tra Cứu Server (Identity)"}
@@ -286,7 +285,7 @@ export default function AdminUsersPage() {
         </div>
 
         {error && (
-          <div style={{ padding: "12px", background: "#fee2e2", color: "#b91c1c", borderRadius: "10px", fontSize: "0.85rem", marginBottom: "16px" }}>
+          <div className="adm-alert error" role="alert">
             {error}
           </div>
         )}
