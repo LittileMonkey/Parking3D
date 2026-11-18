@@ -1,4 +1,4 @@
-﻿param([switch]$NoBuild)
+param([switch]$NoBuild)
 $ErrorActionPreference='Stop'
 $OutputEncoding=[System.Text.UTF8Encoding]::new($false)
 $repo=(Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
@@ -25,7 +25,7 @@ if((Test-Path -LiteralPath 'artifacts/local-stack/processes.json') -and (Test-Pa
 }
 docker compose -f compose.microservices.yml up -d --wait identity-db parking-db payment-db ai-db
 if($LASTEXITCODE -ne 0){throw 'PostgreSQL containers chưa healthy. Kiểm tra Docker logs; không xóa volumes.'}
-foreach($file in @('database/services/parking/migrations/002_hold_default_5_minutes.sql','database/services/parking/migrations/003_scrum99_incidents_shift_handover.sql','database/services/parking/migrations/004_staff_shifts.sql','database/services/parking/migrations/005_booking_cancellations.sql','database/services/parking/migrations/006_reservation_realtime.sql','database/services/parking/migrations/007_notifications.sql','database/services/parking/migrations/008_daily_grace.sql')){
+foreach($file in @('database/services/parking/migrations/002_hold_default_5_minutes.sql','database/services/parking/migrations/003_scrum99_incidents_shift_handover.sql','database/services/parking/migrations/004_staff_shifts.sql','database/services/parking/migrations/005_booking_cancellations.sql','database/services/parking/migrations/006_reservation_realtime.sql','database/services/parking/migrations/007_notifications.sql','database/services/parking/migrations/008_daily_grace.sql','database/services/parking/migrations/009_handover_integrity.sql','database/services/parking/migrations/010_incident_evidence.sql')){
     Get-Content -Raw -Encoding UTF8 $file | docker compose -f compose.microservices.yml exec -T parking-db psql -X -v ON_ERROR_STOP=1 -U parking -d parking_parking
     if($LASTEXITCODE -ne 0){throw "Migration thất bại: $file"}
 }
@@ -37,6 +37,10 @@ foreach($file in @('database/services/identity/002_mfa.sql','database/services/i
 }
 Get-Content -Raw -Encoding UTF8 database/services/payment/003_refund_workflow.sql | docker compose -f compose.microservices.yml exec -T payment-db psql -X -v ON_ERROR_STOP=1 -U payment -d parking_payment
 if($LASTEXITCODE -ne 0){throw 'Refund migration failed.'}
+if(Test-Path -LiteralPath 'database/services/ai/002_seed_approved_faqs.sql'){
+    Get-Content -Raw -Encoding UTF8 database/services/ai/002_seed_approved_faqs.sql | docker compose -f compose.microservices.yml exec -T ai-db psql -X -v ON_ERROR_STOP=1 -U ai -d parking_ai
+    if($LASTEXITCODE -ne 0){throw 'AI FAQ seed failed.'}
+}
 $arguments=@('compose','-f','compose.microservices.yml','up','-d','--wait','--wait-timeout','600')
 if(-not $NoBuild){$arguments+='--build'}
 & docker @arguments

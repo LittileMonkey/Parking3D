@@ -131,7 +131,7 @@ export default function AdminStaffAssignmentsPage() {
         </div>
 
         {error && (
-          <div style={{ padding: "12px", background: "#fee2e2", color: "#b91c1c", borderRadius: "10px", fontSize: "0.85rem", marginBottom: "16px" }}>
+          <div className="adm-alert error" role="alert">
             {error}
           </div>
         )}
