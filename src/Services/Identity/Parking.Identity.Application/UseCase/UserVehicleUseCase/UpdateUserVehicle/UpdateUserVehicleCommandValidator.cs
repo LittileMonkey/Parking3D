@@ -1,9 +1,14 @@
-﻿using FluentValidation;
+using FluentValidation;
+using System.Text.RegularExpressions;
 
 namespace Parking.Identity.Application.UseCase.UserVehicleUseCase.UpdateUserVehicle
 {
     public class UpdateUserVehicleCommandValidator : AbstractValidator<UpdateUserVehicleCommand>
     {
+        private static readonly Regex VietnamesePlateRegex = new(
+            @"^\d{2}([A-Z]{1,2}|[A-Z]\d)\d{4,5}$",
+            RegexOptions.Compiled);
+
         public UpdateUserVehicleCommandValidator()
         {
             RuleFor(x => x.UserId)
@@ -20,12 +25,11 @@ namespace Parking.Identity.Application.UseCase.UserVehicleUseCase.UpdateUserVehi
                 .WithMessage("License plate is required.")
                 .Must(plate =>
                     !string.IsNullOrWhiteSpace(plate) &&
-                    System.Text.RegularExpressions.Regex.IsMatch(
-                        System.Text.RegularExpressions.Regex.Replace(
+                    VietnamesePlateRegex.IsMatch(
+                        Regex.Replace(
                             plate.Trim().ToUpperInvariant(),
                             @"[\s.-]",
-                            string.Empty),
-                        @"^\d{2}[A-Z]\d?\d{5}$"))
+                            string.Empty)))
                 .WithMessage("License plate format is invalid.");
 
             RuleFor(x => x.VehicleType)

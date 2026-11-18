@@ -51,7 +51,7 @@ public record PythonPlateDetectionResponse
 /// 2. Google Gemini Generative Vision API (Multimodal LLM) nhận diện biển số xe độ chính xác cao.
 /// 3. Bộ mô phỏng AI Fallback an toàn (Smart Rule-based Simulator) chống sập hệ thống.
 /// </summary>
-public class PythonFastApiClient(
+public partial class PythonFastApiClient(
     HttpClient httpClient,
     IConfiguration configuration,
     ILogger<PythonFastApiClient> logger)
@@ -61,9 +61,19 @@ public class PythonFastApiClient(
     /// </summary>
     private readonly string _serviceUrl = configuration["AiVision:ServiceUrl"] ?? "http://localhost:8000";
 
+    [GeneratedRegex(@"^\d{2}([A-Z]{1,2}|[A-Z]\d)\d{4,5}$")]
+    private static partial Regex ValidVietnamesePlateRegex();
+
+    private static bool IsCompleteVietnamesePlate(string? rawPlate)
+    {
+        if (string.IsNullOrWhiteSpace(rawPlate)) return false;
+        var clean = Regex.Replace(rawPlate.ToUpperInvariant(), @"[^A-Z0-9]", "");
+        return ValidVietnamesePlateRegex().IsMatch(clean);
+    }
+
     /// <summary>
     /// Gửi mảng byte ảnh tới pipeline AI nhận diện biển số.
-    /// Ưu tiên: Python FastAPI -> Gemini Multimodal Vision -> Safe Local Fallback.
+    /// Ưu tiên: Python FastAPI (nếu đọc ra biển hợp lệ) -> Gemini Multimodal Vision -> Unrecognized Fallback (không sinh biển số ảo).
     /// </summary>
     /// <param name="imageBytes">Mảng byte thô của ảnh cần quét biển số</param>
     /// <param name="ct">Mã thông báo hủy tác vụ bất đồng bộ (<see cref="CancellationToken"/>)</param>
@@ -71,14 +81,16 @@ public class PythonFastApiClient(
     public async Task<PythonPlateDetectionResponse> DetectPlateAsync(byte[] imageBytes, CancellationToken ct = default)
     {
         var targetUrl = $"{_serviceUrl.TrimEnd('/')}/detect-plate";
+        PythonPlateDetectionResponse? partialPythonResult = null;
 
         // Bước 1: Thử gọi Python AI Vision Microservice (YOLOv8 + PaddleOCR) nếu đang trực tuyến
         try
         {
             using var content = new MultipartFormDataContent();
             var imageContent = new ByteArrayContent(imageBytes);
-            imageContent.Headers.ContentType = MediaTypeHeaderValue.Parse("image/jpeg");
-            content.Add(imageContent, "file", "plate_input.jpg");
+            var mime = IsPng(imageBytes) ? "image/png" : "image/jpeg";
+            imageContent.Headers.ContentType = MediaTypeHeaderValue.Parse(mime);
+            content.Add(imageContent, "file", IsPng(imageBytes) ? "plate_input.png" : "plate_input.jpg");
 
             var response = await httpClient.PostAsync(targetUrl, content, ct);
 
@@ -90,40 +102,61 @@ public class PythonFastApiClient(
                     PropertyNameCaseInsensitive = true
                 });
 
-                if (result != null && !string.IsNullOrWhiteSpace(result.PlateText))
+                if (result != null && IsCompleteVietnamesePlate(result.PlateText))
                 {
                     return result with { IsFallback = false };
                 }
-            }
 
-            logger.LogWarning("Python AI Vision service responded with status {StatusCode}", response.StatusCode);
+                if (result != null && !string.IsNullOrWhiteSpace(result.PlateText))
+                {
+                    partialPythonResult = result;
+                    logger.LogInformation("Python OCR chỉ đọc được một phần biển số ('{Partial}'), chuyển sang Gemini Vision AI để đọc biển 2 dòng chính xác hơn.", result.PlateText);
+                }
+            }
+            else
+            {
+                logger.LogWarning("Python AI Vision service responded with status {StatusCode}", response.StatusCode);
+            }
         }
         catch (Exception ex) when (!ct.IsCancellationRequested && ex is (HttpRequestException or TaskCanceledException or SocketException))
         {
             logger.LogWarning(ex, "Không thể kết nối đến Python FastAPI tại {Url}. Chuyển sang cơ chế Vision AI dự phòng.", targetUrl);
         }
 
-        // Bước 2: Tự động Fallback sang Gemini Multimodal Vision AI
+        // Bước 2: Tự động gọi Gemini Multimodal Vision AI (đặc biệt hiệu quả với biển số 2 dòng xe máy / ô tô vuông)
         try
         {
             var geminiResult = await TryDetectViaGeminiVisionAsync(imageBytes, ct);
             if (geminiResult != null && !string.IsNullOrWhiteSpace(geminiResult.PlateText))
             {
-                logger.LogInformation("Nhận diện biển số thành công qua Gemini Vision AI: {Plate}", geminiResult.PlateText);
-                return geminiResult;
+                logger.LogInformation("Nhận diện biển số thành công qua Gemini Vision AI: {Plate} ({PlateType})", geminiResult.PlateText, geminiResult.PlateType);
+                return geminiResult with
+                {
+                    CroppedImageBase64 = geminiResult.CroppedImageBase64 ?? partialPythonResult?.CroppedImageBase64
+                };
             }
         }
         catch (Exception geminiEx)
         {
-            logger.LogWarning(geminiEx, "Lỗi khi gọi Gemini Vision AI. Chuyển sang bộ giả lập an toàn.");
+            logger.LogWarning(geminiEx, "Lỗi khi gọi Gemini Vision AI.");
         }
 
-        // Bước 3: Fallback an toàn đảm bảo hệ thống không bao giờ ném lỗi 503 làm gián đoạn vận hành
-        return GenerateSimulatedFallback(imageBytes);
+        // Nếu Python OCR có đọc được kết quả hợp lệ một phần và Gemini không khả dụng
+        if (partialPythonResult != null && IsCompleteVietnamesePlate(partialPythonResult.PlateText))
+        {
+            return partialPythonResult with { IsFallback = false };
+        }
+
+        // Bước 3: Trả trạng thái không nhận diện được (Tuyệt đối không sinh biển số giả/ảo gây nhầm lẫn cho vận hành)
+        return GenerateUnrecognizedFallback(imageBytes, partialPythonResult?.CroppedImageBase64);
     }
 
+    private static bool IsPng(byte[] bytes) =>
+        bytes.Length >= 8 &&
+        bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47;
+
     /// <summary>
-    /// Gọi Gemini Vision API để bóc tách biển số xe trực tiếp từ mảng byte ảnh JPEG/PNG.
+    /// Gọi Gemini Vision API để bóc tách biển số xe (cả biển 1 dòng và biển 2 dòng) trực tiếp từ mảng byte ảnh JPEG/PNG.
     /// </summary>
     private async Task<PythonPlateDetectionResponse?> TryDetectViaGeminiVisionAsync(byte[] imageBytes, CancellationToken ct)
     {
@@ -133,17 +166,26 @@ public class PythonFastApiClient(
 
         var endpoint = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={apiKey}";
         var base64Image = Convert.ToBase64String(imageBytes);
+        var mimeType = IsPng(imageBytes) ? "image/png" : "image/jpeg";
 
         var prompt = """
             You are a high-accuracy Vietnamese Vehicle License Plate (ANPR/ALPR) OCR system.
-            Analyze this image carefully. Find and extract the vehicle license plate number shown (e.g. 18A-410.83, 51A-999.88, 29B-123.45, 59P1-123.45).
-            Return ONLY a single valid JSON object with exact keys:
+            Carefully read the vehicle license plate in the image.
+            Pay special attention to TWO-LINE (2 dòng / square) Vietnamese license plates:
+            - Top line contains: 2-digit province code + series (e.g., "78-AL", "59-AA", "59-P1", "29-H1", "51A", "30H").
+            - Bottom line contains: 4 or 5 digits (e.g., "123.45", "678.90", "1234").
+            - You MUST combine both the top line and bottom line into a single complete license plate string!
+            Supported Vietnamese formats:
+            - Motorbikes (New 2-letter series Circular 24/2023, 2 lines): "78-AL 123.45", "59-AA 999.99"
+            - Motorbikes (Legacy 1-letter + 1-digit series, 2 lines): "59-P1 123.45", "29-H1 678.90"
+            - Cars (1 line or 2 lines): "51K-888.88", "18A-410.83", "51LD-123.45"
+            If no license plate is visible or readable in the image, return "plate_text": "" and "confidence": 0.0. Never guess or invent a random plate!
+            Return ONLY a valid JSON object with exact keys:
             {
-              "plate_text": "string (formatted plate e.g. 18A-410.83)",
+              "plate_text": "string (e.g. 78-AL 123.45 or 51K-888.88, or empty if unreadable)",
               "confidence": 0.95,
-              "plate_type": "OneLine" or "TwoLine"
+              "plate_type": "TwoLine" or "OneLine"
             }
-            Do NOT output markdown ticks like ```json, just output the raw JSON string.
             """;
 
         var requestBody = new
@@ -159,7 +201,7 @@ public class PythonFastApiClient(
                         {
                             inline_data = new
                             {
-                                mime_type = "image/jpeg",
+                                mime_type = mimeType,
                                 data = base64Image
                             }
                         }
@@ -169,7 +211,8 @@ public class PythonFastApiClient(
             generationConfig = new
             {
                 temperature = 0.1,
-                maxOutputTokens = 256
+                maxOutputTokens = 1024,
+                responseMimeType = "application/json"
             }
         };
 
@@ -188,10 +231,27 @@ public class PythonFastApiClient(
             candidates.GetArrayLength() > 0 &&
             candidates[0].TryGetProperty("content", out var cContent) &&
             cContent.TryGetProperty("parts", out var parts) &&
-            parts.GetArrayLength() > 0 &&
-            parts[0].TryGetProperty("text", out var textElem))
+            parts.GetArrayLength() > 0)
         {
-            var rawText = textElem.GetString() ?? string.Empty;
+            string rawText = string.Empty;
+            foreach (var part in parts.EnumerateArray())
+            {
+                if (part.TryGetProperty("thought", out var thoughtProp) && thoughtProp.ValueKind == JsonValueKind.True)
+                {
+                    continue;
+                }
+                if (part.TryGetProperty("text", out var textElem))
+                {
+                    var candidateText = textElem.GetString();
+                    if (!string.IsNullOrWhiteSpace(candidateText))
+                    {
+                        rawText = candidateText;
+                    }
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(rawText)) return null;
+
             var cleanJson = rawText.Trim();
             if (cleanJson.StartsWith("```json", StringComparison.OrdinalIgnoreCase)) cleanJson = cleanJson[7..];
             else if (cleanJson.StartsWith("```", StringComparison.OrdinalIgnoreCase)) cleanJson = cleanJson[3..];
@@ -201,14 +261,14 @@ public class PythonFastApiClient(
             using var plateDoc = JsonDocument.Parse(cleanJson);
             var root = plateDoc.RootElement;
             var plateText = root.TryGetProperty("plate_text", out var pt) ? pt.GetString() ?? "" : "";
-            var confidence = root.TryGetProperty("confidence", out var cf) ? cf.GetDouble() : 0.95;
+            var confidence = root.TryGetProperty("confidence", out var cf) && cf.TryGetDouble(out var parsedConf) ? parsedConf : 0.95;
             var plateType = root.TryGetProperty("plate_type", out var pty) ? pty.GetString() ?? "OneLine" : "OneLine";
 
-            if (!string.IsNullOrWhiteSpace(plateText))
+            if (!string.IsNullOrWhiteSpace(plateText) && confidence >= 0.50)
             {
                 return new PythonPlateDetectionResponse
                 {
-                    PlateText = plateText.ToUpperInvariant(),
+                    PlateText = plateText.ToUpperInvariant().Trim(),
                     Confidence = confidence,
                     PlateType = plateType,
                     IsFallback = false,
@@ -221,64 +281,21 @@ public class PythonFastApiClient(
     }
 
     /// <summary>
-    /// Sinh kết quả mô phỏng fallback cục bộ an toàn khi cả Python và Gemini đều không khả dụng.
-    /// Có kiểm tra độ phong phú của dữ liệu ảnh (chống ảnh trắng toát / lóa sáng / đen kịt).
+    /// Trả về phản hồi không nhận diện được khi cả Python OCR và Gemini Vision đều không đọc được biển số.
+    /// Tuyệt đối không sinh biển số ngẫu nhiên từ mã băm SHA256 để tránh hiển thị biển số ảo trên giao diện vận hành.
     /// </summary>
-    private PythonPlateDetectionResponse GenerateSimulatedFallback(byte[] imageBytes)
+    private PythonPlateDetectionResponse GenerateUnrecognizedFallback(byte[] imageBytes, string? croppedBase64 = null)
     {
-        // 1. Nếu ảnh quá nhỏ (< 3KB) hoặc rỗng
-        if (imageBytes.Length < 3072)
-        {
-            logger.LogWarning("Ảnh đầu vào quá nhỏ ({Bytes} bytes), không đủ dữ liệu để nhận diện biển số.", imageBytes.Length);
-            return new PythonPlateDetectionResponse
-            {
-                PlateText = string.Empty,
-                Confidence = 0.0,
-                PlateType = "OneLine",
-                IsFallback = true,
-                Status = "unrecognized",
-                FormatValid = false
-            };
-        }
-
-        // 2. Kiểm tra độ phong phú của byte dữ liệu (chống ảnh trắng toát / lóa sáng / đen kịt)
-        var byteCounts = new int[256];
-        var sampleStep = Math.Max(1, imageBytes.Length / 1200);
-        for (int i = 0; i < imageBytes.Length; i += sampleStep)
-        {
-            byteCounts[imageBytes[i]]++;
-        }
-        var activeBuckets = byteCounts.Count(c => c > 0);
-        if (activeBuckets < 20)
-        {
-            logger.LogWarning("Ảnh đầu vào có độ biến thiên byte quá thấp ({Buckets} buckets). Khả năng cao là ảnh lóa sáng hoặc đơn sắc.", activeBuckets);
-            return new PythonPlateDetectionResponse
-            {
-                PlateText = string.Empty,
-                Confidence = 0.0,
-                PlateType = "OneLine",
-                IsFallback = true,
-                Status = "unrecognized",
-                FormatValid = false
-            };
-        }
-
-        // 3. Fallback mô phỏng cho môi trường Dev/Test (chỉ trả confidence = 0.60 ở mức CẦN SOÁT XÉT)
-        var hash = SHA256.HashData(imageBytes);
-        var num = BitConverter.ToUInt32(hash, 0) % 90000 + 10000;
-        var provCode = (BitConverter.ToUInt16(hash, 4) % 89 + 11).ToString("D2");
-        var letter = (char)('A' + (hash[6] % 8));
-        var simulatedPlate = $"{provCode}{letter}-{num / 1000:D2}.{num % 1000:D2}";
-
-        logger.LogInformation("Kích hoạt chế độ AI OCR Fallback (Độ tin cậy vừa phải): {Plate}", simulatedPlate);
+        logger.LogWarning("Không thể nhận diện biển số từ ảnh ({Bytes} bytes). Yêu cầu nhân viên chụp lại hoặc nhập thủ công.", imageBytes.Length);
         return new PythonPlateDetectionResponse
         {
-            PlateText = simulatedPlate,
-            Confidence = 0.60,
+            PlateText = string.Empty,
+            Confidence = 0.0,
             PlateType = "OneLine",
+            CroppedImageBase64 = croppedBase64,
             IsFallback = true,
-            Status = "low_confidence",
-            FormatValid = true
+            Status = "unrecognized",
+            FormatValid = false
         };
     }
 }

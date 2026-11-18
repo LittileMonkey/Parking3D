@@ -1,4 +1,4 @@
-﻿using FluentValidation;
+using FluentValidation;
 using System.Text.RegularExpressions;
 
 namespace Parking.Identity.Application.UseCase.UserVehicleUseCase.CreateUserVehicle
@@ -11,6 +11,10 @@ namespace Parking.Identity.Application.UseCase.UserVehicleUseCase.CreateUserVehi
             "EV",
             "Bike"
         };
+
+        private static readonly Regex VietnamesePlateRegex = new(
+            @"^\d{2}([A-Z]{1,2}|[A-Z]\d)\d{4,5}$",
+            RegexOptions.Compiled);
 
         public CreateVehicleCommandValidators()
         {
@@ -49,10 +53,11 @@ namespace Parking.Identity.Application.UseCase.UserVehicleUseCase.CreateUserVehi
                 @"[\s.-]",
                 string.Empty);
 
-            // Simplified MVP format:
-            // 51A12345, 51A112345, etc.
-            // This is not a complete validator for every Vietnamese plate type.
-            return Regex.IsMatch(normalized, @"^\d{2}[A-Z]\d?\d{5}$");
+            // Supports:
+            // - Cars (standard: 51A12345, 51A1234; special: 51LD12345)
+            // - Motorbikes new format Circular 24/2023: 78AL12345, 59AA12345, 29AB1234
+            // - Motorbikes legacy format: 59P167890, 59F11234
+            return VietnamesePlateRegex.IsMatch(normalized);
         }
 
         private static bool BeSupportedVehicleType(string? vehicleType)
