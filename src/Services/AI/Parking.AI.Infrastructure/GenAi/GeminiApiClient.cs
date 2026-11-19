@@ -209,9 +209,33 @@ public class GeminiApiClient(
             var isCheapest = lower.Contains("rẻ") || lower.Contains("tiết kiệm");
 
             var destination = "Khu vực trung tâm";
-            if (lower.Contains("landmark")) destination = "Landmark 81";
-            else if (lower.Contains("bến thành")) destination = "Chợ Bến Thành";
-            else if (lower.Contains("sân bay") || lower.Contains("tân sơn nhất")) destination = "Sân bay Tân Sơn Nhất";
+            var lat = 10.7781;
+            var lon = 106.7018;
+
+            if (lower.Contains("quận 7") || lower.Contains("quan 7") || lower.Contains("crescent") || lower.Contains("secc") || lower.Contains("phú mỹ hưng"))
+            {
+                destination = "Quận 7";
+                lat = 10.7292;
+                lon = 106.7196;
+            }
+            else if (lower.Contains("quận 1") || lower.Contains("quan 1") || lower.Contains("vincom") || lower.Contains("đồng khởi") || lower.Contains("bến nghé") || lower.Contains("bến thành"))
+            {
+                destination = "Quận 1";
+                lat = 10.7781;
+                lon = 106.7018;
+            }
+            else if (lower.Contains("bình thạnh") || lower.Contains("binh thanh") || lower.Contains("landmark") || lower.Contains("central park"))
+            {
+                destination = "Bình Thạnh";
+                lat = 10.7952;
+                lon = 106.7219;
+            }
+            else if (lower.Contains("sân bay") || lower.Contains("tân sơn nhất"))
+            {
+                destination = "Sân bay Tân Sơn Nhất";
+                lat = 10.8185;
+                lon = 106.6588;
+            }
 
             var vehicleType = isEv ? "ElectricVehicle" : (isMotorbike ? "Motorbike" : "Car");
             var maxPrice = lower.Contains("20k") ? 20000 : (lower.Contains("10k") ? 10000 : 30000);
@@ -220,8 +244,8 @@ public class GeminiApiClient(
             return $$"""
             {
               "destinationName": "{{destination}}",
-              "latitude": 10.7950,
-              "longitude": 106.7218,
+              "latitude": {{lat}},
+              "longitude": {{lon}},
               "vehicleType": "{{vehicleType}}",
               "maxPricePerHour": {{maxPrice}},
               "desiredRadiusMeters": 1000,

@@ -1,14 +1,20 @@
 -- Explicit Development fixture; repeatable.
--- DEMO-BT: Bãi xe ngoài trời 1 tầng (20 ô tô A01..A10, B01..B10 + 20 xe máy M01..M20)
--- DEMO-Q1 & DEMO-Q7: Tòa nhà đỗ xe 3 tầng (Tầng 1: Xe máy, Tầng 2: 100 ô tô F2-A01..E20, Tầng 3: 100 ô tô F3-A01..E20)
+-- DEMO-BT: Bãi xe ngoài trời 1 tầng Landmark 81 - Central Park (20 ô tô A01..A10, B01..B10 + 20 xe máy M01..M20)
+-- DEMO-Q1 & DEMO-Q7: Tòa nhà đỗ xe 3 tầng Vincom Đồng Khởi & Crescent Mall (Tầng 1: Xe máy, Tầng 2: 100 ô tô F2-A01..E20, Tầng 3: 100 ô tô F3-A01..E20)
 BEGIN;
 
 INSERT INTO vehicle_types(code,name) VALUES('CAR','Ô tô'),('MOTORBIKE','Xe máy') ON CONFLICT DO NOTHING;
 
 INSERT INTO parking_lots(id,code,name,address,latitude,longitude,timezone,status,created_at,updated_at) VALUES
- ('11111111-1111-4111-8111-111111111111','DEMO-Q1','Demo Quận 1','Dữ liệu demo — Quận 1',10.776,106.700,'Asia/Ho_Chi_Minh','ACTIVE',now(),now()),
- ('22222222-2222-4222-8222-222222222222','DEMO-BT','Demo Bình Thạnh','Dữ liệu demo — Bình Thạnh',10.790,106.710,'Asia/Ho_Chi_Minh','ACTIVE',now(),now()),
- ('33333333-3333-4333-8333-111111111111','DEMO-Q7','Demo Quận 7','Dữ liệu demo — Quận 7',10.735,106.722,'Asia/Ho_Chi_Minh','ACTIVE',now(),now()) ON CONFLICT DO NOTHING;
+ ('11111111-1111-4111-8111-111111111111','DEMO-Q1','Tòa nhà đỗ xe Vincom Center Đồng Khởi','72 Lê Thánh Tôn, Bến Nghé, Quận 1, TP.HCM',10.7781,106.7018,'Asia/Ho_Chi_Minh','ACTIVE',now(),now()),
+ ('22222222-2222-4222-8222-222222222222','DEMO-BT','Bãi đỗ xe Landmark 81 - Central Park','720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP.HCM',10.7952,106.7219,'Asia/Ho_Chi_Minh','ACTIVE',now(),now()),
+ ('33333333-3333-4333-8333-111111111111','DEMO-Q7','Bãi xe Crescent Mall & SECC Phú Mỹ Hưng','101 Tôn Dật Tiên, Tân Phú, Quận 7, TP.HCM',10.7292,106.7196,'Asia/Ho_Chi_Minh','ACTIVE',now(),now())
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  address = EXCLUDED.address,
+  latitude = EXCLUDED.latitude,
+  longitude = EXCLUDED.longitude,
+  updated_at = now();
 
 INSERT INTO lot_vehicle_policies(lot_id,vehicle_type,guest_booking_enabled,dynamic_multiplier_cap,hold_minutes,min_booking_minutes,max_booking_minutes,
  early_arrival_minutes,late_arrival_minutes,warning_percent,admission_percent,reserved_capacity,cancellation_refund_cutoff_minutes)

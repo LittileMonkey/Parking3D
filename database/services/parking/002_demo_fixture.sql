@@ -4,8 +4,8 @@
 BEGIN;
 INSERT INTO vehicle_types(code,name) VALUES('CAR','Ô tô'),('MOTORBIKE','Xe máy') ON CONFLICT DO NOTHING;
 INSERT INTO parking_lots(id,code,name,address,latitude,longitude,timezone,status,created_at,updated_at) VALUES
- ('11111111-1111-4111-8111-111111111111','DEMO-A','Bãi demo A','Địa chỉ demo A',10.776,106.700,'Asia/Ho_Chi_Minh','ACTIVE',now(),now()),
- ('22222222-2222-4222-8222-222222222222','DEMO-B','Bãi demo B','Địa chỉ demo B',10.790,106.710,'Asia/Ho_Chi_Minh','ACTIVE',now(),now());
+ ('11111111-1111-4111-8111-111111111111','DEMO-A','Tòa nhà đỗ xe Vincom Center Đồng Khởi','72 Lê Thánh Tôn, Bến Nghé, Quận 1, TP.HCM',10.7781,106.7018,'Asia/Ho_Chi_Minh','ACTIVE',now(),now()),
+ ('22222222-2222-4222-8222-222222222222','DEMO-B','Bãi đỗ xe Landmark 81 - Central Park','720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP.HCM',10.7952,106.7219,'Asia/Ho_Chi_Minh','ACTIVE',now(),now());
 INSERT INTO lot_vehicle_policies(lot_id,vehicle_type,guest_booking_enabled,dynamic_multiplier_cap,hold_minutes,min_booking_minutes,max_booking_minutes,
  early_arrival_minutes,late_arrival_minutes,warning_percent,admission_percent,reserved_capacity,cancellation_refund_cutoff_minutes) VALUES
  ('11111111-1111-4111-8111-111111111111','CAR',false,2,5,30,1440,15,30,80,100,0,120),
