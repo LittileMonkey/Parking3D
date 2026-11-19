@@ -341,8 +341,9 @@ function buildFloorBase(group, y, floorNumber) {
     // - Đoạn trước (+11 đến +30): Ở Tầng 1 là lan can tầng trệt, ở Tầng 2 & 3 nối tiếp đỉnh dốc đi lên từ tầng dưới
     box(group, wallT, wallH, frontLandLen + 0.3, X_RAMP_OUTER, wallY, frontLandZ, wallWhite);
 
-    // Tường lan can chữ U bao quanh lỗ thông tầng (Cutout Well) ở Tầng 2 & Tầng 3 (giống hệt tầng trên cùng trong ảnh mẫu)
-    if (floorNumber >= 2) {
+    // Tường lan can chữ U bao quanh lỗ thông tầng (Cutout Well) CHỈ đặt ở Tầng 3 (tầng trên cùng không có dốc đi lên tiếp)
+    // Ở Tầng 2 không đặt tường này để mở thông lối xe đi lên Tầng 3 / đi xuống từ Tầng 3
+    if (floorNumber === 3) {
         // Cạnh ngang chắn mép sau lỗ thông tầng (tại z = Z_RAMP_START = -11, từ X_RAMP_OUTER đến X_RAMP_SPLIT)
         box(group, RAMP_WELL_W + wallT, wallH, wallT, wellCenterX, wallY, Z_RAMP_START, wallWhite);
 

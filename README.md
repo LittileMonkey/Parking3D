@@ -1,6 +1,6 @@
 # Parking3D - Hệ thống Mô phỏng Bãi Đỗ Xe 3D (Three.js & ASP.NET Core)
 
-Dự án trực quan hóa mô hình 3D bãi đỗ xe thông minh sử dụng **Three.js** kết hợp với nền tảng phục vụ ứng dụng web **ASP.NET Core (.NET 10)**. Dự án bao gồm 2 mô hình chính: **Bãi xe ngoài trời 1 tầng (Outdoor Parking)** và **Tòa nhà đỗ xe 3 tầng (3-Floor Parking Building)**.
+Dự án trực quan hóa mô hình 3D bãi đỗ xe thông minh sử dụng **Three.js** kết hợp với nền tảng phục vụ ứng dụng web **ASP.NET Core (.NET 10)**. Dự án bao gồm 3 mô hình chính: **Bãi xe ngoài trời 1 tầng (Outdoor Parking)**, **Tòa nhà đỗ xe 3 tầng nổi (3-Floor Parking Building)** và **Hầm gửi xe chung cư 3 tầng (3-Floor Apartment Basement Parking)**.
 
 ---
 
@@ -39,7 +39,19 @@ Dự án trực quan hóa mô hình 3D bãi đỗ xe thông minh sử dụng **T
   - Xen kẽ giữa 5 hàng là 4 làn đường lưu thông 2 chiều rộng rãi (`6m`) có vạch tim đường nét đứt màu vàng, mũi tên điều hướng và hành lang quay đầu xe rộng `11m` ở hai đầu trái/phải.
   - Click vào bất kỳ ô đỗ nào ở Tầng 2 hoặc Tầng 3 để xem mã ô, tầng, thứ tự ô và trạng thái đỗ xe.
 - **Chuyển đổi chế độ quan sát linh hoạt**:
-  - Hỗ trợ chuyển nhanh góc nhìn Camera giữa **Toàn cảnh 3 tầng**, **Tầng 1 (Xe máy)**, **Tầng 2 (100 ô tô)**, **Tầng 3 (100 ô tô)** và nút chuyển đổi qua lại với **Bãi xe ngoài trời**.
+  - Hỗ trợ chuyển nhanh góc nhìn Camera giữa **Toàn cảnh 3 tầng**, **Tầng 1 (Xe máy)**, **Tầng 2 (100 ô tô)**, **Tầng 3 (100 ô tô)** và nút chuyển đổi qua lại với **Bãi xe ngoài trời** / **Hầm chung cư 3 tầng**.
+
+---
+
+### 3. Mô hình Hầm gửi xe chung cư 3 tầng (`basement.html`, `basement.js`)
+- **Kết cấu 3 tầng hầm (`B1`, `B2`, `B3`) & Khối chung cư trên mặt đất**:
+  - Hiển thị mặt đất bán trong suốt tại `y = 0`, cổng mái che lối xuống hầm và khối tòa chung cư 8 tầng bán trong suốt phía trên (tự động ẩn khi xem riêng từng tầng hầm, có nút bật/tắt nhanh ở chế độ toàn cảnh).
+  - Hệ thống ram dốc nghiêng 2 làn bên hông trái kết nối liên hoàn **Mặt đất ↔ B1 ↔ B2 ↔ B3**, phân làn rõ bằng gờ trắng, mũi tên chỉ hướng (`Lối vào / xuống ↓`, `Lối ra / lên ↑`) và bảng chữ nổi 3D luôn hướng về camera.
+- **Tầng B1 – Khu vực đỗ 100 xe máy**:
+  - Giữ mặt sàn trống kết hợp vạch khu vực, bảng thông tin điện tử đặt gần lối vào (click để xem và cập nhật số xe đang gửi) và bảng chữ nổi 3D ở giữa sàn khi xem riêng Tầng B1.
+- **Tầng B2 & Tầng B3 – 25 ô tô thường + 25 ô tô điện / tầng (`50 slots / tầng`)**:
+  - Chia 2 khu riêng biệt ngăn cách bởi hành lang trung tâm: **25 ô tô thường** (`B2-C01`..`B2-C25`, `B3-C01`..`B3-C25`, xanh lá) và **25 ô tô điện** (`B2-EV01`..`B2-EV25`, `B3-EV01`..`B3-EV25`, xanh dương điện, viền cyan và nhãn `⚡`).
+  - Click trực tiếp từng ô để xem thông tin chi tiết và **cập nhật trạng thái** (`AVAILABLE`, `OCCUPIED`, `MAINTENANCE`) trực tiếp kèm cập nhật màu 3D và bộ đếm thời gian thực.
 
 ---
 
@@ -53,13 +65,15 @@ Parking3D/
     ├── Parking3D.csproj            # Project file (.NET 10)
     └── wwwroot/
         ├── index.html              # Giao diện Bãi đỗ xe ngoài trời 1 tầng
-        ├── building.html           # Giao diện Tòa nhà đỗ xe 3 tầng
+        ├── building.html           # Giao diện Tòa nhà đỗ xe 3 tầng nổi
+        ├── basement.html           # Giao diện Hầm gửi xe chung cư 3 tầng (B1, B2, B3)
         ├── css/
         │   └── style.css           # Định dạng giao diện điều khiển
         ├── js/
         │   ├── main.js             # Xử lý tương tác, camera, barrier, chọn slot cho bãi ngoài trời
         │   ├── parking.js          # Khởi tạo hình học 3D cho bãi xe ngoài trời 1 tầng
-        │   └── building.js         # Khởi tạo hình học 3D & tương tác cho tòa nhà đỗ xe 3 tầng
+        │   ├── building.js         # Khởi tạo hình học 3D & tương tác cho tòa nhà đỗ xe 3 tầng nổi
+        │   └── basement.js         # Khởi tạo hình học 3D & tương tác cho hầm gửi xe chung cư 3 tầng
         └── libs/
             └── three/              # Thư viện Three.js & Addons (OrbitControls, WebXR...)
 ```
@@ -75,4 +89,5 @@ Parking3D/
    ```
 3. Mở trình duyệt truy cập địa chỉ hiển thị trên màn hình console (ví dụ `https://localhost:7xxx` hoặc `http://localhost:5xxx`):
    - Trang mặc định (`/index.html`): Bãi đỗ xe ngoài trời 1 tầng.
-   - Trang tòa nhà 3 tầng (`/building.html`): Bấm nút **"View 3-Floor Parking"** ở góc dưới bên phải hoặc truy cập trực tiếp `/building.html`.
+   - Trang tòa nhà 3 tầng nổi (`/building.html`): Bấm nút **"View 3-Floor Parking"** ở góc dưới bên phải hoặc truy cập trực tiếp `/building.html`.
+   - Trang hầm chung cư 3 tầng (`/basement.html`): Bấm nút **"View 3-Floor Basement Parking"** ở góc dưới bên phải hoặc truy cập trực tiếp `/basement.html`.

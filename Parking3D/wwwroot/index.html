@@ -92,21 +92,40 @@
         <button id="closeSlotInfo">Close</button>
     </div>
 
-    <a href="/building.html"
-       style="
+    <div style="
        position: fixed;
        bottom: 24px;
        right: 24px;
        z-index: 100;
-       background: #2563eb;
-       color: white;
-       padding: 12px 20px;
-       border-radius: 8px;
-       text-decoration: none;
-       font-weight: bold;
-   ">
-        View 3-Floor Parking
-    </a>
+       display: flex;
+       flex-direction: column;
+       gap: 10px;
+    ">
+        <a href="/basement.html"
+           style="
+           background: #0f766e;
+           color: white;
+           padding: 12px 20px;
+           border-radius: 8px;
+           text-decoration: none;
+           font-weight: bold;
+           text-align: center;
+        ">
+            View 3-Floor Basement Parking
+        </a>
+        <a href="/building.html"
+           style="
+           background: #2563eb;
+           color: white;
+           padding: 12px 20px;
+           border-radius: 8px;
+           text-decoration: none;
+           font-weight: bold;
+           text-align: center;
+        ">
+            View 3-Floor Parking
+        </a>
+    </div>
     <script type="module" src="/js/main.js"></script>
 </body>
 </html>

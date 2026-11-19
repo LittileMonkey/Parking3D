@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Parking3D | Hầm Gửi Xe Chung Cư 3 Tầng (B1 - B2 - B3)</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #dce9f3;
+            overflow: hidden;
+            color: #17243a;
+        }
+
+        #viewer {
+            position: fixed;
+            inset: 0;
+        }
+
+        .panel {
+            position: fixed;
+            z-index: 2;
+            background: #ffffffed;
+            border-radius: 12px;
+            padding: 15px 16px;
+            box-shadow: 0 4px 18px #0002;
+            backdrop-filter: blur(4px);
+        }
+
+        .top {
+            left: 20px;
+            top: 20px;
+            max-width: 440px;
+        }
+
+            .top h2 {
+                margin: 0 0 6px;
+                font-size: 19px;
+                color: #0f172a;
+            }
+
+            .top p {
+                margin: 4px 0;
+                font-size: 13px;
+                color: #475569;
+            }
+
+        .stats-list {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        .stat-b1 {
+            color: #0f766e;
+        }
+
+        .stat-b2 {
+            color: #1d4ed8;
+        }
+
+        .stat-b3 {
+            color: #4338ca;
+        }
+
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 12px;
+            margin-top: 9px;
+            padding-top: 8px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 12px;
+            color: #334155;
+        }
+
+        .legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .dot {
+            width: 11px;
+            height: 11px;
+            border-radius: 3px;
+            display: inline-block;
+            border: 1px solid #0002;
+        }
+
+        .actions {
+            right: 20px;
+            top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            width: 215px;
+        }
+
+        .actions-divider {
+            height: 1px;
+            background: #e2e8f0;
+            margin: 2px 0;
+        }
+
+        button, a.nav {
+            cursor: pointer;
+            padding: 10px 11px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: white;
+            color: #17243a;
+            text-align: center;
+            text-decoration: none;
+            font-size: 13.5px;
+            transition: background 0.15s, border-color 0.15s, color 0.15s;
+        }
+
+            button.active {
+                background: #2563eb;
+                color: white;
+                border-color: #2563eb;
+                font-weight: bold;
+            }
+
+            button.secondary-active {
+                background: #0f766e;
+                color: white;
+                border-color: #0f766e;
+            }
+
+            button:hover, a.nav:hover {
+                border-color: #2563eb;
+            }
+
+            button:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+
+        .info {
+            left: 20px;
+            bottom: 20px;
+            min-width: 270px;
+            max-width: 330px;
+            display: none;
+        }
+
+            .info h3 {
+                margin: 0 0 8px;
+                font-size: 17px;
+                color: #0f172a;
+            }
+
+            .info p {
+                margin: 5px 0;
+                font-size: 13.5px;
+                color: #334155;
+            }
+
+        .editor-box {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+            .editor-box label {
+                font-size: 12.5px;
+                font-weight: bold;
+                color: #334155;
+            }
+
+            .editor-box select {
+                padding: 8px;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                font-size: 13.5px;
+                background: white;
+            }
+
+        .btn-row {
+            display: flex;
+            gap: 6px;
+        }
+
+            .btn-row button {
+                flex: 1;
+                padding: 8px 6px;
+                font-size: 13px;
+            }
+
+        .btn-primary {
+            background: #2563eb;
+            color: white;
+            border-color: #2563eb;
+            font-weight: bold;
+        }
+
+            .btn-primary:hover {
+                background: #1d4ed8;
+            }
+
+        @media (max-width: 680px) {
+            .top {
+                top: 10px;
+                left: 10px;
+                right: 165px;
+                padding: 10px;
+            }
+
+                .top h2 {
+                    font-size: 14px;
+                }
+
+                .top p, .stats-list, .legend {
+                    font-size: 11px;
+                }
+
+            .actions {
+                top: 10px;
+                right: 10px;
+                width: 148px;
+                padding: 8px;
+                gap: 6px;
+            }
+
+            button, a.nav {
+                padding: 7px 6px;
+                font-size: 11.5px;
+            }
+
+            .info {
+                left: 10px;
+                right: 10px;
+                bottom: 10px;
+                max-width: none;
+            }
+        }
+    </style>
+    <script type="importmap">
+        {"imports":{"three":"./libs/three/build/three.module.js","three/addons/":"./libs/three/examples/jsm/"}}
+    </script>
+</head>
+<body>
+    <div id="viewer"></div>
+
+    <div class="panel top">
+        <h2>🏢 Hầm Gửi Xe Chung Cư 3D (B1 – B2 – B3)</h2>
+        <p>B1: 100 xe máy · B2 &amp; B3: 25 ô tô thường + 25 ô tô điện / tầng</p>
+        <div class="stats-list">
+            <div class="stat-b1" id="stat-b1">🏍️ B1 (Xe máy): Trống 65 / 100 (Đang gửi: 35 xe)</div>
+            <div class="stat-b2" id="stat-b2">🚗 B2: Ô tô trống 25/25 · ⚡ Ô tô điện trống 25/25</div>
+            <div class="stat-b3" id="stat-b3">🚗 B3: Ô tô trống 25/25 · ⚡ Ô tô điện trống 25/25</div>
+        </div>
+        <div class="legend">
+            <span class="legend-item"><span class="dot" style="background:#16a34a"></span>Ô tô trống</span>
+            <span class="legend-item"><span class="dot" style="background:#0284c7"></span>Ô tô điện trống</span>
+            <span class="legend-item"><span class="dot" style="background:#888e96"></span>Đã có xe</span>
+            <span class="legend-item"><span class="dot" style="background:#eab308"></span>Bảo trì</span>
+            <span class="legend-item"><span class="dot" style="background:#ef4444"></span>Đang chọn</span>
+        </div>
+    </div>
+
+    <div class="panel actions">
+        <button class="active" data-floor="0">Toàn cảnh 3 tầng hầm</button>
+        <button data-floor="1">Tầng B1 (100 xe máy)</button>
+        <button data-floor="2">Tầng B2 (25 Ô tô + 25 EV)</button>
+        <button data-floor="3">Tầng B3 (25 Ô tô + 25 EV)</button>
+        <div class="actions-divider"></div>
+        <button id="toggle-apartment" class="secondary-active">🏢 Chung cư: Đang hiện</button>
+        <div class="actions-divider"></div>
+        <a class="nav" href="./building.html">← Tòa nhà 3 tầng nổi</a>
+        <a class="nav" href="./index.html">← Bãi xe ngoài trời</a>
+    </div>
+
+    <div class="panel info" id="info">
+        <h3 id="slot-id">---</h3>
+        <p id="slot-floor"></p>
+        <p id="slot-type"></p>
+        <p id="slot-status"></p>
+
+        <div class="editor-box" id="car-status-editor" style="display:none;">
+            <label for="slot-status-select">Đổi trạng thái ô đỗ</label>
+            <select id="slot-status-select">
+                <option value="AVAILABLE">Trống (AVAILABLE)</option>
+                <option value="OCCUPIED">Đã có xe (OCCUPIED)</option>
+                <option value="MAINTENANCE">Bảo trì (MAINTENANCE)</option>
+            </select>
+            <button id="save-slot-status" class="btn-primary">Cập nhật trạng thái</button>
+        </div>
+
+        <div class="editor-box" id="moto-editor" style="display:none;">
+            <label>Cập nhật số xe máy đang gửi (Tầng B1)</label>
+            <div class="btn-row">
+                <button type="button" data-moto-delta="-5">-5</button>
+                <button type="button" data-moto-delta="-1">-1</button>
+                <button type="button" data-moto-delta="1">+1</button>
+                <button type="button" data-moto-delta="5">+5</button>
+            </div>
+        </div>
+
+        <button id="close-info" style="width:100%; margin-top:10px;">Đóng</button>
+    </div>
+
+    <script type="module" src="./js/basement.js?v=1"></script>
+</body>
+</html>
