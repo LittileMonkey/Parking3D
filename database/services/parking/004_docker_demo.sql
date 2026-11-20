@@ -1,14 +1,17 @@
 -- Explicit Development fixture; repeatable.
 -- DEMO-BT: Bãi xe ngoài trời 1 tầng (20 ô tô A01..A10, B01..B10 + 20 xe máy M01..M20)
--- DEMO-Q1 & DEMO-Q7: Tòa nhà đỗ xe 3 tầng (Tầng 1: Xe máy, Tầng 2: 100 ô tô F2-A01..E20, Tầng 3: 100 ô tô F3-A01..E20)
+-- DEMO-Q1: Tòa nhà đỗ xe 3 tầng (Tầng 1: 20 xe máy, Tầng 2: 100 ô tô F2-A01..E20, Tầng 3: 100 ô tô F3-A01..E20)
+-- DEMO-Q7: Hầm gửi xe chung cư 3 tầng (B1: 100 xe máy, B2 & B3: mỗi tầng 25 ô tô thường + 25 ô tô điện EV)
 BEGIN;
 
 INSERT INTO vehicle_types(code,name) VALUES('CAR','Ô tô'),('MOTORBIKE','Xe máy') ON CONFLICT DO NOTHING;
 
+INSERT INTO slot_features(code,name) VALUES('EV_CHARGING','Trạm sạc ô tô điện (EV)') ON CONFLICT DO NOTHING;
+
 INSERT INTO parking_lots(id,code,name,address,latitude,longitude,timezone,status,created_at,updated_at) VALUES
  ('11111111-1111-4111-8111-111111111111','DEMO-Q1','Demo Quận 1','Dữ liệu demo — Quận 1',10.776,106.700,'Asia/Ho_Chi_Minh','ACTIVE',now(),now()),
  ('22222222-2222-4222-8222-222222222222','DEMO-BT','Demo Bình Thạnh','Dữ liệu demo — Bình Thạnh',10.790,106.710,'Asia/Ho_Chi_Minh','ACTIVE',now(),now()),
- ('33333333-3333-4333-8333-111111111111','DEMO-Q7','Demo Quận 7','Dữ liệu demo — Quận 7',10.735,106.722,'Asia/Ho_Chi_Minh','ACTIVE',now(),now()) ON CONFLICT DO NOTHING;
+ ('33333333-3333-4333-8333-111111111111','DEMO-Q7','Demo Quận 7','Dữ liệu demo — Quận 7 (Hầm B1–B3)',10.735,106.722,'Asia/Ho_Chi_Minh','ACTIVE',now(),now()) ON CONFLICT DO NOTHING;
 
 INSERT INTO lot_vehicle_policies(lot_id,vehicle_type,guest_booking_enabled,dynamic_multiplier_cap,hold_minutes,min_booking_minutes,max_booking_minutes,
  early_arrival_minutes,late_arrival_minutes,warning_percent,admission_percent,reserved_capacity,cancellation_refund_cutoff_minutes)
@@ -27,6 +30,12 @@ WHERE mo.lot_id = l.id AND l.code IN ('DEMO-Q1','DEMO-BT','DEMO-Q7')
     UNION ALL
     SELECT 1 FROM session_slot_assignments sa WHERE sa.slot_id = mo.slot_id
   ));
+
+DELETE FROM slot_feature_links sfl USING parking_slots s, parking_lots l
+WHERE sfl.slot_id = s.id AND s.lot_id = l.id AND l.code IN ('DEMO-Q1','DEMO-BT','DEMO-Q7')
+  AND NOT EXISTS (SELECT 1 FROM slot_reservations sr WHERE sr.slot_id = s.id)
+  AND NOT EXISTS (SELECT 1 FROM session_slot_assignments sa WHERE sa.slot_id = s.id)
+  AND NOT EXISTS (SELECT 1 FROM map_objects mo WHERE mo.slot_id = s.id);
 
 DELETE FROM slot_vehicle_types svt USING parking_slots s, parking_lots l
 WHERE svt.slot_id = s.id AND s.lot_id = l.id AND l.code IN ('DEMO-Q1','DEMO-BT','DEMO-Q7')
@@ -86,7 +95,7 @@ CROSS JOIN generate_series(1,20) n
 WHERE l.code IN ('DEMO-BT','DEMO-A','DEMO-B') AND z.code = 'MOTO'
 ON CONFLICT (zone_id, code) DO NOTHING;
 
--- 2. Tòa nhà đỗ xe 3 tầng (DEMO-Q1, DEMO-Q7)
+-- 2. Tòa nhà đỗ xe 3 tầng (DEMO-Q1)
 INSERT INTO parking_levels(id,lot_id,code,name,level_kind,elevation_m,display_order)
 SELECT md5('demo-level-bldg:'||l.id||':'||lv.code)::uuid,l.id,lv.code,lv.name,'INDOOR',lv.elev,lv.ord
 FROM parking_lots l
@@ -95,15 +104,15 @@ CROSS JOIN (VALUES
   ('F2','Tầng 2 (100 ô tô)',5.2,2),
   ('F3','Tầng 3 (100 ô tô)',10.4,3)
 ) AS lv(code,name,elev,ord)
-WHERE l.code IN ('DEMO-Q1','DEMO-Q7')
-ON CONFLICT (lot_id, code) DO UPDATE SET name = EXCLUDED.name, elevation_m = EXCLUDED.elevation_m, display_order = EXCLUDED.display_order;
+WHERE l.code = 'DEMO-Q1'
+ON CONFLICT (lot_id, code) DO UPDATE SET name = EXCLUDED.name, level_kind = EXCLUDED.level_kind, elevation_m = EXCLUDED.elevation_m, display_order = EXCLUDED.display_order;
 
--- Khu xe máy ở Tầng 1 (F1)
+-- Khu xe máy ở Tầng 1 (F1) của DEMO-Q1
 INSERT INTO zones(id,lot_id,level_id,code,name)
 SELECT md5('demo-zone-bldg-f1:'||pl.id)::uuid,pl.lot_id,pl.id,'MOTO','Khu xe máy Tầng 1'
 FROM parking_levels pl
 JOIN parking_lots l ON l.id = pl.lot_id
-WHERE l.code IN ('DEMO-Q1','DEMO-Q7') AND pl.code = 'F1'
+WHERE l.code = 'DEMO-Q1' AND pl.code = 'F1'
 ON CONFLICT (level_id, code) DO UPDATE SET name = EXCLUDED.name;
 
 INSERT INTO parking_slots(id,lot_id,zone_id,level_id,code,operational_status,width_m,length_m)
@@ -113,16 +122,16 @@ FROM zones z
 JOIN parking_levels pl ON pl.id = z.level_id
 JOIN parking_lots l ON l.id = z.lot_id
 CROSS JOIN generate_series(1,20) n
-WHERE l.code IN ('DEMO-Q1','DEMO-Q7') AND pl.code = 'F1' AND z.code = 'MOTO'
+WHERE l.code = 'DEMO-Q1' AND pl.code = 'F1' AND z.code = 'MOTO'
 ON CONFLICT (zone_id, code) DO NOTHING;
 
--- 5 Hàng A, B, C, D, E × 20 cột = 100 ô tô/tầng ở Tầng 2 (F2) và Tầng 3 (F3)
+-- 5 Hàng A, B, C, D, E × 20 cột = 100 ô tô/tầng ở Tầng 2 (F2) và Tầng 3 (F3) của DEMO-Q1
 INSERT INTO zones(id,lot_id,level_id,code,name)
 SELECT md5('demo-zone-bldg:'||pl.id||':'||r.code)::uuid,pl.lot_id,pl.id,r.code,'Hàng '||r.code
 FROM parking_levels pl
 JOIN parking_lots l ON l.id = pl.lot_id
 CROSS JOIN (VALUES ('A'),('B'),('C'),('D'),('E')) AS r(code)
-WHERE l.code IN ('DEMO-Q1','DEMO-Q7') AND pl.code IN ('F2','F3')
+WHERE l.code = 'DEMO-Q1' AND pl.code IN ('F2','F3')
 ON CONFLICT (level_id, code) DO UPDATE SET name = EXCLUDED.name;
 
 INSERT INTO parking_slots(id,lot_id,zone_id,level_id,code,operational_status,width_m,length_m)
@@ -132,16 +141,91 @@ FROM zones z
 JOIN parking_levels pl ON pl.id = z.level_id
 JOIN parking_lots l ON l.id = z.lot_id
 CROSS JOIN generate_series(1,20) n
-WHERE l.code IN ('DEMO-Q1','DEMO-Q7') AND pl.code IN ('F2','F3') AND z.code IN ('A','B','C','D','E')
+WHERE l.code = 'DEMO-Q1' AND pl.code IN ('F2','F3') AND z.code IN ('A','B','C','D','E')
 ON CONFLICT (zone_id, code) DO NOTHING;
 
--- Gán loại phương tiện cho toàn bộ slot
+-- 3. Hầm gửi xe chung cư 3 tầng B1 - B2 - B3 (DEMO-Q7)
+-- B1 (-5.2m): 100 xe máy (B1-M001..B1-M100)
+-- B2 (-10.4m) & B3 (-15.6m): mỗi tầng 25 ô tô thường (B2/B3-C01..C25) + 25 ô tô điện EV (B2/B3-EV01..EV25)
+INSERT INTO parking_levels(id,lot_id,code,name,level_kind,elevation_m,display_order)
+SELECT md5('demo-level-basement:'||l.id||':'||lv.code)::uuid,l.id,lv.code,lv.name,'BASEMENT',lv.elev,lv.ord
+FROM parking_lots l
+CROSS JOIN (VALUES
+  ('B1','Tầng hầm B1 (100 xe máy)',-5.2,1),
+  ('B2','Tầng hầm B2 (25 ô tô + 25 ô tô điện)',-10.4,2),
+  ('B3','Tầng hầm B3 (25 ô tô + 25 ô tô điện)',-15.6,3)
+) AS lv(code,name,elev,ord)
+WHERE l.code = 'DEMO-Q7'
+ON CONFLICT (lot_id, code) DO UPDATE SET name = EXCLUDED.name, level_kind = EXCLUDED.level_kind, elevation_m = EXCLUDED.elevation_m, display_order = EXCLUDED.display_order;
+
+-- Khu xe máy Tầng hầm B1 (100 xe máy)
+INSERT INTO zones(id,lot_id,level_id,code,name)
+SELECT md5('demo-zone-basement-b1:'||pl.id)::uuid,pl.lot_id,pl.id,'MOTO','Khu xe máy Tầng hầm B1'
+FROM parking_levels pl
+JOIN parking_lots l ON l.id = pl.lot_id
+WHERE l.code = 'DEMO-Q7' AND pl.code = 'B1'
+ON CONFLICT (level_id, code) DO UPDATE SET name = EXCLUDED.name;
+
+INSERT INTO parking_slots(id,lot_id,zone_id,level_id,code,operational_status,width_m,length_m)
+SELECT md5('demo-slot-basement-b1:'||z.id||':'||n)::uuid,z.lot_id,z.id,z.level_id,
+  'B1-M'||lpad(n::text,3,'0'),'ACTIVE',1.0,2.0
+FROM zones z
+JOIN parking_levels pl ON pl.id = z.level_id
+JOIN parking_lots l ON l.id = z.lot_id
+CROSS JOIN generate_series(1,100) n
+WHERE l.code = 'DEMO-Q7' AND pl.code = 'B1' AND z.code = 'MOTO'
+ON CONFLICT (zone_id, code) DO NOTHING;
+
+-- Khu Ô tô thường (CAR) và Khu Ô tô điện (EV) ở Tầng hầm B2 & B3
+INSERT INTO zones(id,lot_id,level_id,code,name)
+SELECT md5('demo-zone-basement:'||pl.id||':'||z.code)::uuid,pl.lot_id,pl.id,z.code,z.name
+FROM parking_levels pl
+JOIN parking_lots l ON l.id = pl.lot_id
+CROSS JOIN (VALUES
+  ('CAR','Khu Ô tô thường'),
+  ('EV','Khu Ô tô điện (EV)')
+) AS z(code,name)
+WHERE l.code = 'DEMO-Q7' AND pl.code IN ('B2','B3')
+ON CONFLICT (level_id, code) DO UPDATE SET name = EXCLUDED.name;
+
+-- 25 ô tô thường / tầng (B2-C01..C25, B3-C01..C25)
+INSERT INTO parking_slots(id,lot_id,zone_id,level_id,code,operational_status,width_m,length_m)
+SELECT md5('demo-slot-basement-car:'||z.id||':'||n)::uuid,z.lot_id,z.id,z.level_id,
+  pl.code||'-C'||lpad(n::text,2,'0'),'ACTIVE',2.6,5.0
+FROM zones z
+JOIN parking_levels pl ON pl.id = z.level_id
+JOIN parking_lots l ON l.id = z.lot_id
+CROSS JOIN generate_series(1,25) n
+WHERE l.code = 'DEMO-Q7' AND pl.code IN ('B2','B3') AND z.code = 'CAR'
+ON CONFLICT (zone_id, code) DO NOTHING;
+
+-- 25 ô tô điện EV / tầng (B2-EV01..EV25, B3-EV01..EV25)
+INSERT INTO parking_slots(id,lot_id,zone_id,level_id,code,operational_status,width_m,length_m)
+SELECT md5('demo-slot-basement-ev:'||z.id||':'||n)::uuid,z.lot_id,z.id,z.level_id,
+  pl.code||'-EV'||lpad(n::text,2,'0'),'ACTIVE',2.6,5.0
+FROM zones z
+JOIN parking_levels pl ON pl.id = z.level_id
+JOIN parking_lots l ON l.id = z.lot_id
+CROSS JOIN generate_series(1,25) n
+WHERE l.code = 'DEMO-Q7' AND pl.code IN ('B2','B3') AND z.code = 'EV'
+ON CONFLICT (zone_id, code) DO NOTHING;
+
+-- Gán loại phương tiện gốc (CAR / MOTORBIKE) cho toàn bộ slot
 INSERT INTO slot_vehicle_types(slot_id,lot_id,vehicle_type)
 SELECT s.id,s.lot_id,CASE WHEN z.code = 'MOTO' THEN 'MOTORBIKE' ELSE 'CAR' END
 FROM parking_slots s
 JOIN zones z ON z.id = s.zone_id
 JOIN parking_lots l ON l.id = s.lot_id
 WHERE l.code IN ('DEMO-Q1','DEMO-BT','DEMO-Q7','DEMO-A','DEMO-B')
+ON CONFLICT DO NOTHING;
+
+-- Gắn tính năng EV_CHARGING cho toàn bộ ô Ô tô điện tại DEMO-Q7 (tách biệt hoàn toàn với ô Ô tô thường)
+INSERT INTO slot_feature_links(slot_id,feature_code)
+SELECT s.id,'EV_CHARGING'
+FROM parking_slots s
+JOIN zones z ON z.id = s.zone_id
+JOIN parking_lots l ON l.id = s.lot_id
+WHERE l.code = 'DEMO-Q7' AND z.code = 'EV'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO lot_gates(id,lot_id,code,gate_kind)
@@ -159,13 +243,31 @@ CASE p.vehicle_type WHEN 'CAR' THEN 7500 ELSE 1000 END,15,1,
 jsonb_build_object('blockMinutes',15,'rateVnd',CASE p.vehicle_type WHEN 'CAR' THEN 7500 ELSE 1000 END,
  'dailyCapVnd',CASE p.vehicle_type WHEN 'CAR' THEN 120000 ELSE 20000 END,'multiplier',1)
 FROM pricing_plans p JOIN parking_lots l ON l.id=p.lot_id WHERE l.code IN ('DEMO-Q1','DEMO-BT','DEMO-Q7','DEMO-A','DEMO-B')
-AND NOT EXISTS(SELECT 1 FROM pricing_rules r WHERE r.plan_id=p.id) ON CONFLICT DO NOTHING;
+AND NOT EXISTS(SELECT 1 FROM pricing_rules r WHERE r.plan_id=p.id AND r.rule_type='FLAT_BLOCK') ON CONFLICT DO NOTHING;
 
+-- Biểu giá riêng cho Ô tô điện (EV) tại bãi hầm DEMO-Q7 (10.000đ/15p, trần ngày 160.000đ)
+INSERT INTO pricing_rules(id,plan_id,lot_id,rule_type,priority,amount,billing_unit_minutes,multiplier,parameters)
+SELECT md5('demo-rule-ev:'||p.id)::uuid,p.id,p.lot_id,'FLAT_BLOCK_EV',2,
+10000,15,1,
+jsonb_build_object('blockMinutes',15,'rateVnd',10000,'dailyCapVnd',160000,'multiplier',1)
+FROM pricing_plans p JOIN parking_lots l ON l.id=p.lot_id
+WHERE l.code = 'DEMO-Q7' AND p.vehicle_type = 'CAR' AND p.status = 'PUBLISHED'
+AND NOT EXISTS(SELECT 1 FROM pricing_rules r WHERE r.plan_id=p.id AND r.rule_type='FLAT_BLOCK_EV') ON CONFLICT DO NOTHING;
+
+-- Xe demo cho khách hàng: Ô tô thường (51A12345), Ô tô điện EV (51K88888), Xe máy (59P112345)
 INSERT INTO vehicles(id,plate_country,plate_normalized,vehicle_type,fuel_type,is_active,created_at)
-VALUES('99999999-9999-4999-8999-999999999999','VN','51A12345','CAR','PETROL',true,now()) ON CONFLICT DO NOTHING;
+VALUES
+ ('99999999-9999-4999-8999-999999999999','VN','51A12345','CAR','PETROL',true,now()),
+ ('88888888-8888-4888-8888-888888888888','VN','51K88888','CAR','ELECTRIC',true,now()),
+ ('77777777-7777-4777-8777-777777777777','VN','59P112345','MOTORBIKE','PETROL',true,now())
+ON CONFLICT DO NOTHING;
 
 INSERT INTO user_vehicle_access(user_id,vehicle_id,access_kind,verified_at,is_primary,created_at)
-VALUES(:'customer_id'::uuid,'99999999-9999-4999-8999-999999999999','OWNER',now(),true,now()) ON CONFLICT DO NOTHING;
+VALUES
+ (:'customer_id'::uuid,'99999999-9999-4999-8999-999999999999','OWNER',now(),true,now()),
+ (:'customer_id'::uuid,'88888888-8888-4888-8888-888888888888','OWNER',now(),false,now()),
+ (:'customer_id'::uuid,'77777777-7777-4777-8777-777777777777','OWNER',now(),false,now())
+ON CONFLICT DO NOTHING;
 
 INSERT INTO map_versions(id,lot_id,version_no,status,coordinate_unit,created_by,published_at)
 SELECT md5('demo-map:'||l.id)::uuid,l.id,

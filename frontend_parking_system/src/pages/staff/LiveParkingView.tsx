@@ -86,8 +86,8 @@ export default function LiveParkingView() {
       setSlots(data.slots);
       setLoadError("");
       setSessions(sessionRows);
-      if (data.levels.length > 0 && !data.levels.some(level => level.levelId === selectedLevelId)) {
-        setSelectedLevelId(data.levels[0].levelId);
+      if (data.levels.length > 0 && selectedLevelId !== "ALL" && !data.levels.some(level => level.levelId === selectedLevelId)) {
+        setSelectedLevelId(data.levels.length > 1 ? "ALL" : data.levels[0].levelId);
       }
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Không tải được sơ đồ bãi. Hãy thử lại.");
@@ -116,11 +116,24 @@ export default function LiveParkingView() {
   const hubStatus = useParkingHub(Boolean(selectedLotId), selectedLotId ?? null, applyRealtimeStatusChanges);
 
   const selectedLevelCode = useMemo(() => {
-    if (!selectedLevelId) return undefined;
+    if (!selectedLevelId || selectedLevelId === "ALL") return "ALL";
     const fromLayout = lotLayout?.levels.find(l => l.id === selectedLevelId)?.code;
     if (fromLayout) return fromLayout;
     return levels.find(l => l.levelId === selectedLevelId)?.levelCode;
   }, [lotLayout, levels, selectedLevelId]);
+
+  const motoSceneStats = useMemo(() => {
+    const motoSlots = slots.filter(s => s.vehicleType === "Motorcycle");
+    const maxCapacity = motoSlots.length;
+    if (maxCapacity === 0) return null;
+    const availableMoto = motoSlots.filter(s => s.status === "Available").length;
+    return {
+      availableMoto,
+      maxCapacity,
+      currentMoto: Math.max(0, maxCapacity - availableMoto),
+      lang: "vi" as const,
+    };
+  }, [slots]);
 
   const viewerLevels = useMemo<ModelLevel[]>(() => {
     const slotById = new Map(slots.map(slot => [slot.slotId, slot] as const));
@@ -179,7 +192,7 @@ export default function LiveParkingView() {
   }, [lotLayout, selectedLotId, levels, slots]);
 
   // Filtered Slots
-  const currentLevelSlots = slots.filter((s) => !selectedLevelId || s.levelId === selectedLevelId);
+  const currentLevelSlots = slots.filter((s) => !selectedLevelId || selectedLevelId === "ALL" || s.levelId === selectedLevelId);
   const filteredSlots = currentLevelSlots.filter((s) => {
     if (statusFilter !== "All" && s.status !== statusFilter) return false;
     if (vehicleFilter !== "All" && s.vehicleType !== vehicleFilter) return false;
@@ -266,17 +279,29 @@ export default function LiveParkingView() {
         {/* Floor Selection Tabs */}
         <div className="pm-level-switcher">
           {levels.length > 0 ? (
-            levels.map((lvl) => (
-              <button
-                key={lvl.levelId}
-                type="button"
-                onClick={() => setSelectedLevelId(lvl.levelId)}
-                className={`pm-level-btn ${selectedLevelId === lvl.levelId ? "active" : ""}`}
-              >
-                <Layers size={15} />
-                <span>{lvl.levelName.includes("(") ? lvl.levelName.split("(")[0].trim() : lvl.levelName}</span>
-              </button>
-            ))
+            <>
+              {levels.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedLevelId("ALL")}
+                  className={`pm-level-btn ${selectedLevelId === "ALL" ? "active" : ""}`}
+                >
+                  <Layers size={15} />
+                  <span>Toàn cảnh</span>
+                </button>
+              )}
+              {levels.map((lvl) => (
+                <button
+                  key={lvl.levelId}
+                  type="button"
+                  onClick={() => setSelectedLevelId(lvl.levelId)}
+                  className={`pm-level-btn ${selectedLevelId === lvl.levelId ? "active" : ""}`}
+                >
+                  <Layers size={15} />
+                  <span>{lvl.levelName.includes("(") ? lvl.levelName.split("(")[0].trim() : lvl.levelName}</span>
+                </button>
+              ))}
+            </>
           ) : (
             <span className="staff-muted staff-small">{loading ? "Đang tải tầng…" : "Chưa có tầng được cấu hình"}</span>
           )}
@@ -401,7 +426,9 @@ export default function LiveParkingView() {
           <div className="pm-grid-card-body">
             <ParkingViewer
               levels={viewerLevels}
-              selectedLevelCode={selectedLevelCode || ""}
+              lotCode={lotLayout?.code}
+              motoStats={motoSceneStats}
+              selectedLevelCode={selectedLevelCode || "ALL"}
               selectedId={activeSlot?.slotId ?? null}
               onSelect={(slot) => {
                 const matched = slots.find(item => item.slotId === slot.slotId);

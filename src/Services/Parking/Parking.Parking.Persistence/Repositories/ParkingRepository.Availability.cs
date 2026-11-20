@@ -29,7 +29,7 @@ public sealed partial class ParkingRepository
 
         var now = clock.GetUtcNow();
         var (start, end) = ResolveAvailabilityRange(startTime, endTime, now);
-        var type = NormalizeAvailabilityVehicleType(vehicleType);
+        var (type, isEv) = NormalizeAvailabilityVehicleType(vehicleType);
 
         await using var connection = await db.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(
@@ -42,7 +42,7 @@ public sealed partial class ParkingRepository
 
         var levels = await ReadAvailabilityLevelsAsync(connection, transaction, lotId, levelId, ct);
         await ReadAvailabilitySlotsAsync(
-            connection, transaction, lotId, levelId, type, start, end, now, levels, ct);
+            connection, transaction, lotId, levelId, type, isEv, start, end, now, levels, ct);
 
         // Tính trên chính tập ô đã lọc; không dùng tổng sức chứa của toàn bãi.
         // Khi lọc theo loại xe toàn bãi, ẩn các tầng không có ô khớp để tránh mở nhầm tab rỗng.
@@ -91,18 +91,28 @@ public sealed partial class ParkingRepository
     }
 
     /// <summary>Chuẩn hóa loại xe; null nghĩa là không áp dụng bộ lọc loại xe.</summary>
-    private static string? NormalizeAvailabilityVehicleType(string? vehicleType)
+    private static (string? BaseType, bool? IsEv) NormalizeAvailabilityVehicleType(string? vehicleType)
     {
-        var type = string.IsNullOrWhiteSpace(vehicleType)
+        var raw = string.IsNullOrWhiteSpace(vehicleType)
             ? null
             : vehicleType.Trim().ToUpperInvariant();
 
-        if (type is { Length: > 30 })
+        if (raw is null)
+        {
+            return (null, null);
+        }
+
+        if (raw.Length > 30)
         {
             throw new ServiceException(400, "Vehicle type is too long.");
         }
 
-        return type;
+        if (VehicleTypeRules.TryResolve(raw, out var resolved))
+        {
+            return (resolved.BaseVehicleType, resolved.IsEv);
+        }
+
+        return (raw, null);
     }
 
     /// <summary>Đọc mã bãi và múi giờ; từ chối bãi không tồn tại hoặc không hoạt động.</summary>
@@ -263,6 +273,7 @@ public sealed partial class ParkingRepository
         Guid lotId,
         Guid? levelId,
         string? type,
+        bool? isEv,
         DateTimeOffset start,
         DateTimeOffset end,
         DateTimeOffset now,
@@ -285,6 +296,11 @@ public sealed partial class ParkingRepository
               AND (s.operational_status <> 'DISABLED' OR EXISTS(SELECT 1 FROM session_slot_assignments a WHERE a.slot_id=s.id AND a.vacated_at IS NULL))
               AND (@type IS NULL OR EXISTS(SELECT 1 FROM slot_vehicle_types v
                 WHERE v.slot_id=s.id AND v.lot_id=s.lot_id AND v.vehicle_type=@type))
+              AND (
+                @isEv IS NULL
+                OR (@isEv = true AND EXISTS(SELECT 1 FROM slot_feature_links f WHERE f.slot_id=s.id AND f.feature_code IN ('EV','EV_CHARGING')))
+                OR (@isEv = false AND (@type <> 'CAR' OR NOT EXISTS(SELECT 1 FROM slot_feature_links f WHERE f.slot_id=s.id AND f.feature_code IN ('EV','EV_CHARGING'))))
+              )
             ORDER BY s.code,s.id
             """;
 
@@ -292,6 +308,7 @@ public sealed partial class ParkingRepository
         command.Parameters.AddWithValue("lot", lotId);
         command.Parameters.Add("level", NpgsqlDbType.Uuid).Value = (object?)levelId ?? DBNull.Value;
         command.Parameters.Add("type", NpgsqlDbType.Text).Value = (object?)type ?? DBNull.Value;
+        command.Parameters.Add("isEv", NpgsqlDbType.Boolean).Value = (object?)isEv ?? DBNull.Value;
         command.Parameters.AddWithValue("start", start.UtcDateTime);
         command.Parameters.AddWithValue("end", end.UtcDateTime);
         command.Parameters.AddWithValue("now", now.UtcDateTime);

@@ -30,8 +30,8 @@ public sealed class CheckInCommandValidator : AbstractValidator<CheckInCommand>
             When(x => !string.IsNullOrWhiteSpace(x.Request.VehicleType), () =>
             {
                 RuleFor(x => x.Request.VehicleType!)
-                    .Must(type => type.Trim().ToUpperInvariant() is "CAR" or "MOTORBIKE")
-                    .WithMessage("VehicleType must be CAR or MOTORBIKE.");
+                    .Must(type => VehicleTypeRules.TryResolve(type, out _))
+                    .WithMessage("VehicleType must be CAR, EV, or MOTORBIKE.");
             });
             When(x => x.Request.AllowMismatchOverride, () =>
             {

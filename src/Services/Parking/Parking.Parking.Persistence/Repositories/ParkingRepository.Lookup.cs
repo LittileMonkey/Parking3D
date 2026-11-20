@@ -14,9 +14,11 @@ public sealed partial class ParkingRepository
         CancellationToken ct)
     {
         const string sql = """
-            SELECT b.id,b.code,b.lot_id,l.name,b.customer_id,r.slot_id,s.code,b.plate_snapshot,b.vehicle_type,
+            SELECT b.id,b.code,b.lot_id,l.name,b.customer_id,r.slot_id,s.code,b.plate_snapshot,
+              CASE WHEN b.vehicle_type = 'CAR' AND UPPER(COALESCE(v.fuel_type, '')) = 'ELECTRIC' THEN 'EV' ELSE b.vehicle_type END,
               b.starts_at,b.ends_at,b.hold_expires_at,b.arrival_deadline,b.status::text,b.estimated_amount,b.created_at
             FROM bookings b JOIN parking_lots l ON l.id=b.lot_id
+            LEFT JOIN vehicles v ON v.id=b.vehicle_id
             LEFT JOIN LATERAL (
               SELECT slot_id FROM slot_reservations WHERE booking_id=b.id
               ORDER BY CASE WHEN status IN ('HELD','CONFIRMED') THEN 0 ELSE 1 END,created_at DESC,id DESC LIMIT 1

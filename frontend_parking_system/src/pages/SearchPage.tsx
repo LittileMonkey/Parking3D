@@ -12,17 +12,52 @@ import BookingSteps from "../components/customer/BookingSteps";
 import { useIdempotencyKey } from "../hooks/useIdempotencyKey";
 import "./Booking.css";
 
-type VehicleType = "Car" | "Motorbike";
+type VehicleType = "Car" | "EV" | "Motorbike";
 
 function normalizeVehicleType(value: string): VehicleType | null {
   const normalized = value.trim().toLowerCase();
   if (normalized.includes("motorbike") || normalized.includes("motorcycle") || normalized.includes("bike")) {
     return "Motorbike";
   }
-  if (normalized.includes("car") || normalized === "ev" || normalized.includes("electric")) {
+  if (normalized === "ev" || normalized.includes("electric")) {
+    return "EV";
+  }
+  if (normalized.includes("car")) {
     return "Car";
   }
   return null;
+}
+
+function vehicleTypeLabel(type: VehicleType, isEn = false) {
+  if (type === "Motorbike") return isEn ? "Motorbike" : "Xe máy";
+  if (type === "EV") return isEn ? "Electric Car (EV)" : "Ô tô điện (EV)";
+  return isEn ? "Car" : "Ô tô";
+}
+
+function isEvSlotItem(slot: { features?: string[]; slotCode?: string; supportedVehicleTypes?: string[] }) {
+  const hasFeature = (slot.features ?? []).some((f) => {
+    const code = f.trim().toUpperCase();
+    return code === "EV" || code === "EV_CHARGING";
+  });
+  if (hasFeature) return true;
+  const code = (slot.slotCode ?? "").toUpperCase();
+  return code.includes("-EV") || code.startsWith("EV");
+}
+
+function slotMatchesVehicleType(
+  slot: { supportedVehicleTypes: string[]; features?: string[]; slotCode?: string },
+  vehicleType: VehicleType,
+) {
+  if (vehicleType === "Motorbike") {
+    return slot.supportedVehicleTypes.some((t) => normalizeVehicleType(t) === "Motorbike");
+  }
+  const supportsCar = slot.supportedVehicleTypes.some((t) => {
+    const norm = normalizeVehicleType(t);
+    return norm === "Car" || norm === "EV";
+  });
+  if (!supportsCar) return false;
+  const isEv = isEvSlotItem(slot);
+  return vehicleType === "EV" ? isEv : !isEv;
 }
 
 function maskPlate(plate: string) {
@@ -45,19 +80,33 @@ function formatLevelName(levelName: string, levelCode: string, isEn = false) {
   if (code === "F2") return "Floor 2 (100 Cars)";
   if (code === "F3") return "Floor 3 (100 Cars)";
   if (code === "G") return "Ground Lot (Outdoor)";
-  if (code === "B1") return "Basement B1";
+  if (code === "B1") return "Basement B1 (100 Motorbikes)";
+  if (code === "B2") return "Basement B2 (25 Cars + 25 EV)";
+  if (code === "B3") return "Basement B3 (25 Cars + 25 EV)";
   return levelName
     .replace(/Tầng trệt/gi, "Ground Floor")
     .replace(/Bãi ngoài trời/gi, "Outdoor Lot")
     .replace(/Tầng hầm/gi, "Basement")
     .replace(/Tầng/gi, "Floor")
     .replace(/Xe máy/gi, "Motorbike")
+    .replace(/ô tô điện/gi, "Electric Cars")
     .replace(/ô tô/gi, "Cars");
 }
 
 function toLocalDateTime(value: Date) {
   const offset = value.getTimezoneOffset() * 60_000;
   return new Date(value.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function formatDateTimeDdMmYyyy(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value);
+  if (!match) return value;
+  const [, yyyy, mm, dd, hhRaw, min] = match;
+  const hour24 = Number(hhRaw);
+  const period = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  const hh12 = String(hour12).padStart(2, "0");
+  return `${dd}/${mm}/${yyyy} ${hh12}:${min} ${period}`;
 }
 
 function getErrorMessage(error: unknown, isEn = false) {
@@ -97,11 +146,21 @@ function operatingLabel(value: string, isEn = false) {
 function dateLabel(value: string, isEn = false) {
   return new Date(value).toLocaleString(isEn ? "en-US" : "vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" });
 }
-function isBuildingLotItem(lot?: { code?: string } | null, levelsCount = 0) {
+function isBasementLotItem(lot?: { code?: string } | null, levels?: Array<{ levelCode?: string }> | null) {
+  const upper = (lot?.code || "").toUpperCase();
+  if (upper.includes("Q7")) return true;
+  return (levels ?? []).some((l) => {
+    const c = (l.levelCode || "").toUpperCase();
+    return c === "B1" || c === "B2" || c === "B3";
+  });
+}
+
+function isBuildingLotItem(lot?: { code?: string } | null, levels?: Array<{ levelCode?: string }> | null) {
+  if (isBasementLotItem(lot, levels)) return false;
   const upper = (lot?.code || "").toUpperCase();
   if (upper.includes("BT")) return false;
-  if (upper.includes("Q1") || upper.includes("Q7")) return true;
-  return levelsCount > 1;
+  if (upper.includes("Q1")) return true;
+  return (levels?.length ?? 0) > 1;
 }
 
 
@@ -115,9 +174,7 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
   const { key: bookingKey, renewKey: renewBookingKey } = useIdempotencyKey("book");
 
   const paramVehicle = searchParams.get("vehicle") || searchParams.get("vehicleType");
-  const initialVehicle: VehicleType = (paramVehicle && (paramVehicle.toLowerCase().includes("bike") || paramVehicle.toLowerCase().includes("motor")))
-    ? "Motorbike"
-    : "Car";
+  const initialVehicle: VehicleType = (paramVehicle ? normalizeVehicleType(paramVehicle) : null) ?? "Car";
 
   const paramDuration = Number(searchParams.get("duration") || searchParams.get("expectedDuration"));
   const initialDuration = Number.isInteger(paramDuration) && paramDuration >= 30 && paramDuration <= 1440
@@ -305,7 +362,7 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
     if (initialPosition) setPosition(initialPosition);
     const v = searchParams.get("vehicle") || searchParams.get("vehicleType");
     if (v) {
-      setVehicleType(v.toLowerCase().includes("bike") || v.toLowerCase().includes("motor") ? "Motorbike" : "Car");
+      setVehicleType(normalizeVehicleType(v) ?? "Car");
     }
     const d = Number(searchParams.get("duration") || searchParams.get("expectedDuration"));
     if (Number.isInteger(d) && d >= 30 && d <= 1440) {
@@ -384,13 +441,20 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
         setLotLayout(layoutResult ?? cachedLayout ?? null);
         setAvailabilitySnapshot(criteriaSignature);
         setAvailabilityVehicleType(vehicleType);
-        const buildingLot = isBuildingLotItem(lot, result.levels.length);
+        const basementLot = isBasementLotItem(lot, result.levels);
+        const buildingLot = isBuildingLotItem(lot, result.levels);
         setSelectedLevelCode(current => {
+          if (basementLot && (current === "ALL" || current === "B1" || current === "B2" || current === "B3")) {
+            return current;
+          }
           if (buildingLot && (current === "ALL" || current === "F1" || current === "F2" || current === "F3")) {
             return current;
           }
           if (result.levels.some(level => level.levelCode === current)) {
             return current;
+          }
+          if (basementLot) {
+            return vehicleType === "Motorbike" ? "B1" : "ALL";
           }
           if (buildingLot) {
             return vehicleType === "Motorbike" ? "F1" : "ALL";
@@ -399,14 +463,13 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
         });
 
         setSelectedSlotId(current => result.levels.some(level =>
-
           level.slots.some(slot => slot.slotId === current && slot.status.toUpperCase() === "AVAILABLE"
-            && slot.supportedVehicleTypes.some(type => normalizeVehicleType(type) === vehicleType))) ? current : "");
+            && slotMatchesVehicleType(slot, vehicleType))) ? current : "");
         if (!restoredSelection.current) {
           restoredSelection.current = true;
           const requestedSlot = searchParams.get("slot");
           const requestedLevel = result.levels.find(level => level.slots.some(slot => slot.slotId === requestedSlot
-            && slot.status.toUpperCase() === "AVAILABLE" && slot.supportedVehicleTypes.some(type => normalizeVehicleType(type) === vehicleType)));
+            && slot.status.toUpperCase() === "AVAILABLE" && slotMatchesVehicleType(slot, vehicleType)));
           if (requestedLevel && requestedSlot) {
             setSelectedLevelCode(requestedLevel.levelCode);
             setSelectedSlotId(requestedSlot);
@@ -646,14 +709,19 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
   };
 
 
-  const isBuildingLot = useMemo(
-    () => isBuildingLotItem(selectedLot, availability?.levels.length ?? 0),
-    [selectedLot, availability?.levels.length],
+  const isBasementLot = useMemo(
+    () => isBasementLotItem(selectedLot, availability?.levels),
+    [selectedLot, availability?.levels],
   );
+  const isBuildingLot = useMemo(
+    () => isBuildingLotItem(selectedLot, availability?.levels),
+    [selectedLot, availability?.levels],
+  );
+  const isMultiFloorLot = isBasementLot || isBuildingLot;
   const allCompatibleSlots = useMemo(() =>
     availability?.levels.flatMap(level =>
       level.slots
-        .filter(slot => slot.supportedVehicleTypes.some(type => normalizeVehicleType(type) === vehicleType))
+        .filter(slot => slotMatchesVehicleType(slot, vehicleType))
         .map(slot => ({
           ...slot,
           floorCode: level.levelCode,
@@ -670,7 +738,7 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
     if (selectedLevelCode === "ALL") return allCompatibleSlots;
     if (selectedLevel) {
       return selectedLevel.slots
-        .filter(slot => slot.supportedVehicleTypes.some(type => normalizeVehicleType(type) === vehicleType))
+        .filter(slot => slotMatchesVehicleType(slot, vehicleType))
         .map(slot => ({
           ...slot,
           floorCode: selectedLevel.levelCode,
@@ -686,6 +754,17 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
         level.slots.map(slot => [slot.slotId, { ...slot, floorCode: level.levelCode }] as const)
       )
     );
+    const includeInViewer = (slot: { supportedVehicleTypes: string[]; features?: string[]; slotCode?: string }) => {
+      if (isBasementLot) {
+        // Keep both regular CAR and EV slots in B2/B3 so the 3D basement renders all 50 slots/floor;
+        // activeVehicleFilter dims and disables non-matching zone.
+        return slot.supportedVehicleTypes.some((type) => {
+          const norm = normalizeVehicleType(type);
+          return norm === "Car" || norm === "EV";
+        });
+      }
+      return slotMatchesVehicleType(slot, vehicleType);
+    };
 
     if (lotLayout && lotLayout.lotId === availability.lotId && lotLayout.levels.length > 0) {
       const mapped = lotLayout.levels
@@ -697,7 +776,7 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
               .map(spatialSlot => {
                 const live = availabilityBySlotId.get(spatialSlot.id);
                 if (!live) return null;
-                if (!live.supportedVehicleTypes.some(type => normalizeVehicleType(type) === vehicleType)) {
+                if (!includeInViewer(live)) {
                   return null;
                 }
                 return {
@@ -725,7 +804,7 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
             slots,
           };
         })
-        .filter(level => level.slots.length > 0);
+        .filter(level => level.slots.length > 0 || isBasementLot);
       if (mapped.length > 0) return mapped;
     }
 
@@ -735,7 +814,7 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
         levelCode: level.levelCode,
         levelName: level.levelName,
         slots: level.slots
-          .filter(slot => slot.supportedVehicleTypes.some(type => normalizeVehicleType(type) === vehicleType))
+          .filter(slot => includeInViewer(slot))
           .map(slot => ({
             slotId: slot.slotId,
             slotCode: slot.slotCode,
@@ -746,8 +825,8 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
             status: slot.status,
           })),
       }))
-      .filter(level => level.slots.length > 0);
-  }, [availability, lotLayout, vehicleType]);
+      .filter(level => level.slots.length > 0 || isBasementLot);
+  }, [availability, lotLayout, vehicleType, isBasementLot]);
   const selectedSlot = allCompatibleSlots.find(slot => slot.slotId === selectedSlotId) ?? null;
   const compatibleAvailableCount = useMemo(
     () => allCompatibleSlots.filter(slot => slot.status.toUpperCase() === "AVAILABLE").length,
@@ -763,19 +842,20 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
     [availability],
   );
   const motoSceneStats = useMemo(() => {
-    const maxCapacity = allMotoSlots.length > 0 ? allMotoSlots.length : 20;
+    const defaultCap = isBasementLot ? 100 : 20;
+    const maxCapacity = allMotoSlots.length > 0 ? allMotoSlots.length : defaultCap;
     const availableMoto =
       allMotoSlots.length > 0
         ? allMotoSlots.filter(slot => slot.status.toUpperCase() === "AVAILABLE").length
-        : 20;
+        : defaultCap;
     return {
       availableMoto,
       maxCapacity,
       currentMoto: Math.max(0, maxCapacity - availableMoto),
-      showOutdoorBanner: isMotorbike && !isBuildingLot,
+      showOutdoorBanner: isMotorbike && !isMultiFloorLot,
       lang,
     };
-  }, [allMotoSlots, isMotorbike, isBuildingLot, lang]);
+  }, [allMotoSlots, isMotorbike, isMultiFloorLot, isBasementLot, lang]);
 
 
   const currentRange = useMemo(() => {
@@ -800,7 +880,7 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
         slots: applySlotStatusChanges(level.slots, changes, current.lotId),
       }));
       const slots = levels.flatMap(level => level.slots)
-        .filter(slot => slot.supportedVehicleTypes.some(type => normalizeVehicleType(type) === vehicleType));
+        .filter(slot => slotMatchesVehicleType(slot, vehicleType));
       return {
         ...current,
         levels,
@@ -1104,12 +1184,44 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
 
                   <label className="customer-field">
                     <span>{isEn ? "Entry time" : "Thời gian vào dự kiến"}</span>
-                    <input type="datetime-local" value={calcEntryTime} onChange={(e) => setCalcEntryTime(e.target.value)} required />
+                    <div className="datetime-ddmmyyyy-wrapper">
+                      <input
+                        className="datetime-ddmmyyyy-input"
+                        type="datetime-local"
+                        value={calcEntryTime}
+                        onChange={(e) => setCalcEntryTime(e.target.value)}
+                        onClick={(e) => {
+                          try {
+                            (e.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
+                          } catch {}
+                        }}
+                        required
+                      />
+                      <span className="datetime-ddmmyyyy-display" aria-hidden="true">
+                        {formatDateTimeDdMmYyyy(calcEntryTime)}
+                      </span>
+                    </div>
                   </label>
 
                   <label className="customer-field">
                     <span>{isEn ? "Exit time" : "Thời gian ra dự kiến"}</span>
-                    <input type="datetime-local" value={calcExitTime} onChange={(e) => setCalcExitTime(e.target.value)} required />
+                    <div className="datetime-ddmmyyyy-wrapper">
+                      <input
+                        className="datetime-ddmmyyyy-input"
+                        type="datetime-local"
+                        value={calcExitTime}
+                        onChange={(e) => setCalcExitTime(e.target.value)}
+                        onClick={(e) => {
+                          try {
+                            (e.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
+                          } catch {}
+                        }}
+                        required
+                      />
+                      <span className="datetime-ddmmyyyy-display" aria-hidden="true">
+                        {formatDateTimeDdMmYyyy(calcExitTime)}
+                      </span>
+                    </div>
                   </label>
                 </div>
 
@@ -1129,7 +1241,7 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
               {calcResult && (
                 <div style={{ marginTop: 16, background: "#fff", border: "1px solid #bae6fd", borderRadius: 10, padding: 16 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                    <span style={{ fontSize: 13, color: "#0284c7", fontWeight: 700 }}>KẾT QUẢ TÍNH CƯỚC TỪ API :8084</span>
+                    <span style={{ fontSize: 13, color: "#0284c7", fontWeight: 700 }}>Dự tính cước phí: </span>
                     <span style={{ fontSize: 18, fontWeight: 800, color: "#065f46" }}>
                       {(calcResult.subtotalAfterDailyCapVnd || calcResult.totalGrossAmountVnd || 0).toLocaleString("vi-VN")} ₫
                     </span>
@@ -1150,11 +1262,30 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
             <div className="customer-form-grid">
               <label className="customer-field"><span>{isEn ? "Vehicle type" : "Loại phương tiện"}</span>
                 <select value={vehicleType} onChange={event => setVehicleType(event.target.value as VehicleType)}>
-                  <option value="Car">{isEn ? "Car" : "Ô tô"}</option><option value="Motorbike">{isEn ? "Motorbike" : "Xe máy"}</option>
+                  <option value="Car">{isEn ? "Car" : "Ô tô"}</option>
+                  <option value="EV">{isEn ? "Electric Car (EV)" : "Ô tô điện (EV)"}</option>
+                  <option value="Motorbike">{isEn ? "Motorbike" : "Xe máy"}</option>
                 </select>
               </label>
               <label className="customer-field"><span>{isEn ? "Arrival time" : "Thời gian vào bãi"}</span>
-                <input type="datetime-local" value={startsAt} min={toLocalDateTime(new Date())} onChange={event => setStartsAt(event.target.value)} required />
+                <div className="datetime-ddmmyyyy-wrapper">
+                  <input
+                    className="datetime-ddmmyyyy-input"
+                    type="datetime-local"
+                    value={startsAt}
+                    min={toLocalDateTime(new Date())}
+                    onChange={event => setStartsAt(event.target.value)}
+                    onClick={event => {
+                      try {
+                        (event.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
+                      } catch {}
+                    }}
+                    required
+                  />
+                  <span className="datetime-ddmmyyyy-display" aria-hidden="true">
+                    {formatDateTimeDdMmYyyy(startsAt)}
+                  </span>
+                </div>
               </label>
               <label className="customer-field"><span>{isEn ? "Duration (minutes)" : "Thời lượng gửi (phút)"}</span>
                 <input type="number" min={30} max={1440} step={15} value={duration} onChange={event => setDuration(Number(event.target.value))} required />
@@ -1211,7 +1342,7 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
         </>}
 
         {selection && <>
-          <div className="booking-trip-bar"><span>{vehicleType === "Car" ? (isEn ? "Car" : "Ô tô") : (isEn ? "Motorbike" : "Xe máy")}</span><span><Clock3 size={16} />{dateLabel(startsAt, isEn)}{currentRange && ` → ${dateLabel(currentRange.endsAt, isEn)}`}</span><Link to={backToSearch}>{isEn ? "Change time" : "Đổi thời gian"}</Link></div>
+          <div className="booking-trip-bar"><span>{vehicleTypeLabel(vehicleType, isEn)}</span><span><Clock3 size={16} />{dateLabel(startsAt, isEn)}{currentRange && ` → ${dateLabel(currentRange.endsAt, isEn)}`}</span><Link to={backToSearch}>{isEn ? "Change time" : "Đổi thời gian"}</Link></div>
           {isSearching && <div className="customer-panel customer-empty" role="status">{isEn ? "Checking pricing and availability for your trip…" : "Đang kiểm tra giá và chỗ trống cho chuyến đi của bạn…"}</div>}
           {searchError && <div className="customer-alert error" role="alert">{searchError}<Link to={backToSearch}>{isEn ? "Back to search" : "Quay lại tìm bãi"}</Link></div>}
           {selectedLot && <section className="availability-panel">
@@ -1226,6 +1357,7 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
                 </div>
                 <div className="booking-map-toolbar">
                   {availability && availabilityIsCurrent && availability.levels.length > 0 && <label className="customer-field booking-level-picker"><span>{isEn ? "Parking level" : "Tầng đỗ xe"}</span><select value={selectedLevelCode} onChange={event => { setSelectedLevelCode(event.target.value); setSelectedSlotId(""); }}>
+                    {isBasementLot && <option value="ALL">{isEn ? "All 3 Basement Levels (B1–B3)" : "Toàn cảnh 3 tầng hầm (B1–B3)"}</option>}
                     {isBuildingLot && <option value="ALL">{isEn ? "All 3 Floors Overview" : "Toàn cảnh 3 tầng"}</option>}
                     {isBuildingLot && availability.levels.length < 3 ? (
                       <>
@@ -1245,16 +1377,19 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
                 {resumeNotice && <div className="customer-alert warning" role="status">{resumeNotice}</div>}
                 {availability && !availabilityIsCurrent && <div className="customer-alert warning" role="status">{isEn ? "Time range or availability is no longer valid." : "Khung giờ hoặc tình trạng chỗ không còn hiệu lực."} <Link to={backToSearch}>{isEn ? "Search again" : "Tìm lại bãi"}</Link></div>}
                 {availabilityIsCurrent && compatibleAvailableCount === 0 && <div className="customer-alert warning" role="status">{isEn ? "No spots available for this time window. Please choose another lot or time." : "Khung giờ này đã hết chỗ. Hãy chọn bãi hoặc thời gian khác."}</div>}
-                {availabilityIsCurrent && (allCompatibleSlots.length > 0 || isBuildingLot) && <>
+                {availabilityIsCurrent && (allCompatibleSlots.length > 0 || isMultiFloorLot) && <>
                   <ParkingViewer
                     levels={viewerLevels}
                     selectedLevelCode={selectedLevelCode}
                     selectedId={isMotorbike ? null : (selectedSlotId || null)}
                     lotCode={selectedLot.code}
                     isBuilding={isBuildingLot}
+                    lotMode={isBasementLot ? "basement" : isBuildingLot ? "building" : "outdoor"}
                     motoStats={motoSceneStats}
+                    activeVehicleFilter={vehicleType}
                     onSelect={slot => {
                       if (isMotorbike) return;
+                      if (!slotMatchesVehicleType(slot, vehicleType)) return;
                       setSelectedSlotId(slot.slotId);
                       setBookingError("");
                     }}
@@ -1290,14 +1425,21 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
                     </div>
                   ) : (
                     <>
-                      <div className="booking-legend" aria-label={isEn ? "Spot status legend" : "Chú giải trạng thái ô đỗ"}><span><i className="available" />{isEn ? "Available" : "Còn chỗ"}</span><span><i className="held" />{isEn ? "Held" : "Đang giữ"}</span><span><i className="occupied" />{isEn ? "Occupied" : "Có xe"}</span><span><i className="maintenance" />{isEn ? "Maintenance" : "Bảo trì"}</span><span><i className="selected" /><Check size={12} />{isEn ? "Selected" : "Đang chọn"}</span></div>
+                      <div className="booking-legend" aria-label={isEn ? "Spot status legend" : "Chú giải trạng thái ô đỗ"}>
+                        <span><i className="available" />{isEn ? "Car available" : "Ô tô trống"}</span>
+                        {isBasementLot && <span><i className="available-ev" />{isEn ? "EV available" : "Ô tô điện trống"}</span>}
+                        <span><i className="held" />{isEn ? "Held" : "Đang giữ"}</span>
+                        <span><i className="occupied" />{isEn ? "Occupied" : "Có xe"}</span>
+                        <span><i className="maintenance" />{isEn ? "Maintenance" : "Bảo trì"}</span>
+                        <span><i className="selected" /><Check size={12} />{isEn ? "Selected" : "Đang chọn"}</span>
+                      </div>
                       {levelSlots.length > 0 && <details className="booking-slot-list"><summary>{isEn ? `Quick select from list · ${levelSlots.length} spots` : `Chọn nhanh từ danh sách · ${levelSlots.length} ô`}</summary>
                         <div className="customer-slot-grid booking-slot-grid" aria-label={isEn ? "Parking spots list" : "Danh sách ô đỗ"}>{levelSlots.map(slot => <button className={`slot-${slot.status.toLowerCase()}${selectedSlotId === slot.slotId ? " selected" : ""}`} type="button" key={slot.slotId} aria-pressed={selectedSlotId === slot.slotId} disabled={slot.status.toUpperCase() !== "AVAILABLE"} onClick={() => { setSelectedSlotId(slot.slotId); setBookingError(""); }}><strong>{selectedSlotId === slot.slotId && <Check size={13} />}{slot.slotCode}</strong><span>{slotStatusLabel(slot.status, isEn)}</span></button>)}</div>
                       </details>}
                     </>
                   )}
                 </>}
-                {availabilityIsCurrent && !isMotorbike && levelSlots.length === 0 && <div className="customer-empty">{availability?.levels.length ? (isBuildingLot && selectedLevelCode === "F1" && vehicleType === "Car" ? (isEn ? "Floor 1 (Ground Floor) is for motorbikes. Please select All 3 Floors Overview, Floor 2, or Floor 3 to choose a car spot." : "Tầng 1 (Tầng trệt) là khu vực đỗ xe máy. Hãy chọn Toàn cảnh 3 tầng, Tầng 2 hoặc Tầng 3 để chọn ô đỗ ô tô.") : (isEn ? "This floor has no spots compatible with the selected vehicle type." : "Tầng này chưa có ô phù hợp với loại xe đã chọn.")) : (isEn ? "No layout data available for this lot. Please choose another lot." : "Bãi chưa có dữ liệu sơ đồ. Vui lòng chọn bãi khác.")}</div>}
+                {availabilityIsCurrent && !isMotorbike && levelSlots.length === 0 && <div className="customer-empty">{availability?.levels.length ? (isBasementLot && selectedLevelCode === "B1" ? (isEn ? "Basement B1 is for motorbikes (100 slots). Please select All 3 Basement Levels, B2, or B3 to choose a car or EV spot." : "Tầng hầm B1 là khu vực đỗ xe máy (100 xe). Hãy chọn Toàn cảnh 3 tầng hầm, B2 hoặc B3 để chọn ô đỗ ô tô / ô tô điện.") : isBuildingLot && selectedLevelCode === "F1" ? (isEn ? "Floor 1 (Ground Floor) is for motorbikes. Please select All 3 Floors Overview, Floor 2, or Floor 3 to choose a car spot." : "Tầng 1 (Tầng trệt) là khu vực đỗ xe máy. Hãy chọn Toàn cảnh 3 tầng, Tầng 2 hoặc Tầng 3 để chọn ô đỗ ô tô.") : (isEn ? "This floor has no spots compatible with the selected vehicle type." : "Tầng này chưa có ô phù hợp với loại xe đã chọn.")) : (isEn ? "No layout data available for this lot. Please choose another lot." : "Bãi chưa có dữ liệu sơ đồ. Vui lòng chọn bãi khác.")}</div>}
 
               </section>
 
@@ -1325,7 +1467,7 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
                   </div>
                   {((isMotorbike && compatibleAvailableCount > 0) || (selectedSlot && bookingMode === "EXACT_SLOT")) && <Check size={18} />}
                 </div>
-                <dl className="booking-summary-facts"><div><dt>{isEn ? "Parking lot" : "Bãi đỗ"}</dt><dd>{selectedLot.name}</dd></div><div><dt>{isEn ? "Check-in" : "Vào bãi"}</dt><dd>{dateLabel(startsAt, isEn)}</dd></div><div><dt>{isEn ? "Expected exit" : "Rời bãi dự kiến"}</dt><dd>{currentRange ? dateLabel(currentRange.endsAt, isEn) : "—"}</dd></div><div><dt>{isEn ? "Duration" : "Thời lượng"}</dt><dd>{duration} {isEn ? "mins" : "phút"} · {vehicleType === "Car" ? (isEn ? "Car" : "Ô tô") : (isEn ? "Motorbike" : "Xe máy")}</dd></div></dl>
+                <dl className="booking-summary-facts"><div><dt>{isEn ? "Parking lot" : "Bãi đỗ"}</dt><dd>{selectedLot.name}</dd></div><div><dt>{isEn ? "Check-in" : "Vào bãi"}</dt><dd>{dateLabel(startsAt, isEn)}</dd></div><div><dt>{isEn ? "Expected exit" : "Rời bãi dự kiến"}</dt><dd>{currentRange ? dateLabel(currentRange.endsAt, isEn) : "—"}</dd></div><div><dt>{isEn ? "Duration" : "Thời lượng"}</dt><dd>{duration} {isEn ? "mins" : "phút"} · {vehicleTypeLabel(vehicleType, isEn)}</dd></div></dl>
                 {!isMotorbike && <label className="customer-field"><span>{isEn ? "Selection mode" : "Cách chọn chỗ"}</span><select value={bookingMode} disabled={isCreatingBooking} onChange={event => { setBookingMode(event.target.value as "EXACT_SLOT" | "AUTO_SLOT"); renewBookingKey(); }}><option value="EXACT_SLOT">{isEn ? "Pick exact spot on map" : "Tự chọn ô trên sơ đồ"}</option><option value="AUTO_SLOT">{isEn ? "Let system auto-assign spot" : "Để hệ thống chọn ô phù hợp"}</option></select></label>}
 
                 {isAuthenticated && <label className="customer-field booking-vehicle-picker"><span>{isEn ? "Your vehicle" : "Phương tiện của bạn"}</span><select value={selectedVehicle?.id ?? ""} onChange={event => setVehicleId(event.target.value)} disabled={isLoadingVehicles || compatibleVehicles.length === 0}><option value="">{isLoadingVehicles ? (isEn ? "Loading vehicles…" : "Đang tải phương tiện…") : (isEn ? "Select vehicle" : "Chọn phương tiện")}</option>{compatibleVehicles.map(vehicle => <option value={vehicle.id} key={vehicle.id}>{vehicle.isDefault ? (isEn ? "Default · " : "Mặc định · ") : ""}{maskPlate(vehicle.licensePlate)}</option>)}</select></label>}

@@ -38,7 +38,8 @@ public sealed class RegisteredVehicleSync(FacilityAuthorization.FacilityAuthoriz
         }
         await using(var write=new NpgsqlCommand("""
             INSERT INTO vehicles(id,plate_country,plate_normalized,vehicle_type,fuel_type,is_active)
-              VALUES(@vehicle,'VN',@plate,@type,@fuel,true) ON CONFLICT(id) DO NOTHING;
+              VALUES(@vehicle,'VN',@plate,@type,@fuel,true)
+              ON CONFLICT(id) DO UPDATE SET fuel_type=EXCLUDED.fuel_type;
             INSERT INTO user_vehicle_access(user_id,vehicle_id,access_kind,verified_at,is_primary)
               VALUES(@actor,@vehicle,'OWNER',now(),@primary)
               ON CONFLICT(user_id,vehicle_id) DO UPDATE SET verified_at=now(),revoked_at=NULL,is_primary=EXCLUDED.is_primary;

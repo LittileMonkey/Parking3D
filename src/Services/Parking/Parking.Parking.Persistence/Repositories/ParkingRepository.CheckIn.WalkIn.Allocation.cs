@@ -34,6 +34,23 @@ public sealed partial class ParkingRepository
               AND s.operational_status = 'ACTIVE'
               AND svt.vehicle_type = @type
               AND NOT EXISTS (
+                  SELECT 1 FROM slot_feature_links fl
+                  WHERE fl.slot_id = s.id AND fl.feature_code IN ('ACCESSIBLE', 'PRIORITY')
+              )
+              AND (
+                  (@isEv = true AND EXISTS (
+                      SELECT 1 FROM slot_feature_links fl
+                      WHERE fl.slot_id = s.id AND fl.feature_code IN ('EV', 'EV_CHARGING')
+                  ))
+                  OR (@isEv = false AND (
+                      @type <> 'CAR'
+                      OR NOT EXISTS (
+                          SELECT 1 FROM slot_feature_links fl
+                          WHERE fl.slot_id = s.id AND fl.feature_code IN ('EV', 'EV_CHARGING')
+                      )
+                  ))
+              )
+              AND NOT EXISTS (
                   SELECT 1 FROM session_slot_assignments a
                   WHERE a.slot_id = s.id AND a.vacated_at IS NULL
               )

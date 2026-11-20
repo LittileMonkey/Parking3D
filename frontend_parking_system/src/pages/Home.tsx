@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowDown, ArrowRight, Car, Check, ChevronDown, Clock3, CreditCard, LocateFixed, MapPin, ParkingCircle, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Bike, Layers3 } from "lucide-react";
+import { ArrowDown, ArrowRight, Car, Check, ChevronDown, Clock3, CreditCard, LocateFixed, MapPin, ParkingCircle, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Bike, Layers3, Zap } from "lucide-react";
 import CustomerLayout from "../components/customer/CustomerLayout";
 import HomeFaq from "../components/customer/HomeFaq";
 import LandingParkingPreview from "../components/customer/LandingParkingPreview";
@@ -84,7 +84,7 @@ export default function Home() {
               <h1 id="lp-title">{text("Tìm chỗ đỗ phù hợp.", "Find your parking space.")}<br /><span>{text("Nhẹ nhàng mỗi hành trình.", "Make every journey easier.")}</span></h1>
               <p className="lp-hero-description">{text("Tìm bãi, xem giá dự kiến và đặt chỗ trước. Để việc đỗ xe trở thành phần đơn giản nhất trong ngày của bạn.", "Find parking, compare estimates and book ahead. Make parking the easiest part of your day.")}</p>
               <a className="lp-text-link" href="#how-it-works">{text("Khám phá cách đặt chỗ", "See how it works")} <ArrowDown size={16} /></a>
-              <div className="lp-hero-points"><span><Check size={15} />{text("Ô tô & xe máy", "Cars & motorbikes")}</span><span><Check size={15} />{text("Giá theo thời lượng", "Duration-based estimates")}</span><span><Check size={15} />{text("Sơ đồ trực quan", "Visual lot layouts")}</span></div>
+              <div className="lp-hero-points"><span><Check size={15} />{text("Ô tô, xe điện & xe máy", "Cars, EV & motorbikes")}</span><span><Check size={15} />{text("Giá theo thời lượng", "Duration-based estimates")}</span><span><Check size={15} />{text("Sơ đồ trực quan", "Visual lot layouts")}</span></div>
             </div>
             <LandingParkingPreview />
           </div>
@@ -93,7 +93,7 @@ export default function Home() {
               <div className="lp-search-heading"><h2>{text("Bạn cần đỗ xe ở đâu?", "Where are you parking?")}</h2><span><LocateFixed size={14} />{text("Tìm theo nhu cầu của bạn", "Find what works for you")}</span></div>
               <div className="lp-search-grid">
                 <label className="lp-field lp-location-field" htmlFor="search-location"><span><MapPin size={15} />{text("Bãi đỗ", "Parking lot")}</span><select id="search-location" value={lotId} onChange={event => setLotId(event.target.value)}><option value="all">{text("Tất cả bãi trong hệ thống", "All parking lots")}</option>{lots.map(lot => <option value={lot.id} key={lot.id}>{lot.name}</option>)}</select></label>
-                <label className="lp-field" htmlFor="search-vehicle"><span>{vehicle === "Car" ? <Car size={15} /> : <Bike size={15} />}{text("Phương tiện", "Vehicle")}</span><select id="search-vehicle" value={vehicle} onChange={event => setVehicle(event.target.value)}><option value="Car">{text("Ô tô", "Car")}</option><option value="Motorbike">{text("Xe máy", "Motorbike")}</option></select></label>
+                <label className="lp-field" htmlFor="search-vehicle"><span>{vehicle === "Car" ? <Car size={15} /> : vehicle === "EV" ? <Zap size={15} /> : <Bike size={15} />}{text("Phương tiện", "Vehicle")}</span><select id="search-vehicle" value={vehicle} onChange={event => setVehicle(event.target.value)}><option value="Car">{text("Ô tô", "Car")}</option><option value="EV">{text("Ô tô điện (EV)", "Electric Car (EV)")}</option><option value="Motorbike">{text("Xe máy", "Motorbike")}</option></select></label>
                 <label className="lp-field" htmlFor="search-duration"><span><Clock3 size={15} />{text("Thời lượng gửi", "Parking duration")}</span><select id="search-duration" value={duration} onChange={event => setDuration(event.target.value)}>{[30, 60, 120, 240, 480, 1440].map(minutes => <option value={minutes} key={minutes}>{minutes === 30 ? text("30 phút", "30 minutes") : text(`${minutes / 60} giờ`, `${minutes / 60} hours`)}</option>)}</select></label>
                 <button className="lp-button lp-primary" type="submit" disabled={locating}><Search size={18} />{locating ? text("Đang lấy vị trí…", "Locating…") : text("Tìm bãi đỗ", "Find parking")}<ArrowRight size={17} /></button>
               </div>

@@ -49,6 +49,13 @@ export function createParkingArea(
 
 export const OUTDOOR_SLOT_COLORS: Record<string, number>;
 
+export function isEvParkingSlot(slot: Partial<ParkingSceneSlot> & { isEvSlot?: boolean; vehicleType?: string; id?: string }): boolean;
+
+export function getSlotColorHex(
+  slot: Partial<ParkingSceneSlot> & { isEvSlot?: boolean; vehicleType?: string; id?: string },
+  isSelected?: boolean,
+): number;
+
 export interface MotoSceneStats {
   availableMoto: number;
   maxCapacity: number;
@@ -77,6 +84,30 @@ export function createBuildingParkingArea(
   floors: import("three").Group[];
   floorColumnGroups: import("three").Group[];
   motoFloor1CenterSprite: import("three").Sprite | null;
+  floorHeight: number;
+  slotMeshes: Mesh[];
+  interactables: Mesh[];
+  updateMotoStats: (stats: MotoSceneStats | null) => void;
+  dispose: () => void;
+};
+
+export function createBasementParkingArea(
+  levels?: ParkingSceneLevel[],
+  initialMotoStats?: MotoSceneStats | null,
+): {
+  scene: Scene;
+  floors: import("three").Group[];
+  floorColumnGroups: import("three").Group[];
+  floorZoneSprites: Array<{
+    floorIndex: number;
+    floorCode: string;
+    carZoneSprite: import("three").Sprite;
+    evZoneSprite: import("three").Sprite;
+    sprites: import("three").Sprite[];
+  }>;
+  groundPortalGroup: import("three").Group;
+  apartmentGroup: import("three").Group;
+  motoB1CenterSprite: import("three").Sprite | null;
   floorHeight: number;
   slotMeshes: Mesh[];
   interactables: Mesh[];
