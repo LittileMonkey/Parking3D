@@ -84,13 +84,16 @@ public class ParkingSearchAiService(
         // 1. Lấy danh sách bãi xe thực tế từ bảng CSDL ai_lot_catalog & occupancy_snapshots (DEF-05)
         var candidateLots = await GetLotsAsync(cancellationToken);
 
-        var originLat = criteria.Latitude ?? 10.7950;
-        var originLon = criteria.Longitude ?? 106.7218;
+        var anchor = ResolveKnownDistrictAnchor(criteria.DestinationName);
+        var originLat = criteria.Latitude ?? anchor?.Lat ?? 10.7950;
+        var originLon = criteria.Longitude ?? anchor?.Lon ?? 106.7218;
+        var targetDistrict = anchor?.District;
 
         var scoredItems = candidateLots.Select(lot =>
         {
             // Tính khoảng cách Haversine giữa vị trí khách muốn đến và tọa độ thực tế của bãi xe
             var distanceMeters = CalculateHaversineDistanceMeters(originLat, originLon, lot.Latitude, lot.Longitude);
+            var distKm = distanceMeters / 1000.0;
             var pricePerHour = criteria.VehicleType == VehicleType.Motorbike ? lot.MotorbikePricePerHour : lot.CarPricePerHour;
 
             // 2. Tính toán chi phí dự kiến chuẩn hóa theo Rule 7 (áp dụng Block 15 phút và Daily Cap)
@@ -99,25 +102,72 @@ public class ParkingSearchAiService(
             var totalCapacity = Math.Max(1, lot.TotalSlots);
             var occupancyPercent = (double)(totalCapacity - lot.AvailableSlots) / totalCapacity * 100.0;
 
-            // 3. Thuật toán chấm điểm Match Score: Khởi điểm 100 điểm
-            double score = 100.0;
+            bool isDistrictMatch = false;
+            if (!string.IsNullOrEmpty(targetDistrict))
+            {
+                var combined = (lot.Name + " " + lot.Address).ToLowerInvariant();
+                isDistrictMatch = combined.Contains(targetDistrict.ToLowerInvariant());
+            }
+
+            // 3. Thuật toán chấm điểm Match Score hỗn hợp (Composite Score: 0 - 100)
+            double score = 50.0;
+
+            // Yếu tố 1: Khớp quận/địa danh mục tiêu (Tối đa +35 điểm, nếu lệch quận -15 điểm)
+            if (!string.IsNullOrEmpty(targetDistrict))
+            {
+                if (isDistrictMatch)
+                {
+                    score += 35.0; // Đúng quận: thưởng +35 điểm
+                }
+                else
+                {
+                    score -= 15.0; // Lệch quận: trừ 15 điểm
+                }
+            }
+
+            // Yếu tố 2: Điểm khoảng cách (tối đa 25 điểm)
             if (criteria.PriorityStrategy.Equals("NEAREST", StringComparison.OrdinalIgnoreCase))
             {
-                // Ưu tiên gần: Càng xa điểm đến thì trừ điểm (mỗi 50m trừ 1 điểm)
-                score -= (distanceMeters / 50.0);
+                score += Math.Max(0.0, 30.0 - (distKm * 3.0));
             }
             else
             {
-                // Ưu tiên rẻ: Chi phí ước tính càng cao thì trừ điểm (mỗi 1.000đ trừ 1 điểm)
-                score -= (double)(estimatedTotal / 1000m);
+                score += Math.Max(0.0, 18.0 - (distKm * 2.0));
             }
 
-            // Phạt nặng nếu bãi đã hết sạch chỗ trống (-100 điểm)
-            if (lot.AvailableSlots <= 0) score -= 100.0;
+            // Yếu tố 3: Điểm giá cả (tối đa 20 điểm)
+            var priceScore = Math.Max(0.0, 20.0 - ((double)pricePerHour / 3500.0));
+            if (criteria.PriorityStrategy.Equals("CHEAPEST", StringComparison.OrdinalIgnoreCase))
+            {
+                score += priceScore * 1.25;
+            }
+            else
+            {
+                score += priceScore * 0.75;
+            }
 
-            var reason = criteria.PriorityStrategy.Equals("CHEAPEST", StringComparison.OrdinalIgnoreCase)
-                ? $"Giá tiết kiệm chỉ {pricePerHour:N0}đ/h (ước tính {estimatedTotal:N0}đ cho {criteria.ExpectedDurationHours}h), cách điểm đến {Math.Round(distanceMeters)}m"
-                : $"Vị trí cực gần, chỉ cách điểm đến {Math.Round(distanceMeters)}m, còn {lot.AvailableSlots} chỗ trống";
+            // Yếu tố 4: Điểm chỗ trống (tối đa 10 điểm)
+            if (lot.AvailableSlots > 50) score += 10.0;
+            else if (lot.AvailableSlots > 10) score += 6.0;
+
+            // Phạt nặng nếu bãi đã hết sạch chỗ trống (-60 điểm)
+            if (lot.AvailableSlots <= 0) score -= 60.0;
+
+            var finalScore = Math.Round(Math.Clamp(score, 15.0, 99.0), 0);
+
+            string reason;
+            if (isDistrictMatch)
+            {
+                reason = $"Đúng khu vực {targetDistrict}, giá tiết kiệm chỉ {pricePerHour:N0}đ/h (ước tính {estimatedTotal:N0}đ cho {criteria.ExpectedDurationHours}h), còn {lot.AvailableSlots} chỗ trống";
+            }
+            else if (criteria.PriorityStrategy.Equals("CHEAPEST", StringComparison.OrdinalIgnoreCase))
+            {
+                reason = $"Giá tiết kiệm {pricePerHour:N0}đ/h, cách điểm đến ~{Math.Round(distKm, 1)}km, còn {lot.AvailableSlots} chỗ";
+            }
+            else
+            {
+                reason = $"Vị trí cách điểm đến {Math.Round(distanceMeters)}m, giá {pricePerHour:N0}đ/h, còn {lot.AvailableSlots} chỗ trống";
+            }
 
             return new ParkingLotRecommendationItemDto
             {
@@ -132,12 +182,13 @@ public class ParkingSearchAiService(
                 OccupancyRatePercent = Math.Round(Math.Clamp(occupancyPercent, 0, 100), 1),
                 HasEvCharging = lot.HasEvCharging,
                 HasRoofedShelter = lot.HasRoofedShelter,
-                MatchScore = Math.Round(score, 1),
+                MatchScore = finalScore,
                 RecommendationReason = reason
             };
         })
         .Where(x => criteria.MaxPricePerHour == null || x.PricePerHour <= criteria.MaxPricePerHour.Value)
         .OrderByDescending(x => x.MatchScore)
+        .ThenBy(x => x.DistanceMeters)
         .ToList();
 
         stopwatch.Stop();
@@ -154,6 +205,28 @@ public class ParkingSearchAiService(
             ProcessingTimeMs = stopwatch.ElapsedMilliseconds,
             IsFallback = false
         };
+    }
+
+    /// <summary>
+    /// Nhận diện quận/địa danh mục tiêu từ câu truy vấn hoặc tên địa điểm
+    /// </summary>
+    private static (double Lat, double Lon, string District)? ResolveKnownDistrictAnchor(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var lower = text.ToLowerInvariant();
+        if (lower.Contains("quận 7") || lower.Contains("quan 7") || lower.Contains("crescent") || lower.Contains("secc") || lower.Contains("phú mỹ hưng") || lower.Contains("phu my hung"))
+        {
+            return (10.7292, 106.7196, "Quận 7");
+        }
+        if (lower.Contains("quận 1") || lower.Contains("quan 1") || lower.Contains("vincom") || lower.Contains("đồng khởi") || lower.Contains("bến nghé") || lower.Contains("bến thành"))
+        {
+            return (10.7781, 106.7018, "Quận 1");
+        }
+        if (lower.Contains("bình thạnh") || lower.Contains("binh thanh") || lower.Contains("landmark") || lower.Contains("central park"))
+        {
+            return (10.7952, 106.7219, "Bình Thạnh");
+        }
+        return null;
     }
 
     /// <summary>
@@ -195,7 +268,19 @@ public class ParkingSearchAiService(
             PriorityStrategy = "NEAREST"
         };
 
-        if (userLatitude.HasValue && userLongitude.HasValue)
+        var anchor = ResolveKnownDistrictAnchor(naturalLanguagePrompt) ?? ResolveKnownDistrictAnchor(criteria.DestinationName);
+        if (anchor.HasValue)
+        {
+            criteria = criteria with
+            {
+                DestinationName = string.IsNullOrWhiteSpace(criteria.DestinationName) || criteria.DestinationName == "Khu vực trung tâm"
+                    ? anchor.Value.District
+                    : criteria.DestinationName,
+                Latitude = anchor.Value.Lat,
+                Longitude = anchor.Value.Lon
+            };
+        }
+        else if (userLatitude.HasValue && userLongitude.HasValue && (!criteria.Latitude.HasValue || !criteria.Longitude.HasValue))
         {
             criteria = criteria with
             {
@@ -269,8 +354,9 @@ public class ParkingSearchAiService(
             while (await r.ReadAsync(ct))
             {
                 var lotId = r.GetGuid(0);
-                var name = r.GetString(1);
-                var address = r.GetString(2);
+                var rawName = r.GetString(1);
+                var rawAddress = r.GetString(2);
+                var (name, address) = NormalizeLotInfo(rawName, rawAddress);
                 var lat = Convert.ToDouble(r.GetDecimal(3));
                 var lon = Convert.ToDouble(r.GetDecimal(4));
                 var carPrice = r.GetDecimal(5);
@@ -395,10 +481,28 @@ public class ParkingSearchAiService(
 
     private static List<LotData> GetDefaultParkingLots() =>
     [
-        new(Guid.Parse("11111111-1111-4111-8111-111111111111"), "Demo Quận 1", "Dữ liệu demo — Quận 1", 10.776000, 106.700000, 30000, 4000, 20, 40, true, true),
-        new(Guid.Parse("22222222-2222-4222-8222-222222222222"), "Demo Bình Thạnh", "Dữ liệu demo — Bình Thạnh", 10.790000, 106.710000, 30000, 4000, 20, 40, true, true),
-        new(Guid.Parse("33333333-3333-4333-8333-111111111111"), "Demo Quận 7", "Dữ liệu demo — Quận 7", 10.735000, 106.722000, 30000, 4000, 20, 40, true, true)
+        new(Guid.Parse("11111111-1111-4111-8111-111111111111"), "Tòa nhà đỗ xe Vincom Center Đồng Khởi", "72 Lê Thánh Tôn, Bến Nghé, Quận 1, TP.HCM", 10.778100, 106.701800, 30000, 5000, 20, 200, true, true),
+        new(Guid.Parse("22222222-2222-4222-8222-222222222222"), "Bãi đỗ xe Landmark 81 - Central Park", "720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP.HCM", 10.795200, 106.721900, 30000, 5000, 20, 40, true, true),
+        new(Guid.Parse("33333333-3333-4333-8333-111111111111"), "Bãi xe Crescent Mall & SECC Phú Mỹ Hưng", "101 Tôn Dật Tiên, Tân Phú, Quận 7, TP.HCM", 10.729200, 106.719600, 30000, 5000, 20, 200, true, true)
     ];
+
+    private static (string Name, string Address) NormalizeLotInfo(string rawName, string? address)
+    {
+        var text = $"{rawName} {address}".ToLowerInvariant();
+        if (text.Contains("q7") || text.Contains("quận 7") || text.Contains("quan 7") || text.Contains("crescent") || text.Contains("secc") || text.Contains("phú mỹ hưng"))
+        {
+            return ("Bãi xe Crescent Mall & SECC Phú Mỹ Hưng", "101 Tôn Dật Tiên, Tân Phú, Quận 7, TP.HCM");
+        }
+        if (text.Contains("q1") || text.Contains("quận 1") || text.Contains("quan 1") || text.Contains("vincom") || text.Contains("đồng khởi") || text.Contains("bến nghé"))
+        {
+            return ("Tòa nhà đỗ xe Vincom Center Đồng Khởi", "72 Lê Thánh Tôn, Bến Nghé, Quận 1, TP.HCM");
+        }
+        if (text.Contains("bt") || text.Contains("bình thạnh") || text.Contains("binh thanh") || text.Contains("landmark") || text.Contains("central park"))
+        {
+            return ("Bãi đỗ xe Landmark 81 - Central Park", "720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP.HCM");
+        }
+        return (rawName, address ?? "Khu vực bãi đỗ xe ParkMatrix");
+    }
 
     private record LotData(
         Guid Id,
