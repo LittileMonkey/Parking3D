@@ -85,6 +85,29 @@ public class CheckInValidatorAndHandlerTests
     }
 
     [Fact]
+    public void Validator_ShouldPass_WhenWalkInVehicleTypeIsElectricCar()
+    {
+        var command = new CheckInCommand(
+            ActorId: Guid.NewGuid(),
+            Request: new CheckInRequestDto(
+                LotId: Guid.NewGuid(),
+                GateId: Guid.NewGuid(),
+                QrPayload: null,
+                DetectedPlate: "51K-888.88",
+                VehicleType: "EV"),
+            IdempotencyKey: "test-walk-in-ev");
+
+        var result = _validator.TestValidate(command);
+        result.ShouldNotHaveAnyValidationErrors();
+
+        Assert.True(global::Parking.Parking.Domain.VehicleTypeRules.TryResolve("EV", out var resolved));
+        Assert.Equal("CAR", resolved.BaseVehicleType);
+        Assert.True(resolved.IsEv);
+        Assert.Equal("FLAT_BLOCK_EV", resolved.PricingRuleType);
+        Assert.Equal("ELECTRIC", resolved.DefaultFuelType);
+    }
+
+    [Fact]
     public void Validator_ShouldFail_WhenActorOrIdempotencyKeyOrLotOrGateMissing()
     {
         var command = new CheckInCommand(

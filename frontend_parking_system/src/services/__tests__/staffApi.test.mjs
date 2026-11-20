@@ -52,7 +52,7 @@ test('incident update sends displayed version, selected lot, and stable idempote
   assert.equal(result.reportedBy, 'real-user');
 });
 
-test('checkInVehicle maps Car/EV->CAR, Motorcycle/Bike->MOTORBIKE, rejects Truck, supports null bookingId & entryMethod', async () => {
+test('checkInVehicle maps Car->CAR, EV->EV, Motorcycle/Bike->MOTORBIKE, rejects Truck, supports null bookingId & entryMethod', async () => {
   let captured = [];
   const service = adapter({
     checkIn: async (payload, key) => {
@@ -95,12 +95,12 @@ test('checkInVehicle maps Car/EV->CAR, Motorcycle/Bike->MOTORBIKE, rejects Truck
     evidence: [{ kind: 'CAMERA_SNAPSHOT', reference: 'gate-evidence://entry/cam1.jpg' }],
     idempotencyKey: 'fixed-key-2',
   });
-  assert.equal(captured[1].payload.vehicleType, 'CAR');
+  assert.equal(captured[1].payload.vehicleType, 'EV');
   assert.equal(captured[1].payload.allowMismatchOverride, true);
   assert.equal(captured[1].payload.overrideReason, 'Verified registration document at gate');
   assert.equal(captured[1].payload.evidence[0].reference, 'gate-evidence://entry/cam1.jpg');
   assert.equal(captured[1].key, 'fixed-key-2');
-  assert.equal(evEntry.vehicleType, 'Car');
+  assert.equal(evEntry.vehicleType, 'EV');
 
   await assert.rejects(service.checkInVehicle({
     lotId: 'lot-1',

@@ -22,17 +22,20 @@ public sealed partial class ParkingRepository
             throw new ServiceException(400, "Valid actor, lot, gate, plate and Idempotency-Key required.");
 
         key = key.Trim();
-        var vehicleType = string.IsNullOrWhiteSpace(request.VehicleType)
-            ? "CAR"
+        var rawVehicleType = string.IsNullOrWhiteSpace(request.VehicleType)
+            ? VehicleTypeRules.Car
             : request.VehicleType.Trim().ToUpperInvariant();
-        if (vehicleType is not ("CAR" or "MOTORBIKE"))
-            throw new ServiceException(400, "VehicleType must be CAR or MOTORBIKE.");
+        if (!VehicleTypeRules.TryResolve(rawVehicleType, out var resolvedType))
+            throw new ServiceException(400, "VehicleType must be CAR, EV, or MOTORBIKE.");
+        var vehicleType = resolvedType.BaseVehicleType;
+        var isEv = resolvedType.IsEv;
+        var displayVehicleType = resolvedType.ApiCode;
 
         await using var connection = await db.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
         var dedupeKey = $"CheckInWalkIn:{actorId}:{key}";
         var requestId = new Guid(SHA256.HashData(Encoding.UTF8.GetBytes(dedupeKey)).AsSpan(0, 16));
-        var fingerprint = ComputeCheckInFingerprint(request, plate, vehicleType);
+        var fingerprint = ComputeCheckInFingerprint(request, plate, displayVehicleType);
 
         NpgsqlCommand Command(string sql)
         {
@@ -42,6 +45,7 @@ public sealed partial class ParkingRepository
             command.Parameters.AddWithValue("actor", actorId);
             command.Parameters.AddWithValue("plate", plate);
             command.Parameters.AddWithValue("type", vehicleType);
+            command.Parameters.AddWithValue("isEv", isEv);
             return command;
         }
 
@@ -150,7 +154,20 @@ public sealed partial class ParkingRepository
             JOIN slot_vehicle_types svt ON svt.slot_id = s.id AND svt.lot_id = s.lot_id
             WHERE s.lot_id = @lot
               AND s.operational_status = 'ACTIVE'
-              AND svt.vehicle_type = @type;
+              AND svt.vehicle_type = @type
+              AND (
+                  (@isEv = true AND EXISTS (
+                      SELECT 1 FROM slot_feature_links fl
+                      WHERE fl.slot_id = s.id AND fl.feature_code IN ('EV', 'EV_CHARGING')
+                  ))
+                  OR (@isEv = false AND (
+                      @type <> 'CAR'
+                      OR NOT EXISTS (
+                          SELECT 1 FROM slot_feature_links fl
+                          WHERE fl.slot_id = s.id AND fl.feature_code IN ('EV', 'EV_CHARGING')
+                      )
+                  ))
+              );
             """))
         {
             capacityCheck.Parameters.AddWithValue("entry", entryAt.UtcDateTime);
@@ -169,11 +186,11 @@ public sealed partial class ParkingRepository
             }
         }
 
-        var vehicleId = await RegisterAndLockWalkInVehicleAsync(Command, vehicleType, ct);
+        var vehicleId = await RegisterAndLockWalkInVehicleAsync(Command, vehicleType, isEv, ct);
 
         var (slotId, slotCode, levelName) = await AllocateWalkInSlotAsync(Command, transaction, entryAt, endsAt, ct);
 
-        var snapshotId = await GetOrCreateWalkInPricingSnapshotAsync(Command, entryAt, holdMinutes, lateArrivalMinutes, ct);
+        var snapshotId = await GetOrCreateWalkInPricingSnapshotAsync(Command, entryAt, holdMinutes, lateArrivalMinutes, isEv, ct);
 
         // 9. Tạo ParkingSession mới và gán Chỗ đỗ vật lý (session_slot_assignments)
         var sessionId = Guid.NewGuid();
@@ -224,7 +241,7 @@ public sealed partial class ParkingRepository
             await write.ExecuteNonQueryAsync(ct);
         }
 
-        var response = new CheckInResponseDto(sessionId, null, request.LotId, slotId, "ACTIVE", entryAt, slotCode, vehicleType, "WALK_IN", levelName);
+        var response = new CheckInResponseDto(sessionId, null, request.LotId, slotId, "ACTIVE", entryAt, slotCode, displayVehicleType, "WALK_IN", levelName);
 
         await using (var outcome = Command("INSERT INTO integration_inbox(event_id,event_type,payload_hash,outcome) VALUES(@id,'CheckInWalkInRequest',@hash,@outcome)"))
         {

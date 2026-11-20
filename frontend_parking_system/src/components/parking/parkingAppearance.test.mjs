@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
-import { createBuildingParkingArea, createOutdoorParkingArea, createParkingArea } from "./parking.js";
+import {
+  createBasementParkingArea,
+  createBuildingParkingArea,
+  createOutdoorParkingArea,
+  createParkingArea,
+  getSlotColorHex,
+  OUTDOOR_SLOT_COLORS,
+} from "./parking.js";
 
 
 const levels = [
@@ -163,5 +170,40 @@ test("builds 3-floor parking building with 200 car slots across Floor 2 and Floo
   assert.equal(floors.length, 3);
   assert.equal(slotMeshes.length, 200);
   assert.equal(slotMeshes[0].userData.slotId, "f2-a01-id");
+  dispose();
+});
+
+test("builds 3-floor basement with B1 moto board and 50 regular car + 50 EV slots across B2 and B3", () => {
+  const { floors, slotMeshes, apartmentGroup, groundPortalGroup, floorZoneSprites, dispose } = createBasementParkingArea(
+    [
+      {
+        levelId: "lvl-b2",
+        levelCode: "B2",
+        levelName: "Tầng hầm B2",
+        elevationM: -10.4,
+        slots: [
+          { slotId: "b2-c01-id", slotCode: "B2-C01", zoneCode: "CAR", status: "AVAILABLE", features: [] },
+          { slotId: "b2-ev01-id", slotCode: "B2-EV01", zoneCode: "EV", status: "AVAILABLE", features: ["EV_CHARGING"] },
+        ],
+      },
+    ],
+    { availableMoto: 65, maxCapacity: 100, currentMoto: 35, lang: "vi" },
+  );
+
+  assert.equal(floors.length, 3);
+  assert.equal(slotMeshes.length, 100);
+  assert.ok(apartmentGroup);
+  assert.ok(groundPortalGroup);
+  assert.equal(floorZoneSprites.length, 2);
+
+  const carSlot = slotMeshes.find(m => m.userData.slotCode === "B2-C01");
+  const evSlot = slotMeshes.find(m => m.userData.slotCode === "B2-EV01");
+  assert.equal(carSlot?.userData.slotId, "b2-c01-id");
+  assert.equal(evSlot?.userData.slotId, "b2-ev01-id");
+  assert.equal(carSlot?.userData.isEvSlot, false);
+  assert.equal(evSlot?.userData.isEvSlot, true);
+  assert.equal(getSlotColorHex(carSlot.userData, false), OUTDOOR_SLOT_COLORS.AVAILABLE);
+  assert.equal(getSlotColorHex(evSlot.userData, false), OUTDOOR_SLOT_COLORS.AVAILABLE_EV);
+
   dispose();
 });

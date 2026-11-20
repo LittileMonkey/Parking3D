@@ -1919,8 +1919,8 @@ export default function VehicleOperations() {
                         onChange={(e) => { handleVehicleTypeChange(e.target.value as VehicleType); renewCheckInKey(); }}
                       >
                         <option value="Car">Ô tô (4-7 chỗ)</option>
+                        <option value="EV">Ô tô điện (EV)</option>
                         <option value="Motorcycle">Xe máy</option>
-                        <option value="EV">Xe điện (EV → CAR)</option>
                       </select>
                     </div>
                   </div>

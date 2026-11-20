@@ -100,9 +100,12 @@ app.MapGet("/api/v1/parking-lots/{lotId:guid}/sessions", async (
 {
     await access.RequireAsync(context.User.Subject(), lotId, "GATE", ct);
     await using var command = db.CreateCommand("""
-        SELECT ps.id, ps.plate_snapshot, ps.vehicle_type, ps.entry_at, ps.exit_at,
+        SELECT ps.id, ps.plate_snapshot,
+               CASE WHEN ps.vehicle_type = 'CAR' AND UPPER(COALESCE(v.fuel_type, '')) = 'ELECTRIC' THEN 'EV' ELSE ps.vehicle_type END,
+               ps.entry_at, ps.exit_at,
                ps.status::text, s.code, l.name
         FROM parking_sessions ps
+        LEFT JOIN vehicles v ON v.id = ps.vehicle_id
         JOIN LATERAL (
             SELECT slot_id FROM session_slot_assignments
             WHERE session_id = ps.id AND lot_id = ps.lot_id

@@ -1,4 +1,4 @@
-$ErrorActionPreference='Stop'
+﻿$ErrorActionPreference='Stop'
 $OutputEncoding=[System.Text.UTF8Encoding]::new($false)
 Set-Location (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 & "$PSScriptRoot/New-DevelopmentEnv.ps1" -Ensure
@@ -16,6 +16,11 @@ foreach($identityMigration in @('002_mfa.sql','003_guest_otp.sql')){
     Get-Content -Raw -Encoding UTF8 (Join-Path 'database/services/identity' $identityMigration) |
         docker compose -f compose.microservices.yml exec -T identity-db psql -X -v ON_ERROR_STOP=1 -U identity -d parking_identity
     if($LASTEXITCODE -ne 0){throw "Identity migration failed: $identityMigration"}
+}
+foreach($aiMigration in @('002_lot_catalog_details.sql','002_seed_approved_faqs.sql')){
+    Get-Content -Raw -Encoding UTF8 (Join-Path 'database/services/ai' $aiMigration) |
+        docker compose -f compose.microservices.yml exec -T ai-db psql -X -v ON_ERROR_STOP=1 -U ai -d parking_ai
+    if($LASTEXITCODE -ne 0){throw "AI migration failed: $aiMigration"}
 }
 docker compose -f compose.microservices.yml up -d payment | Out-Null
 $settings=@{}
@@ -48,13 +53,16 @@ if($LASTEXITCODE -ne 0){throw 'Không seed được bãi/slot/giá demo; giữ n
 $snapshotSql=@'
 INSERT INTO pricing_snapshots(id,lot_id,plan_id,vehicle_type,engine_version,resolved_rules,policy_snapshot,currency)
 SELECT gen_random_uuid(),p.lot_id,p.id,p.vehicle_type,'block-v1',r.parameters,
-  jsonb_build_object('holdMinutes',v.hold_minutes,'lateArrivalMinutes',v.late_arrival_minutes),'VND'
-FROM pricing_plans p JOIN pricing_rules r ON r.plan_id=p.id AND r.rule_type='FLAT_BLOCK'
+  jsonb_build_object('holdMinutes',v.hold_minutes,'lateArrivalMinutes',v.late_arrival_minutes,'isEv',r.rule_type='FLAT_BLOCK_EV'),'VND'
+FROM pricing_plans p JOIN pricing_rules r ON r.plan_id=p.id AND r.rule_type IN ('FLAT_BLOCK','FLAT_BLOCK_EV')
 JOIN lot_vehicle_policies v ON v.lot_id=p.lot_id AND v.vehicle_type=p.vehicle_type
 JOIN parking_lots l ON l.id=p.lot_id
 WHERE l.code IN ('DEMO-Q1','DEMO-BT','DEMO-Q7','DEMO-A','DEMO-B') AND p.status='PUBLISHED'
 AND p.effective_from<=now() AND (p.effective_until IS NULL OR p.effective_until>now())
-AND NOT EXISTS(SELECT 1 FROM pricing_snapshots s WHERE s.plan_id=p.id);
+AND NOT EXISTS(
+  SELECT 1 FROM pricing_snapshots s
+  WHERE s.plan_id=p.id AND COALESCE((s.policy_snapshot->>'isEv')::boolean,false)=(r.rule_type='FLAT_BLOCK_EV')
+);
 '@
 $snapshotSql | docker compose -f compose.microservices.yml exec -T parking-db psql -X -v ON_ERROR_STOP=1 -U parking -d parking_parking
 if($LASTEXITCODE -ne 0){throw 'Không khởi tạo được pricing snapshot demo.'}
@@ -62,7 +70,11 @@ $identitySql=@'
 BEGIN;
 INSERT INTO user_memberships(user_id,tier_code) SELECT id,'STANDARD' FROM app_users ON CONFLICT DO NOTHING;
 INSERT INTO user_vehicles(id,user_id,license_plate,vehicle_type,is_default,created_at,updated_at)
-VALUES('99999999-9999-4999-8999-999999999999',:'customer_id'::uuid,'51A12345','Car',true,now(),now()) ON CONFLICT DO NOTHING;
+VALUES
+ ('99999999-9999-4999-8999-999999999999',:'customer_id'::uuid,'51A12345','Car',true,now(),now()),
+ ('88888888-8888-4888-8888-888888888888',:'customer_id'::uuid,'51K88888','EV',false,now(),now()),
+ ('77777777-7777-4777-8777-777777777777',:'customer_id'::uuid,'59P112345','Bike',false,now(),now())
+ON CONFLICT DO NOTHING;
 COMMIT;
 '@
 $identitySql | docker compose -f compose.microservices.yml exec -T identity-db psql -X -v ON_ERROR_STOP=1 -U identity -d parking_identity -v "customer_id=$customerId"
@@ -79,7 +91,7 @@ foreach($lot in $lots | Where-Object code -in @('DEMO-Q1','DEMO-BT','DEMO-Q7','D
     }
     $null=Invoke-Api "/api/v1/parking-lots/$($lot.id)/staff-shifts" 'POST' $null $staffAuth.accessToken
     $null=Invoke-Api "/api/v1/parking-lots/$($lot.id)/staff-shifts" 'POST' $null $auth.accessToken
-    docker compose -f compose.microservices.yml exec -T redis redis-cli DEL "parking:lot_layout_$($lot.id)" "parking:pricing_rule:$($lot.id):CAR" "parking:pricing_rule:$($lot.id):MOTORBIKE" | Out-Null
+    docker compose -f compose.microservices.yml exec -T redis redis-cli DEL "parking:lot_layout_$($lot.id)" "parking:pricing_rule:$($lot.id):CAR" "parking:pricing_rule:$($lot.id):EV" "parking:pricing_rule:$($lot.id):MOTORBIKE" | Out-Null
     if($LASTEXITCODE -ne 0){throw 'Could not refresh Redis layout cache after demo seed.'}
 }
 
@@ -87,9 +99,9 @@ foreach($lot in $lots | Where-Object code -in @('DEMO-Q1','DEMO-BT','DEMO-Q7','D
 $aiSyncSql = @"
 INSERT INTO ai_lot_catalog (lot_id, name, address, latitude, longitude, car_price_per_hour, motorbike_price_per_hour, has_ev_charging, has_roofed_shelter, total_slots, updated_at)
 VALUES 
-  ('11111111-1111-4111-8111-111111111111'::uuid, 'Tòa nhà đỗ xe Vincom Center Đồng Khởi', '72 Lê Thánh Tôn, Bến Nghé, Quận 1, TP.HCM', 10.778100, 106.701800, 30000, 5000, true, true, 200, now()),
-  ('22222222-2222-4222-8222-222222222222'::uuid, 'Bãi đỗ xe Landmark 81 - Central Park', '720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP.HCM', 10.795200, 106.721900, 30000, 5000, true, false, 40, now()),
-  ('33333333-3333-4333-8333-111111111111'::uuid, 'Bãi xe Crescent Mall & SECC Phú Mỹ Hưng', '101 Tôn Dật Tiên, Tân Phú, Quận 7, TP.HCM', 10.729200, 106.719600, 30000, 5000, true, true, 200, now())
+  ('11111111-1111-4111-8111-111111111111'::uuid, 'Tòa nhà đỗ xe Vincom Center Đồng Khởi', '72 Lê Thánh Tôn, Bến Nghé, Quận 1, TP.HCM', 10.778100, 106.701800, 30000, 4000, false, true, 220, now()),
+  ('22222222-2222-4222-8222-222222222222'::uuid, 'Bãi đỗ xe Landmark 81 - Central Park', '720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP.HCM', 10.795200, 106.721900, 30000, 4000, false, false, 40, now()),
+  ('33333333-3333-4333-8333-111111111111'::uuid, 'Bãi xe Crescent Mall & SECC Phú Mỹ Hưng', '101 Tôn Dật Tiên, Tân Phú, Quận 7, TP.HCM', 10.729200, 106.719600, 30000, 4000, true, true, 200, now())
 ON CONFLICT (lot_id) DO UPDATE SET 
   name = EXCLUDED.name,
   address = EXCLUDED.address,

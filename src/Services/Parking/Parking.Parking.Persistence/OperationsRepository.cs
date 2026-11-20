@@ -47,22 +47,31 @@ public sealed class OperationsRepository(NpgsqlDataSource db, IParkingCacheServi
 
     public async Task<JsonElement> PricingAsync(Guid lot, string type, CancellationToken ct)
     {
+        var resolved = NormalizeType(type);
         await using var cmd = db.CreateCommand("""
             SELECT coalesce(jsonb_agg(jsonb_build_object('id',p.id,'lotId',p.lot_id,
-              'vehicleType',p.vehicle_type,'version',p.version_no,'name',p.name,'status',p.status,
+              'vehicleType',@apiType,'version',p.version_no,'name',p.name,'status',p.status,
               'effectiveFrom',p.effective_from,'effectiveUntil',p.effective_until,
               'createdBy',p.created_by,'createdAt',p.created_at,'rules',r.parameters)
               ORDER BY p.version_no DESC),'[]'::jsonb)::text
-            FROM pricing_plans p JOIN pricing_rules r ON r.plan_id=p.id AND r.rule_type='FLAT_BLOCK'
+            FROM pricing_plans p JOIN pricing_rules r ON r.plan_id=p.id AND r.rule_type=@ruleType
             WHERE p.lot_id=@lot AND p.vehicle_type=@type
             """);
-        cmd.Parameters.AddWithValue("lot", lot); cmd.Parameters.AddWithValue("type", NormalizeType(type));
+        cmd.Parameters.AddWithValue("lot", lot);
+        cmd.Parameters.AddWithValue("type", resolved.BaseVehicleType);
+        cmd.Parameters.AddWithValue("ruleType", resolved.PricingRuleType);
+        cmd.Parameters.AddWithValue("apiType", resolved.ApiCode);
         return JsonSerializer.Deserialize<JsonElement>((string)(await cmd.ExecuteScalarAsync(ct))!);
     }
 
     public async Task<JsonElement> PublishAsync(Guid lot, Guid actor, PublishPricing request, CancellationToken ct)
     {
-        var type = NormalizeType(request.VehicleType);
+        var resolved = NormalizeType(request.VehicleType);
+        var type = resolved.BaseVehicleType;
+        var ruleType = resolved.PricingRuleType;
+        var siblingRuleType = resolved.BaseVehicleType == VehicleTypeRules.Car
+            ? (resolved.IsEv ? VehicleTypeRules.FlatBlockRule : VehicleTypeRules.FlatBlockEvRule)
+            : null;
         if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Length > 200 || request.ExpectedVersion < 0)
             throw new ServiceException(400, "Name and current version are required.");
         Reason(request.Reason);
@@ -80,14 +89,51 @@ public sealed class OperationsRepository(NpgsqlDataSource db, IParkingCacheServi
             policy.Parameters.AddWithValue("lot", lot); policy.Parameters.AddWithValue("type", type);
             if (!(bool)(await policy.ExecuteScalarAsync(ct))!) throw new ServiceException(400, "Lot does not support this vehicle type.");
         }
-        int version;
+        int latestRuleVersion;
+        await using (var priorRule = new NpgsqlCommand("""
+            SELECT coalesce(max(p.version_no),0)
+            FROM pricing_plans p JOIN pricing_rules r ON r.plan_id=p.id AND r.rule_type=@ruleType
+            WHERE p.lot_id=@lot AND p.vehicle_type=@type
+            """, conn, tx))
+        {
+            priorRule.Parameters.AddWithValue("lot", lot); priorRule.Parameters.AddWithValue("type", type); priorRule.Parameters.AddWithValue("ruleType", ruleType);
+            latestRuleVersion = (int)(await priorRule.ExecuteScalarAsync(ct))!;
+        }
+        if (latestRuleVersion != request.ExpectedVersion) throw new ServiceException(409, "Pricing changed. Reload before publishing.");
+
+        int maxVersion;
         await using (var prior = new NpgsqlCommand("SELECT coalesce(max(version_no),0) FROM pricing_plans WHERE lot_id=@lot AND vehicle_type=@type", conn, tx))
         {
             prior.Parameters.AddWithValue("lot", lot); prior.Parameters.AddWithValue("type", type);
-            version = (int)(await prior.ExecuteScalarAsync(ct))!;
+            maxVersion = (int)(await prior.ExecuteScalarAsync(ct))!;
         }
-        if (version != request.ExpectedVersion) throw new ServiceException(409, "Pricing changed. Reload before publishing.");
+
+        // Preserve sibling CAR/EV rule from currently published plan so updating EV does not erase CAR price (and vice versa).
+        (long Amount, int BillingUnit, decimal Multiplier, string ParametersJson)? siblingRule = null;
+        if (siblingRuleType is not null)
+        {
+            await using var readSibling = new NpgsqlCommand("""
+                SELECT r.amount, r.billing_unit_minutes, r.multiplier, r.parameters::text
+                FROM pricing_plans p JOIN pricing_rules r ON r.plan_id=p.id AND r.rule_type=@siblingType
+                WHERE p.lot_id=@lot AND p.vehicle_type=@type AND p.status='PUBLISHED'
+                ORDER BY p.version_no DESC LIMIT 1
+                """, conn, tx);
+            readSibling.Parameters.AddWithValue("lot", lot);
+            readSibling.Parameters.AddWithValue("type", type);
+            readSibling.Parameters.AddWithValue("siblingType", siblingRuleType);
+            await using var sr = await readSibling.ExecuteReaderAsync(ct);
+            if (await sr.ReadAsync(ct))
+            {
+                siblingRule = (
+                    sr.IsDBNull(0) ? 0 : checked((long)sr.GetDecimal(0)),
+                    sr.IsDBNull(1) ? 15 : sr.GetInt32(1),
+                    sr.IsDBNull(2) ? 1m : sr.GetDecimal(2),
+                    sr.GetString(3));
+            }
+        }
+
         var id = Guid.NewGuid();
+        var priority = resolved.IsEv ? 2 : 1;
         // Existing booking/session snapshots are immutable and retain their promised price.
         await using (var write = new NpgsqlCommand("""
             UPDATE pricing_plans SET status='ARCHIVED',effective_until=greatest(now(),effective_from+interval '1 microsecond')
@@ -95,39 +141,64 @@ public sealed class OperationsRepository(NpgsqlDataSource db, IParkingCacheServi
             INSERT INTO pricing_plans(id,lot_id,vehicle_type,version_no,name,status,effective_from,currency,created_by)
               VALUES(@id,@lot,@type,@version,@name,'PUBLISHED',now(),'VND',@actor);
             INSERT INTO pricing_rules(plan_id,lot_id,rule_type,priority,amount,billing_unit_minutes,multiplier,parameters)
-              VALUES(@id,@lot,'FLAT_BLOCK',1,@rate,@block,@multiplier,@rules::jsonb);
+              VALUES(@id,@lot,@ruleType,@priority,@rate,@block,@multiplier,@rules::jsonb);
             INSERT INTO audit_logs(lot_id,actor_user_id,actor_type,action,entity_type,entity_id,reason,new_values)
               VALUES(@lot,@actor,'USER','PRICE_UPDATE','PRICING_PLAN',@entity,@reason,@rules::jsonb);
             """, conn, tx))
         {
             write.Parameters.AddWithValue("id", id); write.Parameters.AddWithValue("lot", lot);
-            write.Parameters.AddWithValue("type", type); write.Parameters.AddWithValue("version", version + 1);
+            write.Parameters.AddWithValue("type", type); write.Parameters.AddWithValue("version", maxVersion + 1);
             write.Parameters.AddWithValue("name", request.Name.Trim()); write.Parameters.AddWithValue("actor", actor);
+            write.Parameters.AddWithValue("ruleType", ruleType); write.Parameters.AddWithValue("priority", priority);
             write.Parameters.AddWithValue("rate", request.Rules.RateVnd); write.Parameters.AddWithValue("block", request.Rules.BlockMinutes);
             write.Parameters.AddWithValue("multiplier", request.Rules.Multiplier);
             write.Parameters.AddWithValue("rules", JsonSerializer.Serialize(request.Rules, Json));
             write.Parameters.AddWithValue("entity", id.ToString()); write.Parameters.AddWithValue("reason", request.Reason.Trim());
             await write.ExecuteNonQueryAsync(ct);
         }
+
+        if (siblingRuleType is not null && siblingRule is not null)
+        {
+            var siblingPriority = resolved.IsEv ? 1 : 2;
+            await using var copySibling = new NpgsqlCommand("""
+                INSERT INTO pricing_rules(plan_id,lot_id,rule_type,priority,amount,billing_unit_minutes,multiplier,parameters)
+                VALUES(@id,@lot,@ruleType,@priority,@rate,@block,@multiplier,@rules::jsonb);
+                """, conn, tx);
+            copySibling.Parameters.AddWithValue("id", id);
+            copySibling.Parameters.AddWithValue("lot", lot);
+            copySibling.Parameters.AddWithValue("ruleType", siblingRuleType);
+            copySibling.Parameters.AddWithValue("priority", siblingPriority);
+            copySibling.Parameters.AddWithValue("rate", siblingRule.Value.Amount);
+            copySibling.Parameters.AddWithValue("block", siblingRule.Value.BillingUnit);
+            copySibling.Parameters.AddWithValue("multiplier", siblingRule.Value.Multiplier);
+            copySibling.Parameters.AddWithValue("rules", siblingRule.Value.ParametersJson);
+            await copySibling.ExecuteNonQueryAsync(ct);
+        }
+
         await tx.CommitAsync(ct);
         if (cache is not null)
+        {
             await cache.RemoveAsync($"pricing_rule:{lot}:{type}", ct);
-        return await PricingAsync(lot, type, ct);
+            if (type == VehicleTypeRules.Car)
+                await cache.RemoveAsync($"pricing_rule:{lot}:{VehicleTypeRules.Ev}", ct);
+        }
+        return await PricingAsync(lot, resolved.ApiCode, ct);
     }
 
     public async Task<JsonElement> SlotsAsync(Guid lot, CancellationToken ct)
     {
         await using var cmd = db.CreateCommand("""
-            SELECT coalesce(jsonb_agg(row_to_json(x) ORDER BY x."levelName",x."slotCode"),'[]'::jsonb)::text FROM (
-              SELECT s.id,s.lot_id AS "lotId",s.code AS "slotCode",s.level_id AS "levelId",l.name AS "levelName",
-                z.id AS "zoneId",z.name AS "zoneName",s.operational_status::text AS "operationalStatus",
+            SELECT coalesce(jsonb_agg(row_to_json(x) ORDER BY x."levelOrder",x."levelName",x."slotCode"),'[]'::jsonb)::text FROM (
+              SELECT s.id,s.lot_id AS "lotId",s.code AS "slotCode",s.level_id AS "levelId",l.code AS "levelCode",l.name AS "levelName",l.display_order AS "levelOrder",
+                z.id AS "zoneId",z.code AS "zoneCode",z.name AS "zoneName",s.operational_status::text AS "operationalStatus",
                 CASE WHEN EXISTS(SELECT 1 FROM session_slot_assignments a WHERE a.slot_id=s.id AND a.vacated_at IS NULL) THEN 'OCCUPIED'
                   WHEN s.operational_status<>'ACTIVE' THEN s.operational_status::text
                   WHEN EXISTS(SELECT 1 FROM slot_reservations r JOIN bookings b ON b.id=r.booking_id
                     WHERE r.slot_id=s.id AND r.ends_at>now() AND r.status IN ('HELD','CONFIRMED')
                     AND (b.status='CONFIRMED' OR (b.status='PENDING_PAYMENT' AND b.hold_expires_at>now()))) THEN 'HELD'
                   ELSE 'AVAILABLE' END AS status,
-                ARRAY(SELECT vehicle_type FROM slot_vehicle_types WHERE slot_id=s.id ORDER BY vehicle_type) AS "vehicleTypes"
+                ARRAY(SELECT vehicle_type FROM slot_vehicle_types WHERE slot_id=s.id ORDER BY vehicle_type) AS "vehicleTypes",
+                ARRAY(SELECT feature_code FROM slot_feature_links WHERE slot_id=s.id ORDER BY feature_code) AS "features"
               FROM parking_slots s JOIN parking_levels l ON l.id=s.level_id JOIN zones z ON z.id=s.zone_id
               WHERE s.lot_id=@lot
             ) x
@@ -208,13 +279,14 @@ public sealed class OperationsRepository(NpgsqlDataSource db, IParkingCacheServi
               'lotId',@lot,'from',@from,'until',@until,
               'capacity',(SELECT count(*) FROM parking_slots WHERE lot_id=@lot AND operational_status='ACTIVE'),
               'occupied',(SELECT count(*) FROM session_slot_assignments WHERE lot_id=@lot AND vacated_at IS NULL),
-              'entries',count(*) FILTER(WHERE entry_at>=@from AND entry_at<@until),
-              'exits',count(*) FILTER(WHERE exit_at>=@from AND exit_at<@until),
-              'averageDurationMinutes',coalesce(avg(extract(epoch FROM (exit_at-entry_at))/60)
-                FILTER(WHERE exit_at>=@from AND exit_at<@until),0),
-              'carEntries',count(*) FILTER(WHERE vehicle_type='CAR' AND entry_at>=@from AND entry_at<@until),
-              'motorbikeEntries',count(*) FILTER(WHERE vehicle_type='MOTORBIKE' AND entry_at>=@from AND entry_at<@until)
-            )::text FROM parking_sessions WHERE lot_id=@lot
+              'entries',count(*) FILTER(WHERE ps.entry_at>=@from AND ps.entry_at<@until),
+              'exits',count(*) FILTER(WHERE ps.exit_at>=@from AND ps.exit_at<@until),
+              'averageDurationMinutes',coalesce(avg(extract(epoch FROM (ps.exit_at-ps.entry_at))/60)
+                FILTER(WHERE ps.exit_at>=@from AND ps.exit_at<@until),0),
+              'carEntries',count(*) FILTER(WHERE ps.vehicle_type='CAR' AND UPPER(COALESCE(v.fuel_type,''))<>'ELECTRIC' AND ps.entry_at>=@from AND ps.entry_at<@until),
+              'evEntries',count(*) FILTER(WHERE ps.vehicle_type='CAR' AND UPPER(COALESCE(v.fuel_type,''))='ELECTRIC' AND ps.entry_at>=@from AND ps.entry_at<@until),
+              'motorbikeEntries',count(*) FILTER(WHERE ps.vehicle_type='MOTORBIKE' AND ps.entry_at>=@from AND ps.entry_at<@until)
+            )::text FROM parking_sessions ps LEFT JOIN vehicles v ON v.id=ps.vehicle_id WHERE ps.lot_id=@lot
             """);
         cmd.Parameters.AddWithValue("lot", lot); cmd.Parameters.AddWithValue("from",from.ToUniversalTime()); cmd.Parameters.AddWithValue("until",until.ToUniversalTime());
         return JsonSerializer.Deserialize<JsonElement>((string)(await cmd.ExecuteScalarAsync(ct))!);
@@ -224,6 +296,8 @@ public sealed class OperationsRepository(NpgsqlDataSource db, IParkingCacheServi
     { if (until <= from || until - from > TimeSpan.FromDays(366)) throw new ServiceException(400, "Select a range of at most 366 days."); }
     private static void Reason(string reason)
     { if (string.IsNullOrWhiteSpace(reason) || reason.Length > 2000) throw new ServiceException(400, "An audit reason of 1-2000 characters is required."); }
-    private static string NormalizeType(string type) => type?.ToUpperInvariant() switch
-    { "CAR" => "CAR", "MOTORBIKE" or "MOTORCYCLE" => "MOTORBIKE", _ => throw new ServiceException(400, "Vehicle type must be CAR or MOTORBIKE.") };
+    private static VehicleTypeRules.ResolvedVehicleType NormalizeType(string type) =>
+        VehicleTypeRules.TryResolve(type, out var resolved)
+            ? resolved
+            : throw new ServiceException(400, "Vehicle type must be CAR, EV, or MOTORBIKE.");
 }

@@ -2,11 +2,12 @@ import { operations } from "../operations";
 import { api, type IncidentSummaryDto, type PaymentReceiptDto } from "../api";
 import type { ParkingLotSummary, ParkingSlotDetail, SlotStatus, CheckInPayload, CheckInResult, Incident, CreateIncidentPayload, CashConfirmationResult, PlateRecognitionResult } from "../../types/staff";
 
-function mapCheckInVehicleType(vehicleType?: string): "CAR" | "MOTORBIKE" {
+function mapCheckInVehicleType(vehicleType?: string): "CAR" | "EV" | "MOTORBIKE" {
   const normalized = (vehicleType ?? "Car").trim().toUpperCase();
   if (normalized === "MOTORCYCLE" || normalized === "BIKE" || normalized === "MOTORBIKE") return "MOTORBIKE";
-  if (normalized === "CAR" || normalized === "EV") return "CAR";
-  throw new Error(`Loại xe "${vehicleType}" chưa được hỗ trợ check-in tại bãi (chỉ hỗ trợ Ô tô/EV và Xe máy).`);
+  if (normalized === "EV" || normalized === "ELECTRIC" || normalized === "ELECTRIC_CAR") return "EV";
+  if (normalized === "CAR") return "CAR";
+  throw new Error(`Loại xe "${vehicleType}" chưa được hỗ trợ check-in tại bãi (chỉ hỗ trợ Ô tô, Ô tô điện EV và Xe máy).`);
 }
 
 function mapIncident(item: IncidentSummaryDto & { notes?: string | null }): Incident {
@@ -40,13 +41,24 @@ export const staffApi = {
     const rows = await operations.slots(lotId);
     const levels = [...new Set(rows.map(row => row.levelId))].map(id => {
       const items = rows.filter(row => row.levelId === id);
-      return { levelId: id, levelCode: items[0].levelName, levelName: items[0].levelName,
+      return { levelId: id, levelCode: items[0].levelCode || items[0].levelName, levelName: items[0].levelName,
         totalSlots: items.length, availableSlots: items.filter(row => row.status === "AVAILABLE").length };
     });
-    const slots: ParkingSlotDetail[] = rows.map(row => ({ slotId: row.id, slotCode: row.slotCode,
-      levelId: row.levelId, levelName: row.levelName, zoneId: row.zoneId, zoneName: row.zoneName,
-      operationalStatus: row.operationalStatus, vehicleType: row.vehicleTypes.includes("CAR") ? "Car" : "Motorcycle",
-      slotType: "Standard", status: row.status === "OCCUPIED" ? "Occupied" : row.status === "HELD" ? "Reserved" : row.status === "MAINTENANCE" ? "Maintenance" : row.status === "DISABLED" ? "Disabled" : "Available" }));
+    const slots: ParkingSlotDetail[] = rows.map(row => {
+      const features = row.features ?? [];
+      const isEv = features.some(f => f.toUpperCase() === "EV" || f.toUpperCase() === "EV_CHARGING")
+        || row.slotCode.toUpperCase().includes("-EV");
+      const isCar = row.vehicleTypes.includes("CAR");
+      return {
+        slotId: row.id, slotCode: row.slotCode,
+        levelId: row.levelId, levelName: row.levelName, zoneId: row.zoneId, zoneName: row.zoneName,
+        operationalStatus: row.operationalStatus,
+        vehicleType: isEv ? "EV" : isCar ? "Car" : "Motorcycle",
+        slotType: isEv ? "EV Charging" : "Standard",
+        features,
+        status: row.status === "OCCUPIED" ? "Occupied" : row.status === "HELD" ? "Reserved" : row.status === "MAINTENANCE" ? "Maintenance" : row.status === "DISABLED" ? "Disabled" : "Available",
+      };
+    });
     return { levels, slots };
   },
   async updateSlotStatus(lotId: string, slot: ParkingSlotDetail, newStatus: SlotStatus, reason: string): Promise<boolean> {
@@ -79,7 +91,7 @@ export const staffApi = {
       slotCode: result.slotCode || result.slotId,
       levelName: "",
       licensePlate: plate,
-      vehicleType: resolvedType === "MOTORBIKE" ? "Motorcycle" : "Car",
+      vehicleType: resolvedType === "MOTORBIKE" ? "Motorcycle" : resolvedType === "EV" ? "EV" : "Car",
       entryMethod: result.entryMethod ?? (result.bookingId ? "QR" : "WALK_IN"),
       checkinAt: result.entryAt,
       bookingCode: payload.bookingCode,
