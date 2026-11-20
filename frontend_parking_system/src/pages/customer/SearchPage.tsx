@@ -1,15 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Check, Clock3, LocateFixed, MapPin, ParkingCircle, Search, ShieldCheck, Sparkles, Calculator, HelpCircle, ChevronDown, ChevronUp, QrCode, ExternalLink, Sliders, Navigation, Route, Building2, Landmark, Zap, Scan } from "lucide-react";
-import { ApiError, api, type LotAvailability, type LotLayout3DDto, type ParkingSearchItem, type ParkingLevelAvailability, type UserVehicle, type AiParkingRecommendation, type CalculateFeeResponse, type ApprovedFaqResponse, type ParkingLot } from "../services/api";
-import ParkingViewer, { type ModelLevel } from "../components/parking/ParkingViewer";
-import { applySlotStatusChanges, type SlotStatusChange } from "../components/parking/parkingRealtime";
-import { useParkingHub } from "../components/parking/useParkingHub";
-import { useAuth } from "../context/AuthContext";
-import { useLanguage } from "../context/LanguageContext";
-import CustomerLayout from "../components/customer/CustomerLayout";
-import BookingSteps from "../components/customer/BookingSteps";
-import { useIdempotencyKey } from "../hooks/useIdempotencyKey";
+import { ApiError, api, type LotAvailability, type LotLayout3DDto, type ParkingSearchItem, type ParkingLevelAvailability, type UserVehicle, type AiParkingRecommendation, type CalculateFeeResponse, type ApprovedFaqResponse, type ParkingLot } from "../../services/api";
+import ParkingViewer, { type ModelLevel } from "../../components/parking/ParkingViewer";
+import { applySlotStatusChanges, type SlotStatusChange } from "../../components/parking/parkingRealtime";
+import { useParkingHub } from "../../components/parking/useParkingHub";
+import { useAuth } from "../../context/AuthContext";
+import { useLanguage } from "../../context/LanguageContext";
+import CustomerLayout from "../../components/customer/CustomerLayout";
+import BookingSteps from "../../components/customer/BookingSteps";
+import { useIdempotencyKey } from "../../hooks/useIdempotencyKey";
 import "./Booking.css";
 
 type VehicleType = "Car" | "Motorbike";
@@ -726,7 +726,7 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
             id: booking.id,
             code: booking.code || (booking as unknown as { bookingCode?: string }).bookingCode || "BK-ORD",
             lotId: selectedLot.parkingLotId,
-            lotName: selectedLot.name,
+            lotName: selectedLotName || selectedLot.name,
             slotId: selectedSlotId,
             slotCode: selectedSlot?.slotCode,
             expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
@@ -956,6 +956,9 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
   const canBook = (effectiveBookingMode === "AUTO_SLOT" || selectedSlot?.status.toUpperCase() === "AVAILABLE")
     && Boolean(selectedVehicle) && availabilityIsCurrent && compatibleAvailableCount > 0 && !isCreatingBooking;
 
+  const selectedLotVisual = useMemo(() => selectedLot ? getLotVisualMeta(selectedLot) : null, [selectedLot]);
+  const selectedLotName = selectedLot ? (selectedLot.name && !selectedLot.name.startsWith("Demo") ? selectedLot.name : (selectedLotVisual?.nameFallback || selectedLot.name)) : "";
+  const selectedLotAddress = selectedLot ? (selectedLot.address && !selectedLot.address.startsWith("Dữ liệu demo") ? selectedLot.address : (selectedLotVisual?.addressFallback || selectedLot.address)) : "";
 
   return (
     <CustomerLayout booking>
@@ -964,8 +967,8 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
         <BookingSteps current={selection ? 2 : 1} />
         <header className="customer-page-heading">
           <p className="customer-eyebrow">{selection ? (isEn ? "SELECT YOUR SPOT" : "CHỌN VỊ TRÍ CỦA BẠN") : (isEn ? "ONE SPOT, EVERY JOURNEY" : "MỘT CHỖ ĐỖ, MỌI HÀNH TRÌNH")}</p>
-          <h1>{selection ? selectedLot?.name ?? (isEn ? "Select your parking spot" : "Chọn chỗ đỗ của bạn") : (isEn ? "Find parking for your journey." : "Tìm bãi cho hành trình của bạn.")}</h1>
-          <p>{selection ? selectedLot?.address ?? (isEn ? "Select an available spot on the map, review your details, and proceed to payment." : "Chọn ô trên sơ đồ, kiểm tra thông tin rồi tiếp tục thanh toán.") : (isEn ? "Choose your parking time. Compare suitable lots and view estimated fees before booking." : "Chọn thời gian gửi xe. So sánh bãi phù hợp và xem tổng phí dự kiến trước khi đặt.")}</p>
+          <h1>{selection ? (selectedLotName || (isEn ? "Select your parking spot" : "Chọn chỗ đỗ của bạn")) : (isEn ? "Find parking for your journey." : "Tìm bãi cho hành trình của bạn.")}</h1>
+          <p>{selection ? (selectedLotAddress || (isEn ? "Select an available spot on the map, review your details, and proceed to payment." : "Chọn ô trên sơ đồ, kiểm tra thông tin rồi tiếp tục thanh toán.")) : (isEn ? "Choose your parking time. Compare suitable lots and view estimated fees before booking." : "Chọn thời gian gửi xe. So sánh bãi phù hợp và xem tổng phí dự kiến trước khi đặt.")}</p>
         </header>
 
         {!selection && <>
@@ -1806,7 +1809,7 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
                   </div>
                   {((isMotorbike && compatibleAvailableCount > 0) || (selectedSlot && bookingMode === "EXACT_SLOT")) && <Check size={18} />}
                 </div>
-                <dl className="booking-summary-facts"><div><dt>{isEn ? "Parking lot" : "Bãi đỗ"}</dt><dd>{selectedLot.name}</dd></div><div><dt>{isEn ? "Check-in" : "Vào bãi"}</dt><dd>{dateLabel(startsAt, isEn)}</dd></div><div><dt>{isEn ? "Expected exit" : "Rời bãi dự kiến"}</dt><dd>{currentRange ? dateLabel(currentRange.endsAt, isEn) : "—"}</dd></div><div><dt>{isEn ? "Duration" : "Thời lượng"}</dt><dd>{duration} {isEn ? "mins" : "phút"} · {vehicleType === "Car" ? (isEn ? "Car" : "Ô tô") : (isEn ? "Motorbike" : "Xe máy")}</dd></div></dl>
+                <dl className="booking-summary-facts"><div><dt>{isEn ? "Parking lot" : "Bãi đỗ"}</dt><dd>{selectedLotName || selectedLot.name}</dd></div><div><dt>{isEn ? "Check-in" : "Vào bãi"}</dt><dd>{dateLabel(startsAt, isEn)}</dd></div><div><dt>{isEn ? "Expected exit" : "Rời bãi dự kiến"}</dt><dd>{currentRange ? dateLabel(currentRange.endsAt, isEn) : "—"}</dd></div><div><dt>{isEn ? "Duration" : "Thời lượng"}</dt><dd>{duration} {isEn ? "mins" : "phút"} · {vehicleType === "Car" ? (isEn ? "Car" : "Ô tô") : (isEn ? "Motorbike" : "Xe máy")}</dd></div></dl>
                 {!isMotorbike && <label className="customer-field"><span>{isEn ? "Selection mode" : "Cách chọn chỗ"}</span><select value={bookingMode} disabled={isCreatingBooking} onChange={event => { setBookingMode(event.target.value as "EXACT_SLOT" | "AUTO_SLOT"); renewBookingKey(); }}><option value="EXACT_SLOT">{isEn ? "Pick exact spot on map" : "Tự chọn ô trên sơ đồ"}</option><option value="AUTO_SLOT">{isEn ? "Let system auto-assign spot" : "Để hệ thống chọn ô phù hợp"}</option></select></label>}
 
                 {isAuthenticated && <label className="customer-field booking-vehicle-picker"><span>{isEn ? "Your vehicle" : "Phương tiện của bạn"}</span><select value={selectedVehicle?.id ?? ""} onChange={event => setVehicleId(event.target.value)} disabled={isLoadingVehicles || compatibleVehicles.length === 0}><option value="">{isLoadingVehicles ? (isEn ? "Loading vehicles…" : "Đang tải phương tiện…") : (isEn ? "Select vehicle" : "Chọn phương tiện")}</option>{compatibleVehicles.map(vehicle => <option value={vehicle.id} key={vehicle.id}>{vehicle.isDefault ? (isEn ? "Default · " : "Mặc định · ") : ""}{maskPlate(vehicle.licensePlate)}</option>)}</select></label>}
@@ -1951,3 +1954,4 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
     </CustomerLayout>
   );
 }
+

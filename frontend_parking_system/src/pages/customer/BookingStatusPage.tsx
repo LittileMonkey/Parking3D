@@ -2,17 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, Clock3, CreditCard, RefreshCw, ShieldCheck, TriangleAlert, QrCode, ExternalLink, X } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import BookingRefunds from "../components/customer/BookingRefunds";
-import BookingQrTicket from "../components/customer/BookingQrTicket";
-import BookingSteps from "../components/customer/BookingSteps";
-import CustomerLayout from "../components/customer/CustomerLayout";
-import { api, type Payment, type VnPayReturnResult, type PaymentQrResult } from "../services/api";
-import { rememberPaymentReturn } from "../services/paymentReturnContext";
-import { remainingHoldSeconds } from "../services/bookingHold";
-import { useAuth } from "../context/AuthContext";
-import { useLanguage } from "../context/LanguageContext";
-import { useIdempotencyKey } from "../hooks/useIdempotencyKey";
-import { bookingError, useBookingConfirmation } from "../hooks/useBookingConfirmation";
+import BookingRefunds from "../../components/customer/BookingRefunds";
+import BookingQrTicket from "../../components/customer/BookingQrTicket";
+import BookingSteps from "../../components/customer/BookingSteps";
+import CustomerLayout from "../../components/customer/CustomerLayout";
+import { api, type Payment, type VnPayReturnResult, type PaymentQrResult } from "../../services/api";
+import { rememberPaymentReturn } from "../../services/customer/paymentReturnContext";
+import { remainingHoldSeconds } from "../../services/customer/bookingHold";
+import { useAuth } from "../../context/AuthContext";
+import { useLanguage } from "../../context/LanguageContext";
+import { useIdempotencyKey } from "../../hooks/useIdempotencyKey";
+import { bookingError, useBookingConfirmation } from "../../hooks/useBookingConfirmation";
 import "./Booking.css";
 
 const statusLabelsVi: Record<string, string> = {
@@ -441,3 +441,4 @@ export default function BookingStatusPage({ bookingIdOverride, returnResult, ret
     )}
   </main></CustomerLayout>;
 }
+

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+﻿import { useState, type FormEvent } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -11,8 +11,8 @@ import {
   AlertCircle
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { api } from "../services/api";
-import AuthShowcase from "../components/auth/AuthShowcase";
+import { api } from "../../services/api";
+import AuthShowcase from "../../components/auth/AuthShowcase";
 import "./Auth.css";
 
 type Step = "email" | "password" | "success";
@@ -284,3 +284,4 @@ export default function ForgotPassword() {
     </div>
   );
 }
+

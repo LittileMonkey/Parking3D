@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { remainingHoldSeconds } from "./bookingHold.ts";
+import { remainingHoldSeconds } from "../customer/bookingHold.ts";
 
 const deadline = "2026-10-29T02:05:00Z";
 const atDeadline = Date.parse(deadline);

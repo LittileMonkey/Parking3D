@@ -1,4 +1,4 @@
-import { request } from './api';
+import { request } from '../api';
 export interface BlockPricing {
   blockMinutes: number; rateVnd: number; dailyCapVnd: number; multiplier: number;
   peakStart: string | null; peakEnd: string | null;

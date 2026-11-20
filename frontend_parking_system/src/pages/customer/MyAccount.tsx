@@ -1,10 +1,10 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ArrowUpRight, UserRound, Car, Ticket, ShieldCheck } from "lucide-react";
-import CustomerLayout from "../components/customer/CustomerLayout";
-import { AccountProfile, AccountVehicles, AccountBookings } from "../components/customer/AccountPanels";
-import AccountSecurity from "../components/customer/AccountSecurity";
-import { useAuth } from "../context/AuthContext";
+import CustomerLayout from "../../components/customer/CustomerLayout";
+import { AccountProfile, AccountVehicles, AccountBookings } from "../../components/customer/AccountPanels";
+import AccountSecurity from "../../components/customer/AccountSecurity";
+import { useAuth } from "../../context/AuthContext";
 import "./MyAccount.css";
 const tabs = [
     { id: "profile", label: "Hồ sơ cá nhân", icon: UserRound },
@@ -33,3 +33,4 @@ export default function MyAccount() {
     </div>
   </main></CustomerLayout>;
 }
+

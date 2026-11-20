@@ -9,10 +9,10 @@ function client(respond) {
     .replace('import.meta.env.VITE_API_BASE_URL', '""');
   const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const exports = {};
-  const registrationSource = fs.readFileSync(new URL('../registration.ts', import.meta.url), 'utf8');
+  const registrationSource = fs.readFileSync(new URL('../auth/registration.ts', import.meta.url), 'utf8');
   const registrationExports = {};
   vm.runInNewContext(ts.transpileModule(registrationSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: registrationExports });
-  vm.runInNewContext(output, { exports, Headers, FormData, URLSearchParams, crypto, require: name => name === './authStorage' ? { authStorage: { getItem: () => null } } : registrationExports,
+  vm.runInNewContext(output, { exports, Headers, FormData, URLSearchParams, crypto, require: name => name.includes('authStorage') ? { authStorage: { getItem: () => null } } : registrationExports,
     sessionStorage: { getItem: () => null }, fetch: respond });
   return exports;
 }

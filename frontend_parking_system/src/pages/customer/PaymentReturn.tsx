@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ArrowRight, Clock3, RefreshCw, ShieldCheck, TriangleAlert } from "lucide-react";
-import { api, type VnPayReturnResult } from "../services/api";
-import { findPaymentReturn, type PaymentReturnContext } from "../services/paymentReturnContext";
-import { useAuth } from "../context/AuthContext";
-import { useLanguage } from "../context/LanguageContext";
-import CustomerLayout from "../components/customer/CustomerLayout";
+import { api, type VnPayReturnResult } from "../../services/api";
+import { findPaymentReturn, type PaymentReturnContext } from "../../services/customer/paymentReturnContext";
+import { useAuth } from "../../context/AuthContext";
+import { useLanguage } from "../../context/LanguageContext";
+import CustomerLayout from "../../components/customer/CustomerLayout";
 import BookingStatusPage from "./BookingStatusPage";
 import "./Booking.css";
 
@@ -61,3 +61,4 @@ export default function PaymentReturn() {
     </section>
   </main></CustomerLayout>;
 }
+

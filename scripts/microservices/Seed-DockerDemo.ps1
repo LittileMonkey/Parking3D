@@ -1,8 +1,8 @@
-﻿$ErrorActionPreference='Stop'
+$ErrorActionPreference='Stop'
 $OutputEncoding=[System.Text.UTF8Encoding]::new($false)
 Set-Location (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 & "$PSScriptRoot/New-DevelopmentEnv.ps1" -Ensure
-foreach($migration in @('002_hold_default_5_minutes.sql','003_scrum99_incidents_shift_handover.sql','004_staff_shifts.sql','005_booking_cancellations.sql','006_reservation_realtime.sql','007_notifications.sql','008_daily_grace.sql','009_handover_integrity.sql','010_incident_evidence.sql')){
+foreach($migration in @('002_hold_default_5_minutes.sql','003_scrum99_incidents_shift_handover.sql','004_staff_shifts.sql','005_booking_cancellations.sql','006_reservation_realtime.sql','007_notifications.sql','008_daily_grace.sql','009_handover_integrity.sql','010_incident_evidence.sql','011_sync_official_lot_names.sql')){
     Get-Content -Raw -Encoding UTF8 (Join-Path 'database/services/parking/migrations' $migration) |
         docker compose -f compose.microservices.yml exec -T parking-db psql -X -v ON_ERROR_STOP=1 -U parking -d parking_parking
     if($LASTEXITCODE -ne 0){throw "Parking migration failed: $migration"}
@@ -87,9 +87,9 @@ foreach($lot in $lots | Where-Object code -in @('DEMO-Q1','DEMO-BT','DEMO-Q7','D
 $aiSyncSql = @"
 INSERT INTO ai_lot_catalog (lot_id, name, address, latitude, longitude, car_price_per_hour, motorbike_price_per_hour, has_ev_charging, has_roofed_shelter, total_slots, updated_at)
 VALUES 
-  ('11111111-1111-4111-8111-111111111111'::uuid, 'Demo Quận 1', 'Dữ liệu demo — Quận 1', 10.776000, 106.700000, 30000, 4000, true, true, 40, now()),
-  ('22222222-2222-4222-8222-222222222222'::uuid, 'Demo Bình Thạnh', 'Dữ liệu demo — Bình Thạnh', 10.790000, 106.710000, 30000, 4000, true, true, 40, now()),
-  ('33333333-3333-4333-8333-111111111111'::uuid, 'Demo Quận 7', 'Dữ liệu demo — Quận 7', 10.735000, 106.722000, 30000, 4000, true, true, 40, now())
+  ('11111111-1111-4111-8111-111111111111'::uuid, 'Tòa nhà đỗ xe Vincom Center Đồng Khởi', '72 Lê Thánh Tôn, Bến Nghé, Quận 1, TP.HCM', 10.778100, 106.701800, 30000, 5000, true, true, 200, now()),
+  ('22222222-2222-4222-8222-222222222222'::uuid, 'Bãi đỗ xe Landmark 81 - Central Park', '720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP.HCM', 10.795200, 106.721900, 30000, 5000, true, false, 40, now()),
+  ('33333333-3333-4333-8333-111111111111'::uuid, 'Bãi xe Crescent Mall & SECC Phú Mỹ Hưng', '101 Tôn Dật Tiên, Tân Phú, Quận 7, TP.HCM', 10.729200, 106.719600, 30000, 5000, true, true, 200, now())
 ON CONFLICT (lot_id) DO UPDATE SET 
   name = EXCLUDED.name,
   address = EXCLUDED.address,

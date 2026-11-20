@@ -1,4 +1,4 @@
-import GoogleSignIn from "../components/auth/GoogleSignIn";
+﻿import GoogleSignIn from "../../components/auth/GoogleSignIn";
 import { useState, useMemo, type FormEvent } from "react";
 import {
   ArrowLeft,
@@ -14,8 +14,8 @@ import {
   AlertCircle
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { ApiError, api } from "../services/api";
-import AuthShowcase from "../components/auth/AuthShowcase";
+import { ApiError, api } from "../../services/api";
+import AuthShowcase from "../../components/auth/AuthShowcase";
 import "./Auth.css";
 
 export default function Register() {
@@ -342,3 +342,4 @@ export default function Register() {
     </div>
   );
 }
+
