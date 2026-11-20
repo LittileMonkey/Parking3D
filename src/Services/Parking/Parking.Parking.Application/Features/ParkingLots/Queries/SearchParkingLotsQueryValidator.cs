@@ -1,4 +1,5 @@
 ﻿using FluentValidation;
+using Parking.Parking.Domain;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -19,10 +20,10 @@ namespace Parking.Parking.Application.Features.ParkingLots.Queries
             // 2. Bắt buộc phải chọn loại xe
             RuleFor(x => x.VehicleType)
                 .NotEmpty()
-                .WithMessage("Bắt buộc phải truyền VehicleType (Ví dụ: CAR hoặc MOTORBIKE).");
+                .WithMessage("Bắt buộc phải truyền VehicleType (Ví dụ: CAR, EV hoặc MOTORBIKE).");
             // 3. Nếu khách chọn tìm Bãi đỗ GẦN NHẤT (NEAREST) -> Ép buộc phải bật GPS
             RuleFor(x => x.SortBy).Must(value => string.Equals(value,"NEAREST",StringComparison.OrdinalIgnoreCase) || string.Equals(value,"CHEAPEST",StringComparison.OrdinalIgnoreCase));
-            RuleFor(x => x.VehicleType).Must(value => string.Equals(value,"CAR",StringComparison.OrdinalIgnoreCase) || string.Equals(value,"MOTORBIKE",StringComparison.OrdinalIgnoreCase));
+            RuleFor(x => x.VehicleType).Must(value => VehicleTypeRules.TryResolve(value, out _));
             RuleFor(x => x.Latitude).InclusiveBetween(-90,90).When(x => x.Latitude.HasValue);
             RuleFor(x => x.Longitude).InclusiveBetween(-180,180).When(x => x.Longitude.HasValue);
             RuleFor(x => x).Must(x => x.Latitude.HasValue == x.Longitude.HasValue).WithMessage("Provide both latitude and longitude.");

@@ -1,5 +1,6 @@
 ﻿using Npgsql;
 using Parking.Parking.Application.Interfaces;
+using Parking.Parking.Domain;
 using Parking.Parking.Domain.Entities;
 
 namespace Parking.Parking.Infrastructure.Repositories;
@@ -20,10 +21,15 @@ public class ParkingLotRepository : IParkingLotRepository
 
     public async Task<List<ParkingLot>> GetAvailableLotsAsync(string vehicleType, DateTimeOffset startsAt, DateTimeOffset endsAt, CancellationToken cancellationToken = default)
     {
-        var normalizedType = vehicleType.Trim().ToUpperInvariant();
+        var resolved = VehicleTypeRules.TryResolve(vehicleType, out var parsed)
+            ? parsed
+            : new VehicleTypeRules.ResolvedVehicleType(vehicleType.Trim().ToUpperInvariant(), false, vehicleType.Trim().ToUpperInvariant());
+        var normalizedType = resolved.BaseVehicleType;
+        var isEv = resolved.IsEv;
         var now = _clock.GetUtcNow().UtcDateTime;
 
         // Truy vấn danh sách bãi ACTIVE có chính sách cho loại xe này và đếm slot khả dụng thực tế
+        // Tách biệt hoàn toàn ô Ô tô thường và ô Ô tô điện (EV_CHARGING).
         const string sql = """
             SELECT 
                 l.id,
@@ -43,6 +49,19 @@ public class ParkingLotRepository : IParkingLotRepository
                 FROM parking_slots s
                 JOIN slot_vehicle_types svt ON svt.slot_id = s.id AND svt.vehicle_type = @vehicleType
                 WHERE s.operational_status = 'ACTIVE'
+                  AND (
+                      (@isEv = true AND EXISTS (
+                          SELECT 1 FROM slot_feature_links fl
+                          WHERE fl.slot_id = s.id AND fl.feature_code IN ('EV', 'EV_CHARGING')
+                      ))
+                      OR (@isEv = false AND (
+                          @vehicleType <> 'CAR'
+                          OR NOT EXISTS (
+                              SELECT 1 FROM slot_feature_links fl
+                              WHERE fl.slot_id = s.id AND fl.feature_code IN ('EV', 'EV_CHARGING')
+                          )
+                      ))
+                  )
                   -- Loại bỏ slot đang có xe đỗ vật lý
                   AND NOT EXISTS (
                       SELECT 1 FROM session_slot_assignments sa 
@@ -62,6 +81,16 @@ public class ParkingLotRepository : IParkingLotRepository
                 GROUP BY s.lot_id
             ) slots_stat ON slots_stat.lot_id = l.id
             WHERE l.status = 'ACTIVE'
+              AND (
+                  @isEv = false
+                  OR EXISTS (
+                      SELECT 1
+                      FROM parking_slots s_ev
+                      JOIN slot_vehicle_types svt_ev ON svt_ev.slot_id = s_ev.id AND svt_ev.vehicle_type = 'CAR'
+                      JOIN slot_feature_links fl_ev ON fl_ev.slot_id = s_ev.id AND fl_ev.feature_code IN ('EV', 'EV_CHARGING')
+                      WHERE s_ev.lot_id = l.id AND s_ev.operational_status = 'ACTIVE'
+                  )
+              )
               AND NOT EXISTS(SELECT 1 FROM lot_closures c WHERE c.lot_id=l.id
                 AND tstzrange(c.starts_at,c.ends_at,'[)') && tstzrange(@start,@end,'[)'))
               AND NOT EXISTS (
@@ -76,6 +105,7 @@ public class ParkingLotRepository : IParkingLotRepository
 
         await using var cmd = _db.CreateCommand(sql);
         cmd.Parameters.AddWithValue("vehicleType", normalizedType);
+        cmd.Parameters.AddWithValue("isEv", isEv);
         cmd.Parameters.AddWithValue("now", now);
         cmd.Parameters.AddWithValue("start", startsAt.ToUniversalTime());
         cmd.Parameters.AddWithValue("end", endsAt.ToUniversalTime());
@@ -102,7 +132,7 @@ public class ParkingLotRepository : IParkingLotRepository
     }
 
     /// <summary>
-    /// Thực hiện câu lệnh SQL đọc cấu hình biểu giá hiệu lực (FLAT_BLOCK) từ bảng pricing_plans và pricing_rules.
+    /// Thực hiện câu lệnh SQL đọc cấu hình biểu giá hiệu lực (FLAT_BLOCK / FLAT_BLOCK_EV) từ bảng pricing_plans và pricing_rules.
     /// </summary>
     public async Task<(string Timezone, string ParametersJson)?> GetPricingRuleConfigAsync(
         Guid lotId,
@@ -110,12 +140,16 @@ public class ParkingLotRepository : IParkingLotRepository
         DateTime startTime,
         CancellationToken cancellationToken = default)
     {
-        var normalizedType = vehicleType.Trim().ToUpperInvariant();
+        var resolved = VehicleTypeRules.TryResolve(vehicleType, out var parsed)
+            ? parsed
+            : new VehicleTypeRules.ResolvedVehicleType(vehicleType.Trim().ToUpperInvariant(), false, vehicleType.Trim().ToUpperInvariant());
+        var normalizedType = resolved.BaseVehicleType;
+        var ruleType = resolved.PricingRuleType;
         const string sql = """
             SELECT l.timezone, pr.parameters::text
             FROM parking_lots l
             JOIN pricing_plans pp ON pp.lot_id = l.id
-            JOIN pricing_rules pr ON pr.plan_id = pp.id AND pr.rule_type = 'FLAT_BLOCK'
+            JOIN pricing_rules pr ON pr.plan_id = pp.id AND pr.rule_type = @ruleType
             WHERE l.id = @lotId 
               AND pp.vehicle_type = @vehicleType 
               AND pp.status = 'PUBLISHED'
@@ -128,6 +162,7 @@ public class ParkingLotRepository : IParkingLotRepository
         await using var cmd = _db.CreateCommand(sql);
         cmd.Parameters.AddWithValue("lotId", lotId);
         cmd.Parameters.AddWithValue("vehicleType", normalizedType);
+        cmd.Parameters.AddWithValue("ruleType", ruleType);
         cmd.Parameters.AddWithValue("startTime", startTime.ToUniversalTime());
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))

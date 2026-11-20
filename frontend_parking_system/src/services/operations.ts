@@ -8,14 +8,14 @@ export interface PricingVersion {
   effectiveFrom: string; effectiveUntil?: string; createdBy: string; createdAt: string; rules: BlockPricing;
 }
 export interface OperationalSlot {
-  id: string; lotId: string; slotCode: string; levelId: string; levelName: string; zoneId: string; zoneName: string;
-  status: string; operationalStatus: 'ACTIVE' | 'MAINTENANCE' | 'DISABLED'; vehicleTypes: string[];
+  id: string; lotId: string; slotCode: string; levelId: string; levelCode?: string; levelName: string; zoneId: string; zoneCode?: string; zoneName: string;
+  status: string; operationalStatus: 'ACTIVE' | 'MAINTENANCE' | 'DISABLED'; vehicleTypes: string[]; features?: string[];
 }
 export interface OperationAudit {
   id: string; timestampUtc: string; operatorId?: string; operatorRole: string; actionType: string;
   targetEntity: string; justificationNote?: string;
 }
-export interface UsageReport { lotId: string; capacity: number; occupied: number; entries: number; exits: number; averageDurationMinutes: number; carEntries: number; motorbikeEntries: number }
+export interface UsageReport { lotId: string; capacity: number; occupied: number; entries: number; exits: number; averageDurationMinutes: number; carEntries: number; evEntries?: number; motorbikeEntries: number }
 export interface RevenueReport { lotId: string; currency: string; gross: number; cash: number; digital: number; transactions: number; refunds: number; net: number }
 function route(lot: string) {
   if (!lot || lot === 'all') throw new Error('Hãy chọn một bãi cụ thể.');

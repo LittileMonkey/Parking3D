@@ -54,15 +54,18 @@ public sealed partial class ParkingRepository(NpgsqlDataSource db, TimeProvider 
         }
         string type;
         string plate;
+        string fuelType;
         await using (var vehicle = new NpgsqlCommand("""
-            SELECT v.vehicle_type,v.plate_normalized FROM vehicles v JOIN user_vehicle_access a ON a.vehicle_id=v.id
+            SELECT v.vehicle_type,v.plate_normalized,v.fuel_type FROM vehicles v JOIN user_vehicle_access a ON a.vehicle_id=v.id
             WHERE v.id=@vehicle AND v.is_active AND a.user_id=@user AND a.verified_at IS NOT NULL AND a.revoked_at IS NULL
             """, conn, tx))
         {
             vehicle.Parameters.AddWithValue("vehicle", request.VehicleId); vehicle.Parameters.AddWithValue("user", customerId);
             await using var r = await vehicle.ExecuteReaderAsync(ct); if (!await r.ReadAsync(ct)) throw new ServiceException(403, "Verified vehicle access required");
-            type = r.GetString(0); plate = r.GetString(1);
+            type = r.GetString(0); plate = r.GetString(1); fuelType = r.GetString(2);
         }
+        var isEv = VehicleTypeRules.IsElectricVehicle(type, fuelType);
+        var pricingRuleType = isEv ? VehicleTypeRules.FlatBlockEvRule : VehicleTypeRules.FlatBlockRule;
         var slotId = request.SlotId;
         if (request.Mode == "AUTO_SLOT")
         {
@@ -71,11 +74,15 @@ public sealed partial class ParkingRepository(NpgsqlDataSource db, TimeProvider 
                 SELECT s.id FROM parking_slots s
                 JOIN slot_vehicle_types t ON t.slot_id=s.id AND t.vehicle_type=@type
                 WHERE s.lot_id=@lot AND s.operational_status='ACTIVE'
-                  AND NOT EXISTS(SELECT 1 FROM slot_feature_links f WHERE f.slot_id=s.id AND f.feature_code IN ('ACCESSIBLE','PRIORITY','EV','EV_CHARGING'))
+                  AND NOT EXISTS(SELECT 1 FROM slot_feature_links f WHERE f.slot_id=s.id AND f.feature_code IN ('ACCESSIBLE','PRIORITY'))
+                  AND (
+                    (@isEv = true AND EXISTS(SELECT 1 FROM slot_feature_links f WHERE f.slot_id=s.id AND f.feature_code IN ('EV','EV_CHARGING')))
+                    OR (@isEv = false AND NOT EXISTS(SELECT 1 FROM slot_feature_links f WHERE f.slot_id=s.id AND f.feature_code IN ('EV','EV_CHARGING')))
+                  )
                 ORDER BY s.id
                 """, conn, tx))
             {
-                choose.Parameters.AddWithValue("lot",request.LotId); choose.Parameters.AddWithValue("type",type);
+                choose.Parameters.AddWithValue("lot",request.LotId); choose.Parameters.AddWithValue("type",type); choose.Parameters.AddWithValue("isEv",isEv);
                 await using var reader=await choose.ExecuteReaderAsync(ct);
                 while(await reader.ReadAsync(ct)) candidates.Add(reader.GetGuid(0));
             }
@@ -115,17 +122,22 @@ public sealed partial class ParkingRepository(NpgsqlDataSource db, TimeProvider 
               JOIN parking_slots s ON s.lot_id=l.id AND s.id=@slot
               JOIN slot_vehicle_types sv ON sv.slot_id=s.id AND sv.vehicle_type=p.vehicle_type
               JOIN pricing_plans pp ON pp.lot_id=l.id AND pp.vehicle_type=p.vehicle_type
-              JOIN pricing_rules pr ON pr.plan_id=pp.id AND pr.rule_type='FLAT_BLOCK'
+              JOIN pricing_rules pr ON pr.plan_id=pp.id AND pr.rule_type=@ruleType
             WHERE l.id=@lot AND l.status='ACTIVE' AND p.vehicle_type=@type AND s.operational_status='ACTIVE'
               AND pp.status='PUBLISHED' AND pp.currency='VND' AND pp.effective_from<=@start
               AND (pp.effective_until IS NULL OR pp.effective_until>=@end)
               AND NOT EXISTS(SELECT 1 FROM session_slot_assignments x WHERE x.slot_id=s.id AND x.vacated_at IS NULL)
-              AND NOT EXISTS(SELECT 1 FROM slot_feature_links f WHERE f.slot_id=s.id AND f.feature_code IN ('ACCESSIBLE','PRIORITY','EV','EV_CHARGING'))
-              AND NOT EXISTS(SELECT 1 FROM pricing_rules extra WHERE extra.plan_id=pp.id AND extra.id<>pr.id)
+              AND NOT EXISTS(SELECT 1 FROM slot_feature_links f WHERE f.slot_id=s.id AND f.feature_code IN ('ACCESSIBLE','PRIORITY'))
+              AND (
+                (@isEv = true AND EXISTS(SELECT 1 FROM slot_feature_links f WHERE f.slot_id=s.id AND f.feature_code IN ('EV','EV_CHARGING')))
+                OR (@isEv = false AND NOT EXISTS(SELECT 1 FROM slot_feature_links f WHERE f.slot_id=s.id AND f.feature_code IN ('EV','EV_CHARGING')))
+              )
+              AND NOT EXISTS(SELECT 1 FROM pricing_rules extra WHERE extra.plan_id=pp.id AND extra.rule_type NOT IN ('FLAT_BLOCK','FLAT_BLOCK_EV'))
             ORDER BY pp.version_no DESC LIMIT 1
             """, conn, tx))
         {
             policy.Parameters.AddWithValue("slot", slotId); policy.Parameters.AddWithValue("lot", request.LotId); policy.Parameters.AddWithValue("type", type);
+            policy.Parameters.AddWithValue("isEv", isEv); policy.Parameters.AddWithValue("ruleType", pricingRuleType);
             policy.Parameters.AddWithValue("start", request.StartsAt.UtcDateTime); policy.Parameters.AddWithValue("end", request.EndsAt.UtcDateTime);
             await using var r = await policy.ExecuteReaderAsync(ct); if (!await r.ReadAsync(ct)) throw new ServiceException(409, "Lot/slot/price unavailable or unsupported pricing rules");
             cancellationCutoff = r.GetInt32(7);
@@ -164,7 +176,7 @@ public sealed partial class ParkingRepository(NpgsqlDataSource db, TimeProvider 
         var code = "B" + id.ToString("N")[..20].ToUpperInvariant();
         await using (var write = new NpgsqlCommand("""
             INSERT INTO pricing_snapshots(id,lot_id,plan_id,vehicle_type,engine_version,resolved_rules,policy_snapshot,currency,created_at)
-            VALUES(@snapshot,@lot,@plan,@type,'block-v1',@rules::jsonb,jsonb_build_object('holdMinutes',@hold,'lateArrivalMinutes',@late,'cancellationRefundCutoffMinutes',@cutoff,'graceFreeMinutes',@grace),'VND',now());
+            VALUES(@snapshot,@lot,@plan,@type,'block-v1',@rules::jsonb,jsonb_build_object('holdMinutes',@hold,'lateArrivalMinutes',@late,'cancellationRefundCutoffMinutes',@cutoff,'graceFreeMinutes',@grace,'isEv',@isEv),'VND',now());
             INSERT INTO bookings(id,code,lot_id,vehicle_id,vehicle_type,customer_id,plate_snapshot,mode,starts_at,ends_at,hold_expires_at,
               arrival_deadline,status,pricing_snapshot_id,estimated_amount,created_at)
             VALUES(@id,@code,@lot,@vehicle,@type,@user,@plate,@mode::booking_mode,@start,@end,@expires,@arrival,'PENDING_PAYMENT',@snapshot,@amount,now());
@@ -176,6 +188,7 @@ public sealed partial class ParkingRepository(NpgsqlDataSource db, TimeProvider 
         {
             write.Parameters.AddWithValue("cutoff", cancellationCutoff);
             write.Parameters.AddWithValue("grace",grace);
+            write.Parameters.AddWithValue("isEv", isEv);
             write.Parameters.AddWithValue("snapshot", snapshot); write.Parameters.AddWithValue("lot", request.LotId); write.Parameters.AddWithValue("plan", plan);
             write.Parameters.AddWithValue("type", type); write.Parameters.AddWithValue("rules", rulesJson); write.Parameters.AddWithValue("hold", hold); write.Parameters.AddWithValue("late", late);
             write.Parameters.AddWithValue("id", id); write.Parameters.AddWithValue("code", code); write.Parameters.AddWithValue("vehicle", request.VehicleId); write.Parameters.AddWithValue("user", customerId);

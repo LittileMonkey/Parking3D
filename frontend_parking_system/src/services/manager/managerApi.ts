@@ -19,12 +19,17 @@ export const managerApi = {
         occupancyRate: group.length ? Math.round(occupied * 100 / group.length) : 0 };
     });
     const chosen = levels.some(level => level.levelId === levelId) ? levelId : levels[0]?.levelId;
-    const slots: SlotControlItem[] = rows.filter(row => row.levelId === chosen).map(row => ({
-      id: row.id, parkingLotId: lotId, slotCode: row.slotCode, levelId: row.levelId, levelName: row.levelName,
-      zoneId: row.zoneId, zoneName: row.zoneName, operationalStatus: row.operationalStatus,
-      status: row.status === "OCCUPIED" ? "Occupied" : row.status === "HELD" ? "Reserved" : row.status === "MAINTENANCE" ? "Maintenance" : row.status === "DISABLED" ? "Disabled" : "Available",
-      vehicleType: row.vehicleTypes.includes("CAR") ? "Car" : "Motorcycle", sensorStatus: "Unknown",
-    }));
+    const slots: SlotControlItem[] = rows.filter(row => row.levelId === chosen).map(row => {
+      const features = row.features ?? [];
+      const isEv = features.some(f => f.toUpperCase() === "EV" || f.toUpperCase() === "EV_CHARGING")
+        || row.slotCode.toUpperCase().includes("-EV");
+      return {
+        id: row.id, parkingLotId: lotId, slotCode: row.slotCode, levelId: row.levelId, levelName: row.levelName,
+        zoneId: row.zoneId, zoneName: row.zoneName, operationalStatus: row.operationalStatus,
+        status: row.status === "OCCUPIED" ? "Occupied" : row.status === "HELD" ? "Reserved" : row.status === "MAINTENANCE" ? "Maintenance" : row.status === "DISABLED" ? "Disabled" : "Available",
+        vehicleType: isEv ? "EV" : row.vehicleTypes.includes("CAR") ? "Car" : "Motorcycle", sensorStatus: "Unknown",
+      };
+    });
     return { result: { levels, slots }, isSuccess: true, statusCode: 200, message: "Dữ liệu từ máy chủ." };
   },
   async updateSlotStatus(slot: SlotControlItem, newStatus: SlotStatus, reason: string): Promise<ApiResponse<SlotControlItem>> {
