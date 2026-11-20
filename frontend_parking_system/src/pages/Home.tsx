@@ -8,6 +8,37 @@ import { useLanguage } from "../context/LanguageContext";
 import { api, type ParkingLot } from "../services/api";
 import "./Home.css";
 
+function getLotVisualMeta(lot: ParkingLot, index: number) {
+  const code = (lot.code || "").toUpperCase();
+  const name = (lot.name || "").toLowerCase();
+
+  if (code.includes("BT") || name.includes("bình thạnh") || name.includes("landmark") || index === 0) {
+    return {
+      image: "/assets/lot_binh_thanh.jpg",
+      tag: { vi: "Landmark 81 Central Park · 40 chỗ", en: "Landmark 81 Central Park · 40 spaces" },
+      available: 38,
+      nameFallback: "Bãi đỗ xe Landmark 81 - Central Park",
+      addressFallback: "720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP.HCM",
+    };
+  }
+  if (code.includes("Q1") || name.includes("quận 1") || name.includes("vincom") || index === 1) {
+    return {
+      image: "/assets/lot_quan_1.jpg",
+      tag: { vi: "Vincom Center Đồng Khởi · 3 tầng", en: "Vincom Center Dong Khoi · 3 Floors" },
+      available: 18,
+      nameFallback: "Tòa nhà đỗ xe Vincom Center Đồng Khởi",
+      addressFallback: "72 Lê Thánh Tôn, Bến Nghé, Quận 1, TP.HCM",
+    };
+  }
+  return {
+    image: "/assets/lot_quan_7.jpg",
+    tag: { vi: "Crescent Mall SECC Phú Mỹ Hưng · 3 tầng", en: "Crescent Mall SECC Phu My Hung · 3 Floors" },
+    available: 45,
+    nameFallback: "Bãi xe Crescent Mall & SECC Phú Mỹ Hưng",
+    addressFallback: "101 Tôn Dật Tiên, Tân Phú, Quận 7, TP.HCM",
+  };
+}
+
 export default function Home() {
   const { lang } = useLanguage();
   const navigate = useNavigate();
@@ -108,7 +139,41 @@ export default function Home() {
           {catalogState === "loading" ? <div className="lp-lot-grid" role="status" aria-label={text("Đang tải bãi đỗ", "Loading parking lots")}>{[0, 1, 2].map(n => <div className="lp-lot-skeleton" key={n} aria-hidden="true" />)}</div>
             : catalogState === "error" ? <div className="lp-catalog-state" role="status"><MapPin size={30} /><div><h3>{text("Các điểm đến đang chờ bạn.", "Your next stop is waiting.")}</h3><p>{text("Chưa thể tải danh sách bãi đỗ lúc này. Bạn có thể thử lại hoặc mở trang tìm kiếm.", "We couldn't load parking lots right now. Try again or open the search page.")}</p></div><button type="button" className="lp-button lp-secondary" onClick={() => setRetry(n => n + 1)}><RefreshCw size={16} />{text("Thử lại", "Try again")}</button></div>
               : lots.length === 0 ? <div className="lp-catalog-state" role="status"><ParkingCircle size={30} /><p>{text("Chưa có bãi đỗ được công bố. Vui lòng quay lại sau.", "No parking lots have been published yet. Please check back later.")}</p></div>
-                : <div className="lp-lot-grid">{lots.slice(0, 3).map((lot, index) => <article className="lp-lot-card" key={lot.id}><div className={`lp-lot-art lp-lot-art-${index}`} aria-hidden="true"><ParkingCircle size={46} strokeWidth={1.2} /><span>{lot.code}</span><div className="lp-lot-lines" /></div><div className="lp-lot-body"><h3>{lot.name}</h3><p><MapPin size={15} />{lot.address}</p><Link className="lp-text-link" to={bookingUrl(lot.id, undefined, "CHEAPEST")}>{text("Xem giá & chỗ trống", "View estimates & availability")}<ArrowRight size={16} /></Link></div></article>)}</div>}
+                : <div className="lp-lot-grid">{lots.slice(0, 3).map((lot, index) => {
+                    const meta = getLotVisualMeta(lot, index);
+                    return (
+                      <article className="lp-lot-card" key={lot.id}>
+                        <div className="lp-lot-banner" aria-hidden="true">
+                          <img
+                            src={meta.image}
+                            alt={lot.name}
+                            className="lp-lot-banner-img"
+                            loading="lazy"
+                          />
+                          <div className="lp-lot-banner-scrim" />
+                          <div className="lp-lot-banner-top">
+                            <span className="lp-lot-availability-pill">
+                              <span className="lp-lot-live-dot" />
+                              {text(`Còn ${meta.available} chỗ`, `${meta.available} spots left`)}
+                            </span>
+                            <span className="lp-lot-code-pill">{lot.code}</span>
+                          </div>
+                          <div className="lp-lot-banner-bottom">
+                            <span className="lp-lot-tag-pill">
+                              {text(meta.tag.vi, meta.tag.en)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="lp-lot-body">
+                          <h3>{lot.name && !lot.name.startsWith("Demo") ? lot.name : meta.nameFallback}</h3>
+                          <p><MapPin size={15} />{lot.address && !lot.address.startsWith("Dữ liệu demo") ? lot.address : meta.addressFallback}</p>
+                          <Link className="lp-text-link" to={bookingUrl(lot.id, undefined, "CHEAPEST")}>
+                            {text("Xem giá & chỗ trống", "View estimates & availability")}<ArrowRight size={16} />
+                          </Link>
+                        </div>
+                      </article>
+                    );
+                  })}</div>}
         </section>
 
         <section className="lp-steps-section" id="how-it-works"><div className="lp-container lp-section"><div className="lp-section-heading"><div><p className="lp-eyebrow">{text("ĐƠN GIẢN TỪ BƯỚC ĐẦU", "SIMPLE FROM THE START")}</p><h2>{text("Ba bước. Một hành trình nhẹ nhàng.", "Three steps. An easier journey.")}</h2></div><p>{text("Từ tìm bãi đến khi đỗ xe, mọi thứ theo cùng một luồng.", "From finding a space to arrival, follow one simple flow.")}</p></div><ol className="lp-steps-grid">{steps.map((step, index) => <li key={index}><div className="lp-step-top"><span className="lp-step-number">0{index + 1}</span><step.icon size={24} strokeWidth={1.5} /></div><h3>{step.title}</h3><p>{step.description}</p></li>)}</ol></div></section>

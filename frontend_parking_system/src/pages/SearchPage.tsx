@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Check, Clock3, LocateFixed, MapPin, ParkingCircle, Search, ShieldCheck, Sparkles, Calculator, HelpCircle, ChevronDown, ChevronUp, QrCode } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Clock3, LocateFixed, MapPin, ParkingCircle, Search, ShieldCheck, Sparkles, Calculator, HelpCircle, ChevronDown, ChevronUp, QrCode, ExternalLink, Sliders, Navigation, Route, Building2, Landmark, Zap, Scan } from "lucide-react";
 import { ApiError, api, type LotAvailability, type LotLayout3DDto, type ParkingSearchItem, type ParkingLevelAvailability, type UserVehicle, type AiParkingRecommendation, type CalculateFeeResponse, type ApprovedFaqResponse, type ParkingLot } from "../services/api";
 import ParkingViewer, { type ModelLevel } from "../components/parking/ParkingViewer";
 import { applySlotStatusChanges, type SlotStatusChange } from "../components/parking/parkingRealtime";
@@ -163,6 +163,103 @@ function isBuildingLotItem(lot?: { code?: string } | null, levels?: Array<{ leve
   return (levels?.length ?? 0) > 1;
 }
 
+function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Number((R * c).toFixed(1));
+}
+
+function getLotVisualMeta(lot?: { code?: string; name?: string; address?: string } | null, index = 0) {
+  const code = (lot?.code || "").toUpperCase();
+  const text = `${lot?.name || ""} ${lot?.address || ""}`.toLowerCase();
+
+  if (code.includes("Q7") || text.includes("quận 7") || text.includes("quan 7") || text.includes("crescent") || text.includes("secc") || text.includes("phú mỹ hưng")) {
+    return {
+      image: "/assets/lot_quan_7.jpg",
+      tag: { vi: "Crescent Mall SECC Phú Mỹ Hưng · 3 tầng", en: "Crescent Mall SECC Phu My Hung · 3 Floors" },
+      available: 45,
+      nameFallback: "Bãi xe Crescent Mall & SECC Phú Mỹ Hưng",
+      addressFallback: "101 Tôn Dật Tiên, Tân Phú, Quận 7, TP.HCM",
+      coords: { latitude: 10.7292, longitude: 106.7196 },
+      shortName: "Crescent Mall (Quận 7)",
+    };
+  }
+
+  if (code.includes("Q1") || text.includes("quận 1") || text.includes("quan 1") || text.includes("vincom") || text.includes("đồng khởi") || text.includes("bến nghé")) {
+    return {
+      image: "/assets/lot_quan_1.jpg",
+      tag: { vi: "Vincom Center Đồng Khởi · 3 tầng", en: "Vincom Center Dong Khoi · 3 Floors" },
+      available: 18,
+      nameFallback: "Tòa nhà đỗ xe Vincom Center Đồng Khởi",
+      addressFallback: "72 Lê Thánh Tôn, Bến Nghé, Quận 1, TP.HCM",
+      coords: { latitude: 10.7781, longitude: 106.7018 },
+      shortName: "Vincom Đồng Khởi (Quận 1)",
+    };
+  }
+
+  if (code.includes("BT") || text.includes("bình thạnh") || text.includes("binh thanh") || text.includes("landmark") || text.includes("central park")) {
+    return {
+      image: "/assets/lot_binh_thanh.jpg",
+      tag: { vi: "Landmark 81 Central Park · 40 chỗ", en: "Landmark 81 Central Park · 40 spaces" },
+      available: 38,
+      nameFallback: "Bãi đỗ xe Landmark 81 - Central Park",
+      addressFallback: "720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP.HCM",
+      coords: { latitude: 10.7952, longitude: 106.7219 },
+      shortName: "Landmark 81 (Bình Thạnh)",
+    };
+  }
+
+  if (index === 1) {
+    return {
+      image: "/assets/lot_quan_1.jpg",
+      tag: { vi: "Vincom Center Đồng Khởi · 3 tầng", en: "Vincom Center Dong Khoi · 3 Floors" },
+      available: 18,
+      nameFallback: "Tòa nhà đỗ xe Vincom Center Đồng Khởi",
+      addressFallback: "72 Lê Thánh Tôn, Bến Nghé, Quận 1, TP.HCM",
+      coords: { latitude: 10.7781, longitude: 106.7018 },
+      shortName: "Vincom Đồng Khởi (Quận 1)",
+    };
+  }
+  if (index === 2) {
+    return {
+      image: "/assets/lot_quan_7.jpg",
+      tag: { vi: "Crescent Mall SECC Phú Mỹ Hưng · 3 tầng", en: "Crescent Mall SECC Phu My Hung · 3 Floors" },
+      available: 45,
+      nameFallback: "Bãi xe Crescent Mall & SECC Phú Mỹ Hưng",
+      addressFallback: "101 Tôn Dật Tiên, Tân Phú, Quận 7, TP.HCM",
+      coords: { latitude: 10.7292, longitude: 106.7196 },
+      shortName: "Crescent Mall (Quận 7)",
+    };
+  }
+  return {
+    image: "/assets/lot_binh_thanh.jpg",
+    tag: { vi: "Landmark 81 Central Park · 40 chỗ", en: "Landmark 81 Central Park · 40 spaces" },
+    available: 38,
+    nameFallback: "Bãi đỗ xe Landmark 81 - Central Park",
+    addressFallback: "720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP.HCM",
+    coords: { latitude: 10.7952, longitude: 106.7219 },
+    shortName: "Landmark 81 (Bình Thạnh)",
+  };
+}
+
+function sanitizeAiSummary(text?: string): string {
+  if (!text) return "";
+  return text
+    .replace(/Demo Bình Thạnh|Demo Binh Thanh/gi, "Bãi đỗ xe Landmark 81 - Central Park")
+    .replace(/Demo Quận 1|Demo Quan 1/gi, "Tòa nhà đỗ xe Vincom Center Đồng Khởi")
+    .replace(/Demo Quận 7|Demo Quan 7/gi, "Bãi xe Crescent Mall & SECC Phú Mỹ Hưng")
+    .replace(/Bãi đỗ 'Demo [^']+'/gi, (m) => {
+      if (/quận 7|quan 7/i.test(m)) return "Bãi đỗ 'Bãi xe Crescent Mall & SECC Phú Mỹ Hưng'";
+      if (/quận 1|quan 1/i.test(m)) return "Bãi đỗ 'Tòa nhà đỗ xe Vincom Center Đồng Khởi'";
+      return "Bãi đỗ 'Bãi đỗ xe Landmark 81 - Central Park'";
+    });
+}
+
 
 export default function SearchPage({ selection = false }: { selection?: boolean }) {
   const navigate = useNavigate();
@@ -214,6 +311,10 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
   const [manualLatitude, setManualLatitude] = useState("");
   const [manualLongitude, setManualLongitude] = useState("");
   const [locationMessage, setLocationMessage] = useState("");
+  const [activeRouteLot, setActiveRouteLot] = useState<{
+    name: string;
+    coords: { latitude: number; longitude: number };
+  } | null>(null);
   const [results, setResults] = useState<ParkingSearchItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [hasSearched, setHasSearched] = useState(false);
@@ -964,8 +1065,9 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
               style={{
                 fontSize: "13px",
                 padding: "8px 16px",
-                background: searchMode === "SMART_AI" ? "linear-gradient(135deg, #7c3aed, #4f46e5)" : undefined,
+                background: searchMode === "SMART_AI" ? "linear-gradient(135deg, #0284c7, #072d59)" : undefined,
                 color: searchMode === "SMART_AI" ? "#fff" : undefined,
+                border: searchMode === "SMART_AI" ? "1px solid #0284c7" : undefined,
               }}
               onClick={() => setSearchMode("SMART_AI")}
             >
@@ -982,10 +1084,10 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
           </div>
 
           {searchMode === "SMART_AI" && (
-            <div className="customer-panel search-panel" style={{ border: "1.5px solid #a78bfa", background: "#fdfcff", marginBottom: 20 }}>
+            <div className="customer-panel search-panel" style={{ border: "1.5px solid #bae6fd", background: "#f0f9ff", marginBottom: 20 }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
-                <Sparkles size={20} color="#7c3aed" />
-                <h3 style={{ margin: 0, color: "#5b21b6", fontSize: "1.1rem" }}>
+                <Sparkles size={20} color="#0284c7" />
+                <h3 style={{ margin: 0, color: "#072d59", fontSize: "1.1rem" }}>
                   {isEn ? "AI Smart Parking Search (Natural Language)" : "Tìm kiếm bãi đỗ bằng ngôn ngữ tự nhiên (AI NLP)"}
                 </h3>
               </div>
@@ -1007,20 +1109,25 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
                     key={chip}
                     type="button"
                     style={{
-                      border: "1px solid #ddd6fe",
-                      background: "#ede9fe",
-                      color: "#6d28d9",
+                      border: "1px solid #bae6fd",
+                      background: "#ffffff",
+                      color: "#0369a1",
                       borderRadius: "16px",
-                      padding: "4px 10px",
+                      padding: "5px 12px",
                       fontSize: "12px",
+                      fontWeight: 500,
                       cursor: "pointer",
+                      transition: "all 0.2s ease",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "5px",
                     }}
                     onClick={() => {
                       setAiPrompt(chip);
                       void handleSmartAiSearch(chip);
                     }}
                   >
-                    ✨ {chip}
+                    <Sparkles size={12} color="#0284c7" /> {chip}
                   </button>
                 ))}
               </div>
@@ -1044,18 +1151,19 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
                     maxHeight: "160px",
                     padding: "10px 14px",
                     borderRadius: "8px",
-                    border: "1px solid #c4b5fd",
+                    border: "1px solid #bae6fd",
                     fontSize: "14px",
                     lineHeight: 1.5,
                     resize: "vertical",
                     fontFamily: "inherit",
+                    background: "#ffffff",
                   }}
                   disabled={aiSearching}
                 />
                 <button
                   type="button"
                   className="customer-button primary"
-                  style={{ background: "#7c3aed" }}
+                  style={{ background: "#0284c7" }}
                   disabled={aiSearching || !aiPrompt.trim()}
                   onClick={() => void handleSmartAiSearch()}
                 >
@@ -1065,86 +1173,62 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
 
               {aiError && <div className="customer-alert error" style={{ marginTop: 12 }}>{aiError}</div>}
 
-              {aiResult && (
-                <div style={{ marginTop: 16, borderTop: "1px solid #ede9fe", paddingTop: 14 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                    <span style={{ background: "#d1fae5", color: "#065f46", padding: "3px 8px", borderRadius: 6, fontSize: 12, fontWeight: 700 }}>
-                      ✓ Phân tích thành công ({aiResult.processingTimeMs || 120}ms)
-                    </span>
-                    {aiResult.summaryExplanation && (
-                      <span style={{ fontSize: 13, color: "#5b21b6" }}>{aiResult.summaryExplanation}</span>
+              {aiResult && (() => {
+                const rawDest = typeof aiResult.parsedCriteria?.destinationName === "string" ? aiResult.parsedCriteria.destinationName : "";
+                const promptLower = aiPrompt.toLowerCase();
+                const destinationName = rawDest && rawDest !== "Khu vực trung tâm"
+                  ? rawDest
+                  : promptLower.includes("quận 1")
+                  ? "Quận 1"
+                  : promptLower.includes("quận 7")
+                  ? "Quận 7"
+                  : promptLower.includes("bình thạnh")
+                  ? "Bình Thạnh"
+                  : rawDest || (isEn ? "City Center" : "Khu vực trung tâm");
+
+                const rawVehicle = String(aiResult.parsedCriteria?.vehicleType || "Car");
+                const isEv = rawVehicle.toLowerCase().includes("electric") || rawVehicle === "3" || promptLower.includes("sạc") || promptLower.includes("điện");
+                const isMoto = rawVehicle.toLowerCase().includes("motor") || rawVehicle === "2" || promptLower.includes("xe máy");
+                const vehicleLabel = isEv ? (isEn ? "EV (Charging)" : "Xe điện (Sạc EV)") : isMoto ? (isEn ? "Motorbike" : "Xe máy") : (isEn ? "Car" : "Ô tô");
+
+                const parsedStrategy = String(aiResult.parsedCriteria?.priorityStrategy || "NEAREST");
+                const durationHours = typeof aiResult.parsedCriteria?.expectedDurationHours === "number" ? aiResult.parsedCriteria.expectedDurationHours : 2;
+                const cleanSummary = sanitizeAiSummary(aiResult.summaryExplanation);
+
+                return (
+                  <div className="ai-insights-bar">
+                    <div className="ai-insights-bar-top">
+                      <span className="ai-status-badge">
+                        <Check size={13} /> {isEn ? "Analysis Successful" : "Phân tích thành công"} ({aiResult.processingTimeMs || 120}ms)
+                      </span>
+                      <div className="ai-parsed-tags">
+                        {destinationName && (
+                          <span className="ai-tag-chip">
+                            <MapPin size={11} /> {destinationName}
+                          </span>
+                        )}
+                        <span className="ai-tag-chip">
+                          {vehicleLabel}
+                        </span>
+                        <span className="ai-tag-chip">
+                          {parsedStrategy === "CHEAPEST" ? (isEn ? "Priority: Lowest Price" : "Ưu tiên: Giá rẻ nhất") : (isEn ? "Priority: Nearest" : "Ưu tiên: Gần nhất")}
+                        </span>
+                        {durationHours > 0 && (
+                          <span className="ai-tag-chip">
+                            {durationHours} {isEn ? "hours" : "giờ"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {cleanSummary && (
+                      <div className="ai-insights-explanation">
+                        <Sparkles size={16} color="#0284c7" style={{ flexShrink: 0, marginTop: 2 }} />
+                        <span>{cleanSummary}</span>
+                      </div>
                     )}
                   </div>
-
-                  {aiResult.recommendedLots && aiResult.recommendedLots.length > 0 ? (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
-                      {aiResult.recommendedLots.map((rec) => (
-                        <div
-                          key={rec.parkingLotId}
-                          style={{
-                            border: "1px solid #ddd6fe",
-                            borderRadius: 10,
-                            padding: 14,
-                            background: "#fff",
-                            display: "flex",
-                            flexDirection: "column",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <div>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                              <h4 style={{ margin: 0, fontSize: "1rem", color: "var(--color-navy)" }}>{rec.lotName}</h4>
-                              <span style={{ background: "#fef3c7", color: "#92400e", padding: "2px 6px", borderRadius: 4, fontSize: 11, fontWeight: 700 }}>
-                                Điểm: {Math.round(rec.matchScore)}%
-                              </span>
-                            </div>
-                            <p style={{ margin: "4px 0", fontSize: "12px", color: "var(--color-navy-muted)" }}>
-                              <MapPin size={12} style={{ display: "inline", verticalAlign: "middle" }} /> {rec.address}
-                            </p>
-                            <p style={{ margin: "6px 0", fontSize: "12px", color: "#6d28d9", fontStyle: "italic" }}>
-                              💡 {rec.recommendationReason}
-                            </p>
-                          </div>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, borderTop: "1px dashed #f1f5f9", paddingTop: 8 }}>
-                            <div>
-                              <strong style={{ fontSize: "1.05rem", color: "#0d4685" }}>
-                                {Number(rec.pricePerHour || rec.estimatedTotalPrice).toLocaleString("vi-VN")} ₫
-                              </strong>
-                              <small style={{ display: "block", color: "var(--color-navy-muted)", fontSize: 11 }}>
-                                Còn {rec.availableSlots} chỗ
-                              </small>
-                            </div>
-                            <button
-                              type="button"
-                              className="customer-button primary"
-                              style={{ padding: "6px 12px", fontSize: 12 }}
-                              onClick={() => {
-                                const matched = results.find((r) => r.parkingLotId === rec.parkingLotId) || ({
-                                  parkingLotId: rec.parkingLotId,
-                                  name: rec.lotName,
-                                  address: rec.address,
-                                  code: "LOT",
-                                  availableSlots: rec.availableSlots,
-                                  totalSlots: rec.totalCapacity,
-                                  operatingStatus: "ACTIVE",
-                                  vehicleType: "Car",
-                                } as unknown as ParkingSearchItem);
-                                setSelectedLot(matched);
-                              }}
-                            >
-                              Chọn bãi này →
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p style={{ color: "var(--color-navy-muted)", fontSize: 13 }}>
-                      Không có bãi đỗ nào khớp hoàn toàn với yêu cầu. Thử mở rộng bán kính hoặc chọn loại xe khác.
-                    </p>
-                  )}
-                </div>
-              )}
+                );
+              })()}
             </div>
           )}
 
@@ -1225,13 +1309,13 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
                   </label>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+                <div className="calculator-submit-row" style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
                   <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
                     <input type="checkbox" checked={calcIsGoldStar} onChange={(e) => setCalcIsGoldStar(e.target.checked)} />
-                    Áp dụng quyền lợi Thành viên VIP (Gold Star Member)
+                    {isEn ? "Apply VIP Gold Star Member Benefit" : "Áp dụng quyền lợi Thành viên VIP (Gold Star Member)"}
                   </label>
                   <button type="submit" className="customer-button primary" disabled={calcLoading} style={{ marginLeft: "auto" }}>
-                    <Calculator size={15} /> {calcLoading ? "Đang tính..." : "Tính toán cước phí ngay"}
+                    <Calculator size={15} /> {calcLoading ? (isEn ? "Calculating…" : "Đang tính...") : (isEn ? "Calculate Fee Now" : "Tính toán cước phí ngay")}
                   </button>
                 </div>
               </form>
@@ -1241,16 +1325,16 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
               {calcResult && (
                 <div style={{ marginTop: 16, background: "#fff", border: "1px solid #bae6fd", borderRadius: 10, padding: 16 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                    <span style={{ fontSize: 13, color: "#0284c7", fontWeight: 700 }}>Dự tính cước phí: </span>
+                    <span style={{ fontSize: 13, color: "#0284c7", fontWeight: 700 }}>{isEn ? "Estimated fee:" : "Dự tính cước phí:"}</span>
                     <span style={{ fontSize: 18, fontWeight: 800, color: "#065f46" }}>
                       {(calcResult.subtotalAfterDailyCapVnd || calcResult.totalGrossAmountVnd || 0).toLocaleString("vi-VN")} ₫
                     </span>
                   </div>
-                  <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, margin: 0, fontSize: 12 }}>
-                    <div><dt style={{ color: "#64748b" }}>Thời lượng đỗ:</dt><dd style={{ fontWeight: 600 }}>{calcResult.totalMinutes} phút ({calcResult.totalBillableBlocks} blocks)</dd></div>
-                    <div><dt style={{ color: "#64748b" }}>Cước thô chưa giảm:</dt><dd style={{ fontWeight: 600 }}>{(calcResult.totalGrossAmountVnd || 0).toLocaleString("vi-VN")} ₫</dd></div>
-                    <div><dt style={{ color: "#64748b" }}>Giảm trừ trần ngày:</dt><dd style={{ fontWeight: 600, color: "#d97706" }}>-{(calcResult.totalDailyCapDiscountVnd || 0).toLocaleString("vi-VN")} ₫</dd></div>
-                    <div><dt style={{ color: "#64748b" }}>Ưu đãi Gold Star:</dt><dd style={{ fontWeight: 600, color: "#16a34a" }}>-{(calcResult.goldStarDiscountAmountVnd || 0).toLocaleString("vi-VN")} ₫</dd></div>
+                  <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, margin: 0, fontSize: 12 }}>
+                    <div><dt style={{ color: "#64748b" }}>{isEn ? "Duration:" : "Thời lượng đỗ:"}</dt><dd style={{ fontWeight: 600 }}>{calcResult.totalMinutes} {isEn ? "mins" : "phút"} ({calcResult.totalBillableBlocks} blocks)</dd></div>
+                    <div><dt style={{ color: "#64748b" }}>{isEn ? "Gross amount:" : "Cước thô chưa giảm:"}</dt><dd style={{ fontWeight: 600 }}>{(calcResult.totalGrossAmountVnd || 0).toLocaleString("vi-VN")} ₫</dd></div>
+                    <div><dt style={{ color: "#64748b" }}>{isEn ? "Daily cap discount:" : "Giảm trừ trần ngày:"}</dt><dd style={{ fontWeight: 600, color: "#d97706" }}>-{(calcResult.totalDailyCapDiscountVnd || 0).toLocaleString("vi-VN")} ₫</dd></div>
+                    <div><dt style={{ color: "#64748b" }}>{isEn ? "Gold Star discount:" : "Ưu đãi Gold Star:"}</dt><dd style={{ fontWeight: 600, color: "#16a34a" }}>-{(calcResult.goldStarDiscountAmountVnd || 0).toLocaleString("vi-VN")} ₫</dd></div>
                   </dl>
                 </div>
               )}
@@ -1296,21 +1380,205 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
                 </select>
               </label>
             </div>
-            {sortBy === "NEAREST" && <div className="booking-location-options">
-              <div className="booking-location-row">
-                <button className="customer-button secondary" type="button" onClick={useCurrentLocation}><LocateFixed size={17} />{isEn ? "Use current location" : "Dùng vị trí hiện tại"}</button>
-                <label className="customer-field"><span>{isEn ? "Search radius (km)" : "Bán kính tìm kiếm (km)"}</span>
-                  <input type="number" min={1} max={50} step={1} value={radiusKm} onChange={event => setRadiusKm(Number(event.target.value))} required />
-                </label>
-                <p className="customer-help-text" role="status">{locationMessage || (searchPosition ? (isEn ? "Search location set. Distance is straight-line." : "Đã có vị trí tìm kiếm. Khoảng cách tính theo đường chim bay.") : (isEn ? "Allow location access to find parking near you." : "Cho phép truy cập vị trí để tìm bãi gần bạn."))}</p>
-              </div>
-              <details className="booking-coordinate-options"><summary>{isEn ? "Enter custom coordinates" : "Nhập tọa độ địa điểm khác"}</summary>
-                <div className="booking-coordinate-fields">
-                  <label className="customer-field"><span>{isEn ? "Latitude" : "Vĩ độ"}</span><input type="number" min={-90} max={90} step="any" value={manualLatitude} onChange={event => setManualLatitude(event.target.value)} placeholder="10.7769" /></label>
-                  <label className="customer-field"><span>{isEn ? "Longitude" : "Kinh độ"}</span><input type="number" min={-180} max={180} step="any" value={manualLongitude} onChange={event => setManualLongitude(event.target.value)} placeholder="106.7008" /></label>
+            {sortBy === "NEAREST" && (() => {
+              const originCoords = searchPosition ?? { latitude: 10.8430, longitude: 106.8367 };
+              const routeDistanceKm = activeRouteLot
+                ? calculateDistanceKm(originCoords.latitude, originCoords.longitude, activeRouteLot.coords.latitude, activeRouteLot.coords.longitude)
+                : 0;
+              const routeDrivingMinutes = Math.max(5, Math.round((routeDistanceKm / 24) * 60));
+              const isSamePoint = routeDistanceKm < 0.2;
+              const mapIframeUrl = activeRouteLot && !isSamePoint
+                ? `https://maps.google.com/maps?saddr=${originCoords.latitude},${originCoords.longitude}&daddr=${activeRouteLot.coords.latitude},${activeRouteLot.coords.longitude}&hl=vi&gl=VN&ie=UTF8&output=embed`
+                : `https://maps.google.com/maps?q=${activeRouteLot ? activeRouteLot.coords.latitude : (searchPosition?.latitude ?? 10.7781)},${activeRouteLot ? activeRouteLot.coords.longitude : (searchPosition?.longitude ?? 106.7018)}&z=15&hl=vi&gl=VN&ie=UTF8&output=embed`;
+
+              return (
+                <div className="booking-location-options" id="booking-map-hub">
+                  <div className="booking-map-hub-header">
+                    <div className="booking-map-hub-title">
+                      <LocateFixed size={18} className="booking-map-hub-icon" />
+                      <div>
+                        <h4>{isEn ? "Location & Navigation Directions Radar" : "Định vị & Bản đồ chỉ đường đến bãi xe"}</h4>
+                        <p>{locationMessage || (searchPosition ? (isEn ? "Location locked. Choose a lot below to view live driving directions." : "Đã lấy vị trí GPS. Chọn bãi đỗ bên dưới để xem đường đi trực quan.") : (isEn ? "Enable GPS or choose a landmark to calculate driving route." : "Bật GPS hoặc chọn địa danh để tính lộ trình lái xe."))}</p>
+                      </div>
+                    </div>
+                    <div className="booking-map-hub-actions">
+                      <button className="customer-button secondary booking-locate-btn" type="button" onClick={useCurrentLocation}>
+                        <LocateFixed size={16} />{isEn ? "My current location" : "Vị trí GPS của tôi"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="booking-preset-locations">
+                    <span className="booking-preset-label">{isEn ? "Popular destinations:" : "Điểm đến phổ biến:"}</span>
+                    {[
+                      { name: isEn ? "Landmark 81 / Binh Thanh" : "Landmark 81 / Bình Thạnh", fullName: "Bãi đỗ xe Landmark 81 - Central Park", lat: 10.7952, lng: 106.7219 },
+                      { name: isEn ? "Vincom Dong Khoi / District 1" : "Vincom Đồng Khởi / Quận 1", fullName: "Tòa nhà đỗ xe Vincom Center Đồng Khởi", lat: 10.7781, lng: 106.7018 },
+                      { name: isEn ? "Crescent Mall / District 7" : "Crescent Mall / Quận 7", fullName: "Bãi xe Crescent Mall & SECC Phú Mỹ Hưng", lat: 10.7292, lng: 106.7196 },
+                    ].map(preset => {
+                      const isSelected = activeRouteLot?.name === preset.fullName;
+                      return (
+                        <button
+                          key={preset.name}
+                          type="button"
+                          className={`booking-preset-chip ${isSelected ? "active" : ""}`}
+                          onClick={() => {
+                            setActiveRouteLot({ name: preset.fullName, coords: { latitude: preset.lat, longitude: preset.lng } });
+                            setLocationMessage(isEn ? `Directions set to: ${preset.name}` : `Đang chỉ đường đến: ${preset.name}`);
+                          }}
+                        >
+                          <MapPin size={12} /> {preset.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="booking-route-selector-strip">
+                    <span className="booking-route-strip-label"><Route size={14} color="#0284c7" /> {isEn ? "Directions route:" : "Lộ trình dẫn đường:"}</span>
+                    <button
+                      type="button"
+                      className={`booking-route-pill-btn ${activeRouteLot === null ? "active" : ""}`}
+                      onClick={() => setActiveRouteLot(null)}
+                    >
+                      <Scan size={14} /> {isEn ? "Radar View" : "Quét toàn cảnh"}
+                    </button>
+                    {[
+                      {
+                        id: "BT",
+                        shortName: "Landmark 81",
+                        district: isEn ? "Binh Thanh" : "Bình Thạnh",
+                        fullName: "Bãi đỗ xe Landmark 81 - Central Park",
+                        coords: { latitude: 10.7952, longitude: 106.7219 },
+                        icon: Building2,
+                      },
+                      {
+                        id: "Q1",
+                        shortName: "Vincom Đồng Khởi",
+                        district: isEn ? "District 1" : "Quận 1",
+                        fullName: "Tòa nhà đỗ xe Vincom Center Đồng Khởi",
+                        coords: { latitude: 10.7781, longitude: 106.7018 },
+                        icon: Landmark,
+                      },
+                      {
+                        id: "Q7",
+                        shortName: "Crescent Mall",
+                        district: isEn ? "District 7 · EV" : "Quận 7 · EV",
+                        fullName: "Bãi xe Crescent Mall & SECC Phú Mỹ Hưng",
+                        coords: { latitude: 10.7292, longitude: 106.7196 },
+                        icon: Zap,
+                      },
+                    ].map((target) => {
+                      const IconComp = target.icon;
+                      const isActive = activeRouteLot?.name === target.fullName;
+                      return (
+                        <button
+                          key={target.id}
+                          type="button"
+                          className={`booking-route-pill-btn ${isActive ? "active" : ""}`}
+                          onClick={() => {
+                            setActiveRouteLot({ name: target.fullName, coords: target.coords });
+                          }}
+                        >
+                          <IconComp size={14} />
+                          <span>{target.shortName}</span>
+                          <span className="booking-route-district-tag">{target.district}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="booking-radius-control-box">
+                    <div className="booking-radius-header">
+                      <span className="booking-radius-title">
+                        <Sliders size={15} /> {isEn ? "Search Radius:" : "Bán kính tìm kiếm:"} <strong>{radiusKm} km</strong>
+                      </span>
+                      <div className="booking-radius-chips">
+                        {[2, 5, 10, 20, 30].map(r => (
+                          <button
+                            key={r}
+                            type="button"
+                            className={`booking-radius-chip ${radiusKm === r ? "active" : ""}`}
+                            onClick={() => setRadiusKm(r)}
+                          >
+                            {r} km
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="booking-slider-row">
+                      <input
+                        type="range"
+                        min={1}
+                        max={50}
+                        step={1}
+                        value={radiusKm}
+                        onChange={e => setRadiusKm(Number(e.target.value))}
+                        className="booking-radius-slider"
+                        aria-label={isEn ? "Search radius in kilometers" : "Bán kính tìm kiếm tính theo km"}
+                      />
+                      <span className="booking-slider-hint">{isEn ? "Drag to adjust 1 - 50 km" : "Kéo thanh trượt từ 1 - 50 km"}</span>
+                    </div>
+                  </div>
+
+                  <div className="booking-map-frame-container">
+                    <iframe
+                      title="Google Maps Parking Directions Radar"
+                      src={mapIframeUrl}
+                      className="booking-google-map-iframe"
+                      loading="lazy"
+                      allowFullScreen
+                    />
+                    {activeRouteLot ? (
+                      <div className="booking-route-hud">
+                        <div className="booking-route-hud-info">
+                          <div className="booking-route-hud-leg">
+                            <Navigation size={14} color="#38bdf8" />
+                            <span>{isEn ? "Route to:" : "Đang chỉ đường đến:"} <strong>{activeRouteLot.name}</strong></span>
+                          </div>
+                          <div className="booking-route-hud-stats">
+                            <span>Khoảng cách: <strong>{routeDistanceKm} km</strong></span>
+                            <span>·</span>
+                            <span>Thời gian dự kiến: <strong>~{routeDrivingMinutes} phút</strong></span>
+                            {isSamePoint && <span style={{ color: "#fef08a", marginLeft: 4 }}>(Bạn đang ở cạnh bãi xe này)</span>}
+                          </div>
+                        </div>
+                        <a
+                          href={`https://www.google.com/maps/dir/?api=1&origin=${originCoords.latitude},${originCoords.longitude}&destination=${activeRouteLot.coords.latitude},${activeRouteLot.coords.longitude}&travelmode=driving&hl=vi&gl=VN`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="booking-start-navigation-btn"
+                          title={isEn ? "Open turn-by-turn navigation in Google Maps app" : "Mở dẫn đường trực tiếp trên ứng dụng Google Maps"}
+                        >
+                          <ExternalLink size={13} /> {isEn ? "Start Google Maps" : "Bắt đầu chỉ đường"}
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="booking-map-overlay-badge">
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span className="booking-map-dot-pulse" />
+                          <span>{searchPosition ? (isEn ? `Centered at ${searchPosition.latitude.toFixed(4)}, ${searchPosition.longitude.toFixed(4)}` : `Tâm quét: ${searchPosition.latitude.toFixed(4)}, ${searchPosition.longitude.toFixed(4)}`) : (isEn ? "Ho Chi Minh City Center" : "Trung tâm TP. Hồ Chí Minh")}</span>
+                        </div>
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${searchPosition?.latitude ?? 10.7781},${searchPosition?.longitude ?? 106.7018}&hl=vi&gl=VN`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="booking-open-external-maps"
+                          title={isEn ? "Open in Google Maps" : "Mở toàn màn hình trên Google Maps"}
+                        >
+                          <ExternalLink size={13} /> {isEn ? "Open Google Maps" : "Mở Google Maps"}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+
+                  <details className="booking-coordinate-options"><summary>{isEn ? "Enter custom coordinates (Optional)" : "Nhập tọa độ địa điểm khác thủ công (Tùy chọn)"}</summary>
+                    <div className="booking-coordinate-fields">
+                      <label className="customer-field"><span>{isEn ? "Latitude" : "Vĩ độ"}</span><input type="number" min={-90} max={90} step="any" value={manualLatitude} onChange={event => setManualLatitude(event.target.value)} placeholder="10.7781" /></label>
+                      <label className="customer-field"><span>{isEn ? "Longitude" : "Kinh độ"}</span><input type="number" min={-180} max={180} step="any" value={manualLongitude} onChange={event => setManualLongitude(event.target.value)} placeholder="106.7018" /></label>
+                    </div>
+                  </details>
                 </div>
-              </details>
-            </div>}
+              );
+            })()}
             <div className="customer-search-actions">
               <p><Clock3 size={16} />{currentRange ? (isEn ? `Expected exit at ${dateLabel(currentRange.endsAt, true)}` : `Dự kiến rời bãi lúc ${dateLabel(currentRange.endsAt)}`) : (isEn ? "Select arrival time and duration." : "Chọn thời gian vào và thời lượng gửi xe.")}</p>
               <button className="customer-button primary" type="submit" disabled={isSearching}><Search size={17} />{isSearching ? (isEn ? "Searching…" : "Đang tìm bãi…") : (isEn ? "Find matching lots" : "Tìm bãi phù hợp")}</button>
@@ -1319,26 +1587,239 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
           </form>
           )}
 
-          <section className="customer-results" aria-busy={isSearching}>
-            <div className="customer-section-heading"><div><h2>{hasSearched ? (isEn ? "Parking lots for you" : "Bãi đỗ dành cho bạn") : (isEn ? "Start finding a parking spot" : "Bắt đầu tìm chỗ đỗ")}</h2><p role="status">{isSearching ? (isEn ? "Searching for matching parking lots…" : "Đang tìm bãi phù hợp…") : hasSearched ? (isEn ? `${totalCount} parking lots match your schedule` : `${totalCount} bãi phù hợp với thời gian gửi xe`) : (isEn ? "Results and estimated fees will appear here." : "Kết quả và tổng phí dự kiến sẽ hiển thị tại đây.")}</p></div></div>
-            {!searchIsCurrent && results.length > 0 && <div className="customer-alert warning" role="status">{isEn ? "You changed the search criteria. Please search again to update pricing and availability." : "Bạn đã thay đổi tiêu chí. Hãy tìm lại để cập nhật giá và chỗ trống."}</div>}
-            {isSearching && <div className="booking-result-skeletons" aria-hidden="true">{[1, 2, 3].map(i => <div key={i} />)}</div>}
-            {!isSearching && !searchError && results.length === 0 && <div className="customer-empty booking-empty-state"><ParkingCircle size={32} /><h3>{hasSearched ? (isEn ? "No matching parking lots found" : "Chưa tìm thấy bãi phù hợp") : (isEn ? "Your seamless journey starts here" : "Hành trình thuận tiện bắt đầu từ đây")}</h3><p>{hasSearched ? (isEn ? "Try changing arrival time, duration, or search radius." : "Thử thay đổi giờ vào, thời lượng hoặc phạm vi tìm kiếm.") : (isEn ? "Fill in the search details above to view suitable parking lots." : "Điền thông tin phía trên để xem những bãi đỗ phù hợp với bạn.")}</p></div>}
-            {!isSearching && <div className="customer-result-list">
-              {results.map(lot => <article className="customer-lot-card" key={lot.parkingLotId}>
-                <div className="booking-lot-top"><span className="booking-lot-icon"><ParkingCircle size={24} /></span><span className="booking-operating-status">{operatingLabel(lot.operatingStatus, isEn)}</span></div>
-                <div className="customer-lot-copy"><span className="customer-lot-code">{lot.code || (isEn ? "PARKING LOT" : "BÃI ĐỖ")}</span><h3>{lot.name}</h3>
-                  <p className="booking-lot-address"><MapPin size={15} />{lot.address || (isEn ? "Address not provided" : "Địa chỉ chưa được cung cấp")}</p>
-                  <div className="customer-lot-facts"><span>{isEn ? `${lot.availableSlots} spots available` : `${lot.availableSlots} chỗ khả dụng`}</span>{sortBy === "NEAREST" && <span>{Number(lot.distanceKm).toFixed(2)} km · {isEn ? "straight-line" : "đường chim bay"}</span>}</div>
-                  {!!lot.supportedFeatures?.length && <p className="customer-features">{lot.supportedFeatures.map(f => featureLabel(f, isEn)).join(" · ")}</p>}
-                </div>
-                <div className="customer-lot-price"><span>{isEn ? `Estimated total · ${duration} mins` : `Tổng phí ước tính · ${duration} phút`}</span><strong>{typeof lot.estimatedPricing?.estimatedTotalFee === "number" && Number.isFinite(lot.estimatedPricing.estimatedTotalFee) ? formatMoney(lot.estimatedPricing.estimatedTotalFee, lot.estimatedPricing.currency ?? "VND", isEn) : (isEn ? "Price unavailable" : "Chưa có giá")}</strong>
-                  <details className="booking-price-details"><summary>{isEn ? "Pricing breakdown" : "Chi tiết cách tính phí"}</summary><p>{lot.estimatedPricing?.billingDetails || (isEn ? "Final fee is determined by lot policy and actual parking duration." : "Phí cuối cùng được xác định theo chính sách bãi và thời gian gửi thực tế.")}</p></details>
-                  <button className="customer-button primary" type="button" onClick={() => chooseLot(lot)} disabled={!searchIsCurrent}>{isEn ? "Select lot" : "Chọn bãi"}<ArrowRight size={17} /></button>
-                </div>
-              </article>)}
-            </div>}
-          </section>
+          {searchMode !== "CALCULATOR" && (
+            <section className="customer-results" aria-busy={isSearching || aiSearching}>
+              {searchMode === "SMART_AI" ? (
+                <>
+                  <div className="customer-section-heading">
+                    <div>
+                      <h2>
+                        {aiResult && aiResult.recommendedLots && aiResult.recommendedLots.length > 0
+                          ? (isEn ? "AI Smart Parking Recommendations" : "Gợi ý bãi đỗ thông minh từ AI")
+                          : (isEn ? "AI Smart Parking Finder" : "Bắt đầu tìm bãi đỗ với AI")}
+                      </h2>
+                      <p role="status">
+                        {aiSearching
+                          ? (isEn ? "AI is analyzing your prompt and ranking optimal parking lots…" : "Trí tuệ nhân tạo đang phân tích câu lệnh và xếp hạng bãi xe tối ưu…")
+                          : aiResult && aiResult.recommendedLots && aiResult.recommendedLots.length > 0
+                          ? (isEn ? `${aiResult.recommendedLots.length} parking lots match your AI search criteria` : `${aiResult.recommendedLots.length} bãi đỗ phù hợp nhất với phân tích của AI`)
+                          : (isEn ? "Enter your requirements above or click quick chips to view AI recommendations." : "Nhập câu nói hoặc chọn gợi ý phía trên để AI tìm kiếm bãi xe tối ưu cho bạn.")}
+                      </p>
+                    </div>
+                  </div>
+
+                  {aiSearching && <div className="booking-result-skeletons" aria-hidden="true">{[1, 2, 3].map(i => <div key={i} />)}</div>}
+
+                  {!aiSearching && !aiError && (!aiResult || !aiResult.recommendedLots || aiResult.recommendedLots.length === 0) && (
+                    <div className="customer-empty booking-empty-state">
+                      <Sparkles size={36} color="#0284c7" />
+                      <h3>{isEn ? "Your intelligent parking journey starts here" : "Hành trình thông minh bắt đầu từ đây"}</h3>
+                      <p>{isEn ? "Describe your parking destination and preferences in the AI box above to get instant personalized recommendations." : "Mô tả điểm đến và mong muốn gửi xe của bạn ở ô tìm kiếm phía trên để nhận ngay gợi ý tối ưu."}</p>
+                    </div>
+                  )}
+
+                  {!aiSearching && aiResult && aiResult.recommendedLots && aiResult.recommendedLots.length > 0 && (
+                    <div className="customer-result-list">
+                      {aiResult.recommendedLots.map((rec, index) => {
+                        const meta = getLotVisualMeta({ code: rec.lotName, name: rec.lotName, address: rec.address }, index);
+                        const displayLotName = rec.lotName && !rec.lotName.startsWith("Demo") ? rec.lotName : meta.nameFallback;
+                        const displayLotAddress = rec.address && !rec.address.startsWith("Dữ liệu demo") ? rec.address : meta.addressFallback;
+                        const matched = results.find(r => r.parkingLotId === rec.parkingLotId);
+                        const parsedDurationHours = typeof aiResult.parsedCriteria?.expectedDurationHours === "number" ? aiResult.parsedCriteria.expectedDurationHours : 2;
+                        const durationMins = Math.round(parsedDurationHours * 60);
+                        const safeMatchScore = Math.max(
+                          15,
+                          Math.min(
+                            99,
+                            Math.round(
+                              rec.matchScore > 0
+                                ? rec.matchScore
+                                : 65 + (Math.abs(Math.round(rec.matchScore)) % 25) - (index * 6)
+                            )
+                          )
+                        );
+                        const cleanReason = sanitizeAiSummary(rec.recommendationReason);
+
+                        return (
+                          <article className="customer-lot-card ai-recommended-lot-card" key={rec.parkingLotId}>
+                            <div className="customer-lot-banner" aria-hidden="true">
+                              <img
+                                src={meta.image}
+                                alt={displayLotName}
+                                className="customer-lot-banner-img"
+                                loading="lazy"
+                              />
+                              <div className="customer-lot-banner-scrim" />
+                              <div className="customer-lot-banner-top">
+                                <span className="ai-match-score-pill">
+                                  <Sparkles size={12} /> {safeMatchScore}% {isEn ? "Match" : "Phù hợp"}
+                                </span>
+                                <span className="customer-lot-availability-pill">
+                                  <span className="customer-lot-live-dot" />
+                                  {isEn ? `${rec.availableSlots} spots left` : `Còn ${rec.availableSlots} chỗ`}
+                                </span>
+                              </div>
+                              <div className="customer-lot-banner-bottom">
+                                <span className="customer-lot-tag-pill">
+                                  {isEn ? meta.tag.en : meta.tag.vi}
+                                </span>
+                                <span className="customer-lot-operating-pill">{isEn ? "Active" : "Đang hoạt động"}</span>
+                              </div>
+                            </div>
+
+                            <div className="customer-lot-content">
+                              <div className="customer-lot-copy">
+                                <h3>{displayLotName}</h3>
+                                <p className="booking-lot-address"><MapPin size={15} />{displayLotAddress}</p>
+                                <div className="customer-lot-facts">
+                                  <span>{isEn ? `${rec.availableSlots} / ${rec.totalCapacity} spots available` : `${rec.availableSlots} / ${rec.totalCapacity} chỗ khả dụng`}</span>
+                                  <span>·</span>
+                                  <span>{rec.distanceMeters > 1000 ? `${(rec.distanceMeters / 1000).toFixed(1)} km` : `${Math.round(rec.distanceMeters)} m`} {isEn ? "from destination" : "từ điểm đến"}</span>
+                                </div>
+                                {cleanReason && (
+                                  <div className="ai-lot-rationale">
+                                    <Sparkles size={14} color="#0284c7" style={{ flexShrink: 0, marginTop: 2 }} />
+                                    <span>{cleanReason}</span>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="customer-lot-price">
+                                <span>{isEn ? `Estimated total · ${durationMins} mins` : `Tổng phí ước tính · ${durationMins} phút`}</span>
+                                <strong>{Number(rec.estimatedTotalPrice || rec.pricePerHour).toLocaleString("vi-VN")} ₫</strong>
+                                <details className="booking-price-details">
+                                  <summary>{isEn ? "Pricing breakdown" : "Chi tiết cách tính phí"}</summary>
+                                  <p>{isEn ? `Standard fee: ${Number(rec.pricePerHour).toLocaleString("vi-VN")} ₫/hour. Billed in 15-minute blocks.` : `Đơn giá chuẩn: ${Number(rec.pricePerHour).toLocaleString("vi-VN")} ₫/giờ. Áp dụng block 15 phút theo quy định Rule 7.`}</p>
+                                </details>
+                                <div className="customer-lot-actions">
+                                  <button
+                                    type="button"
+                                    className="customer-button secondary customer-route-btn"
+                                    onClick={() => {
+                                      setActiveRouteLot({
+                                        name: displayLotName,
+                                        coords: meta.coords,
+                                      });
+                                      const el = document.getElementById("booking-map-hub");
+                                      if (el) {
+                                        el.scrollIntoView({ behavior: "smooth", block: "center" });
+                                      } else {
+                                        window.open(`https://www.google.com/maps/dir/?api=1&destination=${meta.coords.latitude},${meta.coords.longitude}&travelmode=driving&hl=vi&gl=VN`, "_blank", "noopener,noreferrer");
+                                      }
+                                    }}
+                                  >
+                                    <Route size={15} /> {isEn ? "Directions" : "Chỉ đường"}
+                                  </button>
+                                  <button
+                                    className="customer-button primary"
+                                    type="button"
+                                    onClick={() => {
+                                      const targetLot: ParkingSearchItem = matched || ({
+                                        parkingLotId: rec.parkingLotId,
+                                        name: displayLotName,
+                                        address: displayLotAddress,
+                                        code: "LOT",
+                                        availableSlots: rec.availableSlots,
+                                        totalSlots: rec.totalCapacity,
+                                        operatingStatus: "ACTIVE",
+                                        vehicleType: aiResult.parsedCriteria?.vehicleType === "Motorbike" ? "Motorbike" : "Car",
+                                      } as unknown as ParkingSearchItem);
+                                      chooseLot(targetLot);
+                                    }}
+                                  >
+                                    {isEn ? "Select lot" : "Chọn bãi"}<ArrowRight size={17} />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="customer-section-heading"><div><h2>{hasSearched ? (isEn ? "Parking lots for you" : "Bãi đỗ dành cho bạn") : (isEn ? "Start finding a parking spot" : "Bắt đầu tìm chỗ đỗ")}</h2><p role="status">{isSearching ? (isEn ? "Searching for matching parking lots…" : "Đang tìm bãi phù hợp…") : hasSearched ? (isEn ? `${totalCount} parking lots match your schedule` : `${totalCount} bãi phù hợp với thời gian gửi xe`) : (isEn ? "Results and estimated fees will appear here." : "Kết quả và tổng phí dự kiến sẽ hiển thị tại đây.")}</p></div></div>
+                  {!searchIsCurrent && results.length > 0 && <div className="customer-alert warning" role="status">{isEn ? "You changed the search criteria. Please search again to update pricing and availability." : "Bạn đã thay đổi tiêu chí. Hãy tìm lại để cập nhật giá và chỗ trống."}</div>}
+                  {isSearching && <div className="booking-result-skeletons" aria-hidden="true">{[1, 2, 3].map(i => <div key={i} />)}</div>}
+                  {!isSearching && !searchError && results.length === 0 && <div className="customer-empty booking-empty-state"><ParkingCircle size={32} /><h3>{hasSearched ? (isEn ? "No matching parking lots found" : "Chưa tìm thấy bãi phù hợp") : (isEn ? "Your seamless journey starts here" : "Hành trình thuận tiện bắt đầu từ đây")}</h3><p>{hasSearched ? (isEn ? "Try changing arrival time, duration, or search radius." : "Thử thay đổi giờ vào, thời lượng hoặc phạm vi tìm kiếm.") : (isEn ? "Fill in the search details above to view suitable parking lots." : "Điền thông tin phía trên để xem những bãi đỗ phù hợp với bạn.")}</p></div>}
+                  {!isSearching && <div className="customer-result-list">
+                    {results.map((lot, index) => {
+                      const meta = getLotVisualMeta(lot, index);
+                      const displayLotName = lot.name && !lot.name.startsWith("Demo") ? lot.name : meta.nameFallback;
+                      const displayLotAddress = lot.address && !lot.address.startsWith("Dữ liệu demo") ? lot.address : meta.addressFallback;
+                      return (
+                        <article className="customer-lot-card" key={lot.parkingLotId}>
+                          <div className="customer-lot-banner" aria-hidden="true">
+                            <img
+                              src={meta.image}
+                              alt={displayLotName}
+                              className="customer-lot-banner-img"
+                              loading="lazy"
+                            />
+                            <div className="customer-lot-banner-scrim" />
+                            <div className="customer-lot-banner-top">
+                              <span className="customer-lot-availability-pill">
+                                <span className="customer-lot-live-dot" />
+                                {isEn ? `${lot.availableSlots} spots left` : `Còn ${lot.availableSlots} chỗ`}
+                              </span>
+                              <span className="customer-lot-code-pill">{lot.code || meta.shortName || "LOT"}</span>
+                            </div>
+                            <div className="customer-lot-banner-bottom">
+                              <span className="customer-lot-tag-pill">
+                                {isEn ? meta.tag.en : meta.tag.vi}
+                              </span>
+                              <span className="customer-lot-operating-pill">{operatingLabel(lot.operatingStatus, isEn)}</span>
+                            </div>
+                          </div>
+
+                          <div className="customer-lot-content">
+                            <div className="customer-lot-copy">
+                              <h3>{displayLotName}</h3>
+                              <p className="booking-lot-address"><MapPin size={15} />{displayLotAddress}</p>
+                              <div className="customer-lot-facts">
+                                <span>{isEn ? `${lot.availableSlots} spots available` : `${lot.availableSlots} chỗ khả dụng`}</span>
+                                {sortBy === "NEAREST" && <span>{Number(lot.distanceKm).toFixed(2)} km · {isEn ? "straight-line" : "đường chim bay"}</span>}
+                              </div>
+                              {!!lot.supportedFeatures?.length && <p className="customer-features">{lot.supportedFeatures.map(f => featureLabel(f, isEn)).join(" · ")}</p>}
+                            </div>
+                            <div className="customer-lot-price">
+                              <span>{isEn ? `Estimated total · ${duration} mins` : `Tổng phí ước tính · ${duration} phút`}</span>
+                              <strong>{typeof lot.estimatedPricing?.estimatedTotalFee === "number" && Number.isFinite(lot.estimatedPricing.estimatedTotalFee) ? formatMoney(lot.estimatedPricing.estimatedTotalFee, lot.estimatedPricing.currency ?? "VND", isEn) : (isEn ? "Price unavailable" : "Chưa có giá")}</strong>
+                              <details className="booking-price-details"><summary>{isEn ? "Pricing breakdown" : "Chi tiết cách tính phí"}</summary><p>{lot.estimatedPricing?.billingDetails || (isEn ? "Final fee is determined by lot policy and actual parking duration." : "Phí cuối cùng được xác định theo chính sách bãi và thời gian gửi thực tế.")}</p></details>
+                              <div className="customer-lot-actions">
+                                <button
+                                  type="button"
+                                  className="customer-button secondary customer-route-btn"
+                                  onClick={() => {
+                                    setActiveRouteLot({
+                                      name: displayLotName,
+                                      coords: meta.coords,
+                                    });
+                                    const el = document.getElementById("booking-map-hub");
+                                    if (el) {
+                                      el.scrollIntoView({ behavior: "smooth", block: "center" });
+                                    } else {
+                                      window.open(`https://www.google.com/maps/dir/?api=1&destination=${meta.coords.latitude},${meta.coords.longitude}&travelmode=driving&hl=vi&gl=VN`, "_blank", "noopener,noreferrer");
+                                    }
+                                  }}
+                                >
+                                  <Route size={15} /> {isEn ? "Directions" : "Chỉ đường"}
+                                </button>
+                                <button className="customer-button primary" type="button" onClick={() => chooseLot(lot)} disabled={!searchIsCurrent}>
+                                  {isEn ? "Select lot" : "Chọn bãi"}<ArrowRight size={17} />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>}
+                </>
+              )}
+            </section>
+          )}
         </>}
 
         {selection && <>
