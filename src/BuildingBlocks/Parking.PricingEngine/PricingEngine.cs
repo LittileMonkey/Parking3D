@@ -149,7 +149,8 @@ namespace Parking.Pricing;
                 ExitTime: exitTime,
                 IsGoldStarMember: isGoldStarMember,
                 GoldStarDiscountRate: policy.GoldStarDiscountRate,
-                DailyBreakdowns: dayBreakdowns
+                DailyBreakdowns: dayBreakdowns,
+                MinimumChargeVnd: policy.MinimumChargeVnd
             );
         }
 

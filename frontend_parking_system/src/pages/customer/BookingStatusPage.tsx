@@ -200,12 +200,20 @@ export default function BookingStatusPage({ bookingIdOverride, returnResult, ret
           <section className={`booking-payment-summary${paid ? " is-paid" : ""}`}>
             <div><span>{paid ? (isEn ? "Amount paid" : "Số tiền đã thanh toán") : (isEn ? "Estimated total fee" : "Tổng phí ước tính")}</span><strong className={paid ? "booking-paid-amount" : ""}>{paid ? typeof amount === "number" && Number.isFinite(amount) ? money(amount, currency, isEn) : (isEn ? "Updating" : "Đang cập nhật") : typeof booking.estimatedAmount === "number" ? money(booking.estimatedAmount, "VND", isEn) : (isEn ? "Price unavailable" : "Chưa có giá")}</strong></div>
             {paid && <span className="booking-paid-badge"><Check size={14} />{isEn ? "Paid" : "Đã thanh toán"}</span>}
+            {(booking.minimumChargeVnd ?? 0) > 0 && <p className="booking-vehicle-note">{isEn ? "Minimum fee per visit after discounts: " : "Phí tối thiểu mỗi lượt sau ưu đãi: "}{money(booking.minimumChargeVnd ?? 0, "VND", isEn)}</p>}
           </section>
           {(payment || receipt) && <dl className="booking-transaction-facts"><div><dt>{isEn ? "Method" : "Phương thức"}</dt><dd>{paymentMethod ? methodLabel(paymentMethod, isEn) : (isEn ? "Updating" : "Đang cập nhật")}</dd></div>{receipt && <><div><dt>{isEn ? "Receipt no." : "Mã biên lai"}</dt><dd>{receipt.receiptNumber}</dd></div><div><dt>{isEn ? "Paid at" : "Thanh toán lúc"}</dt><dd>{date(receipt.paidAt, isEn)}</dd></div></>}{(receipt?.bankTransactionNo || (returnResult?.isSuccess && returnResult.transactionNo)) && <div><dt>{isEn ? "Bank transaction no." : "Mã giao dịch ngân hàng"}</dt><dd>{receipt?.bankTransactionNo || returnResult?.transactionNo}</dd></div>}</dl>}
           {statusError && <p className="customer-help-text" role="status">{isEn ? "Could not load full payment/receipt details." : "Chưa tải được đầy đủ thông tin thanh toán/biên lai."} {statusError}</p>}
           {pending && !paid && <div className="booking-hold-note" role="status"><Clock3 size={18} /><div>{remaining === null ? (isEn ? "Checking hold expiration" : "Đang kiểm tra thời hạn giữ chỗ") : remaining === 0 ? (isEn ? "Hold time expired" : "Đã qua thời hạn giữ chỗ") : (isEn ? `Hold remaining ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}` : `Giữ chỗ còn ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`)}<span>{remaining === 0 ? (isEn ? "Checking final status. Please do not pay again." : "Đang kiểm tra trạng thái cuối cùng. Vui lòng không thanh toán lại.") : (isEn ? "Complete payment within this window to receive your entry ticket." : "Hoàn tất thanh toán trong thời gian này để nhận vé vào bãi.")}</span></div></div>}
           {pending && !reconciling && !holdExpired && <section className="booking-payment-options">
             <h3>{paymentFailed ? (isEn ? "Payment incomplete" : "Thanh toán chưa hoàn tất") : (isEn ? "Choose payment method" : "Chọn cách thanh toán")}</h3>
+            {typeof booking.estimatedAmount === "number" && booking.estimatedAmount > 0 && booking.estimatedAmount < 10_000 && (
+              <p className="customer-alert warning" role="status">
+                {isEn
+                  ? "NCB test cards on VNPay Sandbox require at least VND 10,000. This booking is below that limit. Choose cash before starting a payment, or use another supported payment method. Your parking fee stays unchanged."
+                  : "Thẻ NCB trên VNPay Sandbox yêu cầu tối thiểu 10.000đ. Đơn này thấp hơn hạn mức đó. Bạn có thể chọn tiền mặt trước khi tạo giao dịch, hoặc dùng phương thức thanh toán khác được hỗ trợ. Phí đỗ xe vẫn giữ nguyên."}
+              </p>
+            )}
             {awaitingPayment ? (
               <div style={{ background: "#f0f9ff", border: "1.5px solid #0284c7", borderRadius: 12, padding: "14px 16px", display: "grid", gap: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#0369a1", fontWeight: 700, fontSize: 14 }}>

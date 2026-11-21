@@ -14,6 +14,7 @@ namespace Parking.Parking.Application.Interfaces
         public string Currency { get; set; } = "VND";
         public string Details { get; set; } = string.Empty;
         public bool HasPricing { get; set; } = true;
+        public long MinimumChargeVnd { get; set; }
     }
     // Hợp đồng dịch vụ tính giá
     public interface IEstimatedPriceService
@@ -22,6 +23,7 @@ namespace Parking.Parking.Application.Interfaces
             Guid lotId,
             string vehicleType,
             DateTime startTime,
-            int expectedDurationMinutes);
+            int expectedDurationMinutes,
+            CancellationToken cancellationToken = default);
     }
 }

@@ -78,8 +78,10 @@ public sealed class OperationsRepository(NpgsqlDataSource db, IParkingCacheServi
         if (request.Rules is null) throw new ServiceException(400, "Pricing rules are required.");
         if (request.Rules.RateVnd <= 0 || request.Rules.DailyCapVnd <= 0)
             throw new ServiceException(400, "Published booking rates and daily caps must be positive.");
+        if (request.Rules.MinimumChargeVnd < 10000)
+            throw new ServiceException(400, "Minimum charge for a new pricing version must be at least 10,000 VND per visit.");
         try { request.Rules.Validate(); }
-        catch (ArgumentException) { throw new ServiceException(400, "Invalid pricing rules; multiplier must be between 1 and 1.5."); }
+        catch (ArgumentException) { throw new ServiceException(400, "Invalid pricing rules; check the block, multiplier and minimum charge against the daily cap."); }
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
         await using (var gate = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended(@key,0))", conn, tx))

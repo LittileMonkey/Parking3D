@@ -56,3 +56,23 @@ test('incident pagination keeps totalCount and sends search filters to server', 
   assert.equal(result.totalCount, 26);
   assert.equal(result.items[0].status, 'Cancelled');
 });
+
+test('search carries the per-visit minimum and final quote through lot normalization', async () => {
+  const { api } = client(async () => Response.json({ result: { totalCount: 1, items: [{
+    parkingLotId: '22222222-2222-4222-8222-222222222222', code: 'DEMO-BT', name: 'Landmark', address: '',
+    estimatedPricing: { estimatedTotalFee: 10000, minimumChargeVnd: 10000, currency: 'VND', billingDetails: 'minimum after grace' }
+  }] }, isSuccess: true, statusCode: 200 }));
+  const result = await api.searchParkingLots({ vehicleType: 'MOTORBIKE', startTime: '2026-11-21T08:00:00Z', expectedDuration: 120, sortBy: 'CHEAPEST' });
+  assert.equal(result.items[0].estimatedPricing.estimatedTotalFee, 10000);
+  assert.equal(result.items[0].estimatedPricing.minimumChargeVnd, 10000);
+});
+
+test('search accepts legacy quotes without a minimum instead of inventing a new charge', async () => {
+  const { api } = client(async () => Response.json({ result: { totalCount: 1, items: [{
+    parkingLotId: 'legacy-lot', code: 'LEGACY', name: 'Legacy lot', address: '',
+    estimatedPricing: { estimatedTotalFee: 7000, currency: 'VND' }
+  }] }, isSuccess: true }));
+  const result = await api.searchParkingLots({ vehicleType: 'MOTORBIKE', startTime: '2026-11-21T08:00:00Z', expectedDuration: 120, sortBy: 'CHEAPEST' });
+  assert.equal(result.items[0].estimatedPricing.estimatedTotalFee, 7000);
+  assert.equal(result.items[0].estimatedPricing.minimumChargeVnd, undefined);
+});

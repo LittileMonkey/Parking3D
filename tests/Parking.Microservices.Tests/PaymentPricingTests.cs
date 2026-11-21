@@ -17,7 +17,7 @@ namespace Parking.Microservices.Tests
     /// Bộ Unit Test nghiệm thu Ticket SCRUM-95:
     /// 1. Bắt lỗi 404 khi không tìm thấy biểu giá (Tuyệt đối không tính 0 đồng).
     /// 2. Tính đúng cước phí khi gRPC trả về biểu giá thật.
-    /// 3. Kiểm chứng cơ chế MemoryCache (Lần 2 đọc từ RAM, không gọi lại gRPC).
+    /// 3. Đọc lại biểu giá hiệu lực để thấy ngay phiên bản mới được công bố.
     /// 4. Kiểm chứng 3 trạng thái độc lập: PaymentStatus, BookingStatus, SessionStatus.
     /// 5. Kiểm chứng DTO xác nhận CASH lưu đúng UUID nhân viên thật.
     /// </summary>
@@ -108,8 +108,9 @@ namespace Parking.Microservices.Tests
             Assert.Equal(1, fakeClient.CallCount);
         }
         [Fact]
-        public async Task CalculateFee_ShouldHitMemoryCache_OnSecondIdenticalRequest()
+        public async Task CalculateFee_ReadsEffectivePolicyAgain_OnSecondIdenticalRequest()
         {
+            long minimum = 50000;
             // ARRANGE: Thiết lập giả lập đếm số lần gọi gRPC
             var fakeClient = new FakeParkingCatalogClient(req => new PricingPolicyReply
             {
@@ -121,7 +122,8 @@ namespace Parking.Microservices.Tests
                 PeakMultiplier = 1.0,
                 DailyCapVnd = 150_000,
                 GoldStarDiscountRate = 0.0,
-                Timezone = "Asia/Ho_Chi_Minh"
+                Timezone = "Asia/Ho_Chi_Minh",
+                MinimumChargeVnd = minimum
             });
             var cache = new MemoryCache(new MemoryCacheOptions());
             var handler = new CalculateFeeQueryHandler(fakeClient, cache);
@@ -131,10 +133,12 @@ namespace Parking.Microservices.Tests
             var query = new CalculateFeeQuery(lotId, entry, exit, isGoldStarMember: false, VehicleType: "CAR");
             // ACT: Gọi 2 lần liên tiếp với cùng bãi xe và loại xe
             var result1 = await handler.Handle(query, CancellationToken.None);
+            minimum = 60000;
             var result2 = await handler.Handle(query, CancellationToken.None);
-            // ASSERT: Cả 2 lần đều tính đúng tiền, nhưng gRPC CHỈ ĐƯỢC GỌI DUY NHẤT 1 LẦN (Lần 2 hit RAM Cache)
-            Assert.Equal(result1.FinalNetAmountVnd, result2.FinalNetAmountVnd);
-            Assert.Equal(1, fakeClient.CallCount);
+            // A freshly published minimum must be visible on the next request.
+            Assert.Equal(50000, result1.FinalNetAmountVnd);
+            Assert.Equal(60000, result2.FinalNetAmountVnd);
+            Assert.Equal(2, fakeClient.CallCount);
         }
         [Fact]
         public void PaymentStatusDto_ShouldDistinguishThreeDistinctStates()

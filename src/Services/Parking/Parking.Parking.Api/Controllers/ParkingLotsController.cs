@@ -18,8 +18,13 @@ namespace Parking.Parking.Api.Controllers
         }
         // Định nghĩa Endpoint GET: /api/v1/parking-lots/search
         [HttpGet("search")]
+        [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
         public async Task<IActionResult> Search([FromQuery] SearchParkingLotsQuery query, CancellationToken cancellationToken)
         {
+            // Optional authentication still rejects a supplied invalid/expired
+            // token so clients refresh it instead of displaying a guest price.
+            if (Request.Headers.ContainsKey("Authorization") && User.Identity?.IsAuthenticated != true)
+                return Unauthorized(new ApiResponse<SearchParkingLotsResultDto>(null, false, 401, "Invalid or expired access token."));
             // 1. Nhờ MediatR bắn cái Query này vào đường ống (Pipeline).
             // Pipeline sẽ TỰ ĐỘNG gọi file Validator kiểm tra lỗi (Báo 400 nếu có lỗi).
             // Nếu qua ải Validator, Pipeline tự động dẫn tiếp vào file Handler để chạy thuật toán.

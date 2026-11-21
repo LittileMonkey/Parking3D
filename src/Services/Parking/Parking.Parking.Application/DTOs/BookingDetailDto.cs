@@ -18,5 +18,6 @@ public sealed record BookingDetailDto(
     string Status,
     long EstimatedAmount,
     string? QrToken,
-    DateTimeOffset CreatedAt
+    DateTimeOffset CreatedAt,
+    long MinimumChargeVnd = 0
 );

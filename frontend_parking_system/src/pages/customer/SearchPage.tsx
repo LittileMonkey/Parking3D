@@ -265,7 +265,8 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
   const navigate = useNavigate();
   const { lotId } = useParams();
   const [searchParams] = useSearchParams();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const pricingIdentity = user?.userId ?? user?.email ?? (isAuthenticated ? "signed-in" : "guest");
   const { lang } = useLanguage();
   const isEn = lang === "en";
   const { key: bookingKey, renewKey: renewBookingKey } = useIdempotencyKey("book");
@@ -677,6 +678,14 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
   };
 
   const initialSearchTriggered = useRef(false);
+  const previousPricingIdentity = useRef(pricingIdentity);
+  useEffect(() => {
+    if (previousPricingIdentity.current === pricingIdentity) return;
+    previousPricingIdentity.current = pricingIdentity;
+    if (hasSearched) {
+      void executeSearch(vehicleType, startsAt, duration, sortBy, radiusKm, searchPosition, selection ? lotId : null);
+    }
+  }, [pricingIdentity, hasSearched, executeSearch, vehicleType, startsAt, duration, sortBy, radiusKm, searchPosition, selection, lotId]);
   useEffect(() => {
     if (initialSearchTriggered.current) return;
     const hasParams = selection || searchParams.has("vehicle") || searchParams.has("duration") || searchParams.has("lot") || searchParams.has("radius") || searchParams.has("sortBy") || searchParams.has("criteria");
@@ -1330,7 +1339,7 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                     <span style={{ fontSize: 13, color: "#0284c7", fontWeight: 700 }}>{isEn ? "Estimated fee:" : "Dự tính cước phí:"}</span>
                     <span style={{ fontSize: 18, fontWeight: 800, color: "#065f46" }}>
-                      {(calcResult.subtotalAfterDailyCapVnd || calcResult.totalGrossAmountVnd || 0).toLocaleString("vi-VN")} ₫
+                      {calcResult.finalNetAmountVnd.toLocaleString("vi-VN")} ₫
                     </span>
                   </div>
                   <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, margin: 0, fontSize: 12 }}>
@@ -1338,6 +1347,8 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
                     <div><dt style={{ color: "#64748b" }}>{isEn ? "Gross amount:" : "Cước thô chưa giảm:"}</dt><dd style={{ fontWeight: 600 }}>{(calcResult.totalGrossAmountVnd || 0).toLocaleString("vi-VN")} ₫</dd></div>
                     <div><dt style={{ color: "#64748b" }}>{isEn ? "Daily cap discount:" : "Giảm trừ trần ngày:"}</dt><dd style={{ fontWeight: 600, color: "#d97706" }}>-{(calcResult.totalDailyCapDiscountVnd || 0).toLocaleString("vi-VN")} ₫</dd></div>
                     <div><dt style={{ color: "#64748b" }}>{isEn ? "Gold Star discount:" : "Ưu đãi Gold Star:"}</dt><dd style={{ fontWeight: 600, color: "#16a34a" }}>-{(calcResult.goldStarDiscountAmountVnd || 0).toLocaleString("vi-VN")} ₫</dd></div>
+                    {(calcResult.minimumChargeVnd ?? 0) > 0 && <div><dt style={{ color: "#64748b" }}>{isEn ? "Minimum per visit:" : "Phí tối thiểu/lượt:"}</dt><dd style={{ fontWeight: 600 }}>{formatMoney(calcResult.minimumChargeVnd ?? 0, "VND", isEn)}</dd></div>}
+                    {(calcResult.minimumChargeAdjustmentVnd ?? 0) > 0 && <div><dt style={{ color: "#64748b" }}>{isEn ? "Minimum fee adjustment:" : "Điều chỉnh theo phí tối thiểu:"}</dt><dd style={{ fontWeight: 600 }}>+{formatMoney(calcResult.minimumChargeAdjustmentVnd ?? 0, "VND", isEn)}</dd></div>}
                   </dl>
                 </div>
               )}
@@ -1958,6 +1969,7 @@ export default function SearchPage({ selection = false }: { selection?: boolean 
                 {vehicleError && <div className="customer-alert error" role="alert">{vehicleError} <Link to={loginTo}>{isEn ? "Log in again" : "Đăng nhập lại"}</Link></div>}
                 {isAuthenticated && !isLoadingVehicles && !vehicleError && compatibleVehicles.length === 0 && <p className="booking-vehicle-note">{isEn ? "You have no compatible vehicle registered." : "Bạn chưa có phương tiện phù hợp."} <Link to="/account?tab=vehicles">{isEn ? "Add a vehicle in your account" : "Thêm phương tiện trong tài khoản"}</Link> {isEn ? "then return to book." : "rồi quay lại đặt chỗ."}</p>}
                 <div className="booking-summary-price"><span>{isEn ? "Estimated total fee" : "Tổng phí ước tính"}</span><strong>{estimatedPrice}</strong></div>
+                {(selectedLot.estimatedPricing?.minimumChargeVnd ?? 0) > 0 && <p className="booking-vehicle-note">{isEn ? "Minimum per visit after discounts: " : "Phí tối thiểu mỗi lượt sau ưu đãi: "}{formatMoney(selectedLot.estimatedPricing.minimumChargeVnd ?? 0, "VND", isEn)}</p>}
                 <details className="booking-price-details"><summary>{isEn ? "How fee is calculated" : "Cách tính phí"}</summary><p>{selectedLot.estimatedPricing?.billingDetails || (isEn ? "Fee is estimated based on duration. Final fee follows the lot's pricing policy and actual parking time." : "Phí được ước tính theo thời lượng gửi xe. Mức phí cuối cùng theo chính sách của bãi và thời gian gửi thực tế.")}</p></details>
 
                 {/* FAQ Document Retrieval Section (POST /api/v1/parking-lots/{lotId}/assistant) */}

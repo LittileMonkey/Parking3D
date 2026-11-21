@@ -18,7 +18,7 @@ namespace Parking.Payment.Application.UseCase.CalculateFee
 {
     /// <summary>
     /// Handler xử lý CalculateFeeQuery theo mô hình CQRS:
-    /// 1. Kiểm tra RAM Cache hoặc gọi gRPC sang Parking để lấy biểu giá thật từ DB.
+    /// 1. Gọi gRPC sang Parking để lấy biểu giá thật theo thời điểm, không cache theo bãi/loại xe.
     /// 2. Bắt lỗi 404 nếu bãi xe chưa có biểu giá hiệu lực (Tuyệt đối không tính 0 đồng).
     /// 3. Kích hoạt Động cơ tính cước PricingEngine.Calculate ở tầng Domain.
     /// </summary>
@@ -30,26 +30,21 @@ namespace Parking.Payment.Application.UseCase.CalculateFee
 
         private readonly ParkingCatalog.ParkingCatalogClient _parkingCatalogClient;
         
-        private readonly IMemoryCache _cache;
-
-        private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(30);
 
         private readonly IConfiguration? _config;
 
         public CalculateFeeQueryHandler(ParkingCatalog.ParkingCatalogClient parkingCatalogClient, IMemoryCache cache, IConfiguration? config = null)
         {
             _parkingCatalogClient = parkingCatalogClient;
-            _cache = cache;
+            _ = cache; // Retain constructor compatibility; effective pricing must be read fresh.
             _config = config;
         }
 
         public async Task<FeeCalculationResultDto> Handle(CalculateFeeQuery request, CancellationToken cancellationToken)
         {
             var normalizedType = request.VehicleType.Trim().ToUpperInvariant();
-            var cacheKey = $"pricing_policy:{request.ParkingLotId}:{normalizedType}";
-            
-            // 1. Kiểm tra bộ nhớ đệm RAM trước
-            if (!_cache.TryGetValue(cacheKey, out (PricingPolicy Policy, TimeZoneInfo Tz) cachedData))
+            // A lot/type cache hides newly published prices and scheduled plans.
+            (PricingPolicy Policy, TimeZoneInfo Tz) cachedData;
             {
                 // 2. Chuyển đổi EntryTime sang Unix timestamp để kiểm tra thời gian hiệu lực
                 var gRpcRequest = new PricingPolicyRequest
@@ -111,10 +106,10 @@ namespace Parking.Payment.Application.UseCase.CalculateFee
                     Peak2Start: peak2Start,
                     Peak2End: peak2End,
                     DailyCapVnd: reply.DailyCapVnd,
-                    GoldStarDiscountRate: (decimal)reply.GoldStarDiscountRate
+                    GoldStarDiscountRate: (decimal)reply.GoldStarDiscountRate,
+                    MinimumChargeVnd: reply.MinimumChargeVnd
                 );
                 cachedData = (policy, lotTz);
-                _cache.Set(cacheKey, cachedData, CacheDuration);
             }
             // 6. Kích hoạt Động cơ tính cước lõi tại tầng Domain với biểu giá thật
             var pricingResult = PricingEngine.Calculate(
@@ -138,6 +133,8 @@ namespace Parking.Payment.Application.UseCase.CalculateFee
                 IsGoldStarMember = pricingResult.IsGoldStarMember,
                 GoldStarDiscountAmountVnd = pricingResult.GoldStarDiscountAmountVnd,
                 FinalNetAmountVnd = pricingResult.FinalNetAmountVnd,
+                MinimumChargeVnd = pricingResult.MinimumChargeVnd,
+                MinimumChargeAdjustmentVnd = pricingResult.MinimumChargeAdjustmentVnd,
                 Currency = "VND",
                 DailyBreakdowns = pricingResult.DailyBreakdowns.Select(d => new DayPricingBreakdownDto
                 {

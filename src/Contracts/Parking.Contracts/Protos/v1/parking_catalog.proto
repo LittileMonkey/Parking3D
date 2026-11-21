@@ -48,4 +48,5 @@ message PricingPolicyReply {
   double gold_star_discount_rate = 12; // Chiết khấu Gold Star (ví dụ: 0.10 = 10%)
 
   string timezone = 13;            // Múi giờ của bãi xe (ví dụ: "Asia/Ho_Chi_Minh")
+  int64 minimum_charge_vnd = 14;    // Per visit, after discounts; absent in legacy policies => 0.
 }

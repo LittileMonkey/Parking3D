@@ -1,4 +1,4 @@
-param([string]$EnvFile='.env.production',[switch]$NoBuild)
+﻿param([string]$EnvFile='.env.production',[switch]$NoBuild)
 $ErrorActionPreference='Stop'
 Set-Location (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 if(-not(Test-Path -LiteralPath $EnvFile)){throw 'Production environment file missing. Run New-ProductionEnv.ps1 and configure SMTP/provider first.'}
@@ -16,4 +16,7 @@ foreach($service in $migrations.Keys){$entry=$migrations[$service];foreach($file
 $up=@('up','-d','--wait','--wait-timeout','600');if(-not $NoBuild){$up+='--build'}
 & docker @compose @up
 if($LASTEXITCODE -ne 0){throw 'Production services not ready. Inspect compose ps/logs without printing secrets.'}
+# Upgrade pricing only after the running services understand minimumChargeVnd.
+Get-Content -Raw -Encoding UTF8 database/services/parking/migrations/012_minimum_charge_10000.sql | & docker @compose exec -T parking-db psql -X -v ON_ERROR_STOP=1 -U parking -d parking_parking
+if($LASTEXITCODE -ne 0){throw 'Minimum-charge migration failed. Review pricing and restore procedures before continuing.'}
 Write-Host 'Services started. Verify domain/TLS and business flows before admitting production traffic.'

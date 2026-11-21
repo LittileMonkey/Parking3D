@@ -29,9 +29,16 @@ public static class CheckOutFee
         bool isGoldStarMember = false, int graceMinutes = 0)
     {
         if(graceMinutes is < 0 or > 15)throw new ArgumentException("Invalid grace snapshot");
+        var physicalEntry = entryAt;
         entryAt=entryAt.AddMinutes(graceMinutes);bookedStart=bookedStart?.AddMinutes(graceMinutes);
         var start = hasBooking ? expectedExitAt : entryAt;
-        if (pricedAt <= start) return 0;
+        if (pricedAt <= start)
+        {
+            if (hasBooking || pricedAt <= physicalEntry) return 0;
+            // A positive walk-in visit may fit entirely within grace. The
+            // per-visit minimum still applies when its snapshot specifies one.
+            return ParsePolicy(rulesJson).MinimumChargeVnd;
+        }
 
         // Flat-block snapshots must use the same calculation as search and booking.
         // Otherwise the legacy multiplier is applied only at checkout peak hours.
@@ -123,7 +130,8 @@ public static class CheckOutFee
             Peak2Start: peak2Start,
             Peak2End: peak2End,
             DailyCapVnd: dailyCap,
-            GoldStarDiscountRate: goldStarDiscount);
+            GoldStarDiscountRate: goldStarDiscount,
+            MinimumChargeVnd: root.TryGetProperty("minimumChargeVnd", out var minimum) ? minimum.GetInt64() : 0);
 
         policy.Validate();
         return policy;

@@ -14,7 +14,8 @@ namespace Parking.Pricing;
         DateTimeOffset ExitTime,                                // Thời điểm xe ra bãi
         bool IsGoldStarMember,                                  // Khách hàng có phải là hội viên Gold Star hay không
         decimal GoldStarDiscountRate,                           // Tỷ lệ giảm giá cho hội viên Gold Star (VD: 0.10m = 10%)
-        IReadOnlyList<DayPricingBreakdown> DailyBreakdowns      // Danh sách chi tiết bóc tách cước theo từng ngày lịch
+        IReadOnlyList<DayPricingBreakdown> DailyBreakdowns,     // Danh sách chi tiết bóc tách cước theo từng ngày lịch
+        long MinimumChargeVnd = 0
     )
     {
         /// Tổng khoảng thời gian thực tế xe đỗ trong bãi
@@ -49,5 +50,6 @@ namespace Parking.Pricing;
         }
 
         /// Số tiền thực thu cuối cùng mà khách hàng phải thanh toán.
-        public long FinalNetAmountVnd => SubtotalAfterDailyCapVnd - GoldStarDiscountAmountVnd;
+        public long MinimumChargeAdjustmentVnd => Math.Max(0, MinimumChargeVnd - (SubtotalAfterDailyCapVnd - GoldStarDiscountAmountVnd));
+        public long FinalNetAmountVnd => Math.Max(MinimumChargeVnd, SubtotalAfterDailyCapVnd - GoldStarDiscountAmountVnd);
     }
