@@ -26,6 +26,8 @@ src/
 
 Xem [RUNBOOK](docs/microservices/RUNBOOK.md) để chạy, [kiến trúc](docs/microservices/ARCHITECTURE.md), [API contracts](docs/microservices/API-CONTRACTS.md), [kết quả kiểm thử](docs/microservices/VALIDATION.md) và [phần còn thiếu](docs/microservices/IMPLEMENTATION-STATUS.md).
 
+Chạy web để đăng ký và xem ngay dữ liệu bằng pgAdmin trên PostgreSQL local: xem [LOCAL_TEST_QUICKSTART](docs/LOCAL_TEST_QUICKSTART.md). Từ thư mục gốc, chạy `.\scripts\microservices\Sync-LocalDatabases.ps1 -StartBackend` để sao lưu, cập nhật bốn database và khởi động backend, sau đó chạy frontend bằng Vite.
+
 Đã triển khai đăng nhập, quyền theo bãi, đặt chỗ chống trùng, xác nhận tiền mặt → outbox → gRPC → booking, OCR adapter, dự báo thống kê và FAQ đã duyệt. OCR kiểm thử dùng test double; chưa chứng minh độ chính xác thực tế.
 
 QR/check-in/check-out, VNPay sandbox thực tế, giao diện 3D và đánh giá AI vẫn là backlog. Chưa xác nhận chạy Docker/pipeline trên môi trường đích. Khóa dùng chung chỉ dành cho Development; yêu cầu production nằm trong RUNBOOK.

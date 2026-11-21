@@ -1,4 +1,4 @@
-param([switch]$NoBuild)
+﻿param([switch]$NoBuild)
 $ErrorActionPreference='Stop'
 $OutputEncoding=[System.Text.UTF8Encoding]::new($false)
 $repo=(Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
@@ -31,7 +31,7 @@ foreach($file in @('database/services/parking/migrations/002_hold_default_5_minu
 }
 Get-Content -Raw -Encoding UTF8 database/services/payment/002_schema.sql | docker compose -f compose.microservices.yml exec -T payment-db psql -X -v ON_ERROR_STOP=1 -U payment -d parking_payment
 if($LASTEXITCODE -ne 0){throw 'Payment migration thất bại.'}
-foreach($file in @('database/services/identity/002_mfa.sql','database/services/identity/003_guest_otp.sql')) {
+foreach($file in @('database/services/identity/002_mfa.sql','database/services/identity/003_guest_otp.sql','database/services/identity/004_password_reset_attempt_count.sql')) {
     Get-Content -Raw -Encoding UTF8 $file | docker compose -f compose.microservices.yml exec -T identity-db psql -X -v ON_ERROR_STOP=1 -U identity -d parking_identity
     if($LASTEXITCODE -ne 0){throw "Identity migration failed: $file"}
 }
