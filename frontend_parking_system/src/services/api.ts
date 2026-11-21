@@ -1,5 +1,8 @@
-import { authStorage } from "./authStorage";
-import { createRegistrationRequest } from "./registration";
+import { authStorage } from "./auth/authStorage";
+import { createRegistrationRequest } from "./auth/registration";
+
+export { authStorage } from "./auth/authStorage";
+export { createRegistrationRequest } from "./auth/registration";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -367,6 +370,32 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   return (body.result ?? body.Result ?? body) as T;
 }
 
+export function normalizeParkingLotMeta<T extends { code?: string; name?: string; address?: string }>(lot: T): T {
+  if (!lot) return lot;
+  const code = (lot.code || "").toUpperCase();
+  const text = `${lot.name || ""} ${lot.address || ""}`.toLowerCase();
+
+  let officialName = lot.name;
+  let officialAddress = lot.address;
+
+  if (code.includes("BT") || text.includes("bình thạnh") || text.includes("binh thanh") || text.includes("landmark") || text.includes("central park")) {
+    officialName = "Bãi đỗ xe Landmark 81 - Central Park";
+    officialAddress = "720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP.HCM";
+  } else if (code.includes("Q1") || text.includes("quận 1") || text.includes("quan 1") || text.includes("vincom") || text.includes("đồng khởi") || text.includes("bến nghé")) {
+    officialName = "Tòa nhà đỗ xe Vincom Center Đồng Khởi";
+    officialAddress = "72 Lê Thánh Tôn, Bến Nghé, Quận 1, TP.HCM";
+  } else if (code.includes("Q7") || text.includes("quận 7") || text.includes("quan 7") || text.includes("crescent") || text.includes("phú mỹ hưng") || text.includes("secc")) {
+    officialName = "Bãi xe Crescent Mall & SECC Phú Mỹ Hưng";
+    officialAddress = "101 Tôn Dật Tiên, Tân Phú, Quận 7, TP.HCM";
+  }
+
+  return {
+    ...lot,
+    name: officialName,
+    address: officialAddress,
+  };
+}
+
 export const api = {
   async searchParkingLots(query: ParkingSearchQuery): Promise<ParkingSearchResult> {
     const params = new URLSearchParams({
@@ -378,15 +407,21 @@ export const api = {
     });
     if (query.latitude !== undefined) params.set("latitude", String(query.latitude));
     if (query.longitude !== undefined) params.set("longitude", String(query.longitude));
-    return request<ParkingSearchResult>(`/api/v1/parking-lots/search?${params.toString()}`);
+    const result = await request<ParkingSearchResult>(`/api/v1/parking-lots/search?${params.toString()}`);
+    return {
+      ...result,
+      items: (result.items ?? []).map(normalizeParkingLotMeta),
+    };
   },
 
   async getParkingLots(): Promise<ParkingLot[]> {
-    return request<ParkingLot[]>("/api/v1/parking-lots");
+    const items = await request<ParkingLot[]>("/api/v1/parking-lots");
+    return (items ?? []).map(normalizeParkingLotMeta);
   },
 
   async getParkingLotById(lotId: string): Promise<ParkingLotDetail> {
-    return request<ParkingLotDetail>(`/api/v1/parking-lots/${encodeURIComponent(lotId)}`);
+    const item = await request<ParkingLotDetail>(`/api/v1/parking-lots/${encodeURIComponent(lotId)}`);
+    return normalizeParkingLotMeta(item);
   },
 
   async getLotLayout3D(lotId: string): Promise<LotLayout3DDto> {
@@ -1179,17 +1214,31 @@ export const api = {
     userCurrentLatitude?: number;
     userCurrentLongitude?: number;
   }): Promise<AiParkingRecommendation> {
-    return request<AiParkingRecommendation>("/api/v1/ai/parking/smart-search", {
+    const res = await request<AiParkingRecommendation>("/api/v1/ai/parking/smart-search", {
       method: "POST",
       body: JSON.stringify(payload),
     });
+    if (res?.recommendedLots) {
+      res.recommendedLots = res.recommendedLots.map(rec => {
+        const norm = normalizeParkingLotMeta({ code: (rec as unknown as { code?: string }).code || "", name: rec.lotName, address: rec.address });
+        return { ...rec, lotName: norm.name, address: norm.address };
+      });
+    }
+    return res;
   },
 
   async recommendParking(criteria: Record<string, unknown>): Promise<AiParkingRecommendation> {
-    return request<AiParkingRecommendation>("/api/v1/ai/parking/recommend", {
+    const res = await request<AiParkingRecommendation>("/api/v1/ai/parking/recommend", {
       method: "POST",
       body: JSON.stringify(criteria),
     });
+    if (res?.recommendedLots) {
+      res.recommendedLots = res.recommendedLots.map(rec => {
+        const norm = normalizeParkingLotMeta({ code: (rec as unknown as { code?: string }).code || "", name: rec.lotName, address: rec.address });
+        return { ...rec, lotName: norm.name, address: norm.address };
+      });
+    }
+    return res;
   },
 
   // ─── NOTIFICATIONS ────────────────────────────────────────────────────────

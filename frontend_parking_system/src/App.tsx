@@ -1,19 +1,18 @@
-import MyAccount from "./pages/MyAccount";
-import PaymentReturn from "./pages/PaymentReturn";
-import SecurityPage from "./pages/SecurityPage";
+import MyAccount from "./pages/customer/MyAccount";
+import PaymentReturn from "./pages/customer/PaymentReturn";
 import { Route, Routes, Navigate, useLocation } from "react-router-dom";
-import Home from "./pages/Home";
+import Home from "./pages/customer/Home";
 import { lazy, Suspense, type ReactNode } from "react";
 import { useAuth } from "./context/AuthContext";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import ForgotPassword from "./pages/ForgotPassword";
-import VerifyEmail from "./pages/VerifyEmail";
-import EmailVerified from "./pages/EmailVerified";
-import BookingStatusPage from "./pages/BookingStatusPage";
-import FaqPage from "./pages/FaqPage";
-import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
-import TermsOfServicePage from "./pages/TermsOfServicePage";
+import Login from "./pages/auth/Login";
+import Register from "./pages/auth/Register";
+import ForgotPassword from "./pages/auth/ForgotPassword";
+import VerifyEmail from "./pages/auth/VerifyEmail";
+import EmailVerified from "./pages/auth/EmailVerified";
+import BookingStatusPage from "./pages/customer/BookingStatusPage";
+import FaqPage from "./pages/customer/FaqPage";
+import PrivacyPolicyPage from "./pages/legal/PrivacyPolicyPage";
+import TermsOfServicePage from "./pages/legal/TermsOfServicePage";
 
 // Staff Operations Portal Components
 import StaffLayout from "./components/staff/StaffLayout";
@@ -45,7 +44,7 @@ import AdminServicesPage from "./pages/admin/AdminServicesPage";
 // Global AI Conversational Assistant
 import AiChatbotWidget from "./components/ai/AiChatbotWidget";
 
-const Booking = lazy(() => import("./pages/Booking"));
+const Booking = lazy(() => import("./pages/customer/Booking"));
 
 function RequireRole({ roles, children }: { roles: string[]; children: ReactNode }) {
   const { user, isAuthenticated, getRedirectPath } = useAuth();
@@ -66,7 +65,7 @@ export default function App() {
       <Route path="/account" element={<MyAccount />} />
       <Route path="/payment-return" element={<PaymentReturn />} />
       <Route path="/guest-login" element={<Navigate to="/login" replace />} />
-      <Route path="/security" element={<SecurityPage />} />
+      <Route path="/security" element={<Navigate to="/account?tab=security" replace />} />
       {/* Customer / Public Routes */}
       <Route path="/" element={<Home />} />
       <Route path="/booking" element={<Suspense fallback={<p role="status">Đang tải tìm kiếm và đặt chỗ…</p>}><Booking /></Suspense>} />

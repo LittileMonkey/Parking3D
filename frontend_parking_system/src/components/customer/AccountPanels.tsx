@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { UserRound, Mail, Phone, Car, Bike, Zap, Plus, Pencil, Trash2, Star, Ticket, ArrowUpRight, MapPin, Clock3, RefreshCw, Info } from "lucide-react";
 import { api, ApiError, type MembershipDto, type UserVehicle } from "../../services/api";
-import { normalizePhoneNumber } from "../../services/registration";
+import { normalizePhoneNumber } from "../../services/auth/registration";
 import { useAuth } from "../../context/AuthContext";
 import { AccountAlert, AccountDialog, accountDate, bookingStatusLabels } from "./AccountUi";
 export function AccountProfile() {

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { authStorage, beginSession, clearSession, restoreSession } from "../services/authStorage";
+import { authStorage, beginSession, clearSession, restoreSession } from "../services/auth/authStorage";
 import { tryRefreshAccessToken, api, type AuthTokens, type AuthUser } from "../services/api";
 
 export interface AuthContextValue {

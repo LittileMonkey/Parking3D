@@ -293,12 +293,42 @@ export function createParkingArea(levels, mapObjects = []) {
 
 export const OUTDOOR_SLOT_COLORS = {
   AVAILABLE: 0x16a34a,
+  AVAILABLE_EV: 0x0284c7,
   HELD: 0xf59e0b,
   RESERVED: 0xf59e0b,
   OCCUPIED: 0x888e96,
   MAINTENANCE: 0xeab308,
+  DISABLED: 0x64748b,
   SELECTED: 0xef4444
 };
+
+export function isEvParkingSlot(slot) {
+  if (!slot) return false;
+  if (slot.isEvSlot === true) return true;
+  if (String(slot.vehicleType || "").toUpperCase() === "EV") return true;
+  if (
+    Array.isArray(slot.features) &&
+    slot.features.some((f) => {
+      const code = String(f || "").toUpperCase();
+      return code === "EV" || code === "EV_CHARGING";
+    })
+  ) {
+    return true;
+  }
+  const code = String(slot.slotCode || slot.id || "").toUpperCase();
+  return code.includes("-EV") || code.startsWith("EV");
+}
+
+export function getSlotColorHex(slot, isSelected = false) {
+  if (isSelected) return OUTDOOR_SLOT_COLORS.SELECTED;
+  const status = String(slot?.status || "AVAILABLE").toUpperCase();
+  if (status === "AVAILABLE") {
+    return isEvParkingSlot(slot)
+      ? OUTDOOR_SLOT_COLORS.AVAILABLE_EV
+      : OUTDOOR_SLOT_COLORS.AVAILABLE;
+  }
+  return OUTDOOR_SLOT_COLORS[status] ?? OUTDOOR_SLOT_COLORS.AVAILABLE;
+}
 
 function drawBillboardCanvas(canvas, lines, options = {}) {
   const {
@@ -1464,6 +1494,914 @@ export function createBuildingParkingArea(levels = [], initialMotoStats = null) 
     floors,
     floorColumnGroups,
     motoFloor1CenterSprite,
+    floorHeight,
+    slotMeshes,
+    interactables,
+    updateMotoStats,
+    dispose
+  };
+}
+
+export function createBasementParkingArea(levels = [], initialMotoStats = null) {
+  const scene = new THREE.Scene();
+  scene.name = "Parking Basement 3D";
+  scene.background = new THREE.Color(0xdce9f3);
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x64748b, 2.3));
+
+  const sun = new THREE.DirectionalLight(0xffffff, 1.9);
+  sun.position.set(40, 75, 45);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.left = -120;
+  sun.shadow.camera.right = 120;
+  sun.shadow.camera.top = 120;
+  sun.shadow.camera.bottom = -120;
+  scene.add(sun);
+
+  const fillLight = new THREE.DirectionalLight(0xe0f2fe, 0.75);
+  fillLight.position.set(-50, 20, -45);
+  scene.add(fillLight);
+
+  const mat = (color, extra = {}) =>
+    new THREE.MeshStandardMaterial({ color, roughness: 0.82, ...extra });
+
+  const concrete = mat(0xaab5c0);
+  const columnMat = mat(0x64748b);
+  const white = mat(0xf8fafc);
+  const wallWhite = mat(0xeef2f6, { roughness: 0.65 });
+  const yellow = mat(0xfacc15);
+  const cyanLine = mat(0x38bdf8, { roughness: 0.5 });
+  const asphalt = mat(0x424b57);
+  const rampRoadMat = mat(0x3b4450);
+  const signBoardMat = mat(0x0f172a);
+  const signPoleMat = mat(0x475569);
+
+  const arrowYellowMat = new THREE.MeshBasicMaterial({
+    color: 0xfacc15,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+  const arrowInMat = new THREE.MeshBasicMaterial({
+    color: 0x4ade80,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+  const arrowOutMat = new THREE.MeshBasicMaterial({
+    color: 0x60a5fa,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+
+  const floorHeight = 5.2;
+  const BW = 52;
+  const BD = 60;
+  const HBW = BW / 2;
+  const HBD = BD / 2;
+
+  const RAMP_INNER_W = 6.5;
+  const RAMP_WELL_W = 8.5;
+  const RAMP_TOTAL_W = RAMP_INNER_W + RAMP_WELL_W;
+  const X_RAMP_SPLIT = -HBW - RAMP_INNER_W;
+  const X_RAMP_OUTER = -HBW - RAMP_TOTAL_W;
+  const Z_RAMP_START = -11;
+  const Z_RAMP_END = 11;
+
+  const floors = [];
+  const slotMeshes = [];
+  const interactables = [];
+  const floorColumnGroups = [];
+  const floorZoneSprites = [];
+  const rampSprites = [];
+  const floorTagSprites = [];
+
+  const MOTO_CAPACITY = initialMotoStats?.maxCapacity ?? 100;
+  const MOTO_AVAILABLE = initialMotoStats?.availableMoto ?? MOTO_CAPACITY;
+  const MOTO_CURRENT = initialMotoStats?.currentMoto ?? Math.max(0, MOTO_CAPACITY - MOTO_AVAILABLE);
+  const initialEn = initialMotoStats?.lang === "en";
+
+  let b1BoardSpriteRef = null;
+  let motoB1CenterSprite = null;
+  let b1SignBoardMeshRef = null;
+  let portalSignSpriteRef = null;
+  let aptTitleSpriteRef = null;
+
+  function box(parent, w, h, d, x, y, z, material, castShadow = true) {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = castShadow;
+    mesh.receiveShadow = true;
+    parent.add(mesh);
+    return mesh;
+  }
+
+  function createSlotLabel(text, isEV = false) {
+    if (typeof document === "undefined") {
+      return new THREE.Mesh();
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = 280;
+    canvas.height = 100;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.fillStyle = isEV ? "#e0f2fe" : "#ffffff";
+      ctx.font = "bold 42px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, canvas.width / 2, canvas.height / 2, canvas.width - 16);
+    }
+
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.2, 0.78),
+      new THREE.MeshBasicMaterial({
+        map: new THREE.CanvasTexture(canvas),
+        transparent: true,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      })
+    );
+    mesh.rotation.x = -Math.PI / 2;
+    return mesh;
+  }
+
+  function arrow(parent, x, y, z, yaw = 0, material = arrowYellowMat, scale = 1) {
+    const shape = new THREE.Shape();
+    shape.moveTo(-0.25, -0.8);
+    shape.lineTo(0.25, -0.8);
+    shape.lineTo(0.25, 0.15);
+    shape.lineTo(0.67, 0.15);
+    shape.lineTo(0, 1.1);
+    shape.lineTo(-0.67, 0.15);
+    shape.lineTo(-0.25, 0.15);
+    shape.closePath();
+
+    const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), material);
+    mesh.rotation.x = -Math.PI / 2;
+
+    const pivot = new THREE.Group();
+    pivot.position.set(x, y, z);
+    pivot.rotation.y = yaw;
+    mesh.scale.setScalar(scale);
+    pivot.add(mesh);
+    parent.add(pivot);
+    return pivot;
+  }
+
+  // ── PHẦN TRÊN MẶT ĐẤT: CỔNG HẦM & KHỐI CHUNG CƯ BÁN TRONG SUỐT ───────────
+  const groundPortalGroup = new THREE.Group();
+  groundPortalGroup.name = "Ground Portal";
+  scene.add(groundPortalGroup);
+
+  const apartmentGroup = new THREE.Group();
+  apartmentGroup.name = "Apartment Above Ground";
+  scene.add(apartmentGroup);
+
+  {
+    const wellCenterX = (X_RAMP_SPLIT + X_RAMP_OUTER) / 2;
+    const wallH = 1.05;
+    const wallT = 0.35;
+
+    const approachLen = 25;
+    const approachZ = Z_RAMP_END + approachLen / 2;
+    box(groundPortalGroup, RAMP_WELL_W + 0.8, 0.36, approachLen, wellCenterX, 0, approachZ, concrete);
+    box(groundPortalGroup, RAMP_WELL_W - 0.1, 0.05, approachLen - 0.2, wellCenterX, 0.2, approachZ, rampRoadMat);
+    box(groundPortalGroup, 0.18, 0.14, approachLen - 2, wellCenterX, 0.27, approachZ, wallWhite);
+    box(groundPortalGroup, wallT, wallH, approachLen, X_RAMP_OUTER, 0.68, approachZ, wallWhite);
+    box(groundPortalGroup, wallT, wallH, approachLen, X_RAMP_SPLIT, 0.68, approachZ, wallWhite);
+
+    const wellLen = Z_RAMP_END - Z_RAMP_START;
+    box(groundPortalGroup, RAMP_WELL_W + wallT, wallH, wallT, wellCenterX, 0.68, Z_RAMP_START, wallWhite);
+    box(groundPortalGroup, wallT, wallH, wellLen + wallT, X_RAMP_SPLIT, 0.68, 0, wallWhite);
+    box(groundPortalGroup, wallT, wallH, wellLen + wallT, X_RAMP_OUTER, 0.68, 0, wallWhite);
+
+    const xDownLane = wellCenterX + RAMP_WELL_W / 4;
+    const xUpLane = wellCenterX - RAMP_WELL_W / 4;
+    for (const zPos of [15, 22, 29]) {
+      arrow(groundPortalGroup, xDownLane, 0.25, zPos, 0, arrowInMat, 0.8);
+      arrow(groundPortalGroup, xUpLane, 0.25, zPos, Math.PI, arrowOutMat, 0.8);
+    }
+
+    const canopyMat = mat(0x1e293b, { roughness: 0.45 });
+    const canopyGlassMat = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.35,
+      roughness: 0.2,
+      depthWrite: false
+    });
+    box(groundPortalGroup, 0.45, 4.4, 0.45, X_RAMP_OUTER, 2.2, 13.5, canopyMat);
+    box(groundPortalGroup, 0.45, 4.4, 0.45, X_RAMP_SPLIT, 2.2, 13.5, canopyMat);
+    box(groundPortalGroup, 0.45, 4.4, 0.45, X_RAMP_OUTER, 2.2, 19.5, canopyMat);
+    box(groundPortalGroup, 0.45, 4.4, 0.45, X_RAMP_SPLIT, 2.2, 19.5, canopyMat);
+    box(groundPortalGroup, RAMP_WELL_W + 1.2, 0.35, 7.2, wellCenterX, 4.45, 16.5, canopyMat);
+    box(groundPortalGroup, RAMP_WELL_W + 0.4, 0.08, 6.2, wellCenterX, 4.66, 16.5, canopyGlassMat, false);
+
+    portalSignSpriteRef = makeBillboardSprite(
+      initialEn
+        ? [
+            "🏢 BASEMENT PORTAL (B1 – B2 – B3)",
+            "← Exit Up ↑   |   Entry Down ↓ →"
+          ]
+        : [
+            "🏢 CỔNG HẦM CHUNG CƯ (B1 – B2 – B3)",
+            "← Lối ra hầm ↑   |   Lối vào hầm ↓ →"
+          ],
+      {
+        bgColor: "rgba(15, 23, 42, 0.94)",
+        borderColor: "#38bdf8",
+        textColor: "#ffffff",
+        subTextColor: "#7dd3fc",
+        scaleX: 13.5,
+        scaleY: 3.8,
+        alwaysOnTop: true
+      }
+    );
+    portalSignSpriteRef.position.set(wellCenterX, 7.2, 16.5);
+    groundPortalGroup.add(portalSignSpriteRef);
+
+    // Mặt đất bán trong suốt tại y = 0
+    const groundGlassMat = new THREE.MeshStandardMaterial({
+      color: 0x86efac,
+      transparent: true,
+      opacity: 0.24,
+      roughness: 0.9,
+      depthWrite: false
+    });
+    const groundDeck = new THREE.Mesh(new THREE.BoxGeometry(BW + 13, 0.22, BD + 12), groundGlassMat);
+    groundDeck.position.set(0, 0, 0);
+    apartmentGroup.add(groundDeck);
+
+    const groundEdges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(BW + 13, 0.22, BD + 12)),
+      new THREE.LineBasicMaterial({ color: 0x15803d, transparent: true, opacity: 0.55 })
+    );
+    groundEdges.position.set(0, 0, 0);
+    apartmentGroup.add(groundEdges);
+
+    // Khối đế sảnh chung cư
+    const podiumW = 42;
+    const podiumD = 44;
+    const podiumH = 4.4;
+    const podiumGlass = new THREE.MeshStandardMaterial({
+      color: 0xe2e8f0,
+      transparent: true,
+      opacity: 0.2,
+      roughness: 0.3,
+      depthWrite: false
+    });
+    const podiumMesh = new THREE.Mesh(new THREE.BoxGeometry(podiumW, podiumH, podiumD), podiumGlass);
+    podiumMesh.position.set(0, podiumH / 2 + 0.15, 0);
+    apartmentGroup.add(podiumMesh);
+
+    const podiumEdges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(podiumW, podiumH, podiumD)),
+      new THREE.LineBasicMaterial({ color: 0x475569, transparent: true, opacity: 0.45 })
+    );
+    podiumEdges.position.copy(podiumMesh.position);
+    apartmentGroup.add(podiumEdges);
+
+    // Thân tòa nhà chung cư 8 tầng bán trong suốt
+    const towerW = 36;
+    const towerD = 34;
+    const numAptFloors = 8;
+    const aptFloorH = 3.2;
+    const towerH = numAptFloors * aptFloorH;
+    const towerBaseY = podiumH + 0.15;
+
+    const towerGlass = new THREE.MeshStandardMaterial({
+      color: 0xbae6fd,
+      transparent: true,
+      opacity: 0.16,
+      roughness: 0.25,
+      depthWrite: false
+    });
+    const towerMesh = new THREE.Mesh(new THREE.BoxGeometry(towerW, towerH, towerD), towerGlass);
+    towerMesh.position.set(0, towerBaseY + towerH / 2, 0);
+    apartmentGroup.add(towerMesh);
+
+    const towerEdges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(towerW, towerH, towerD)),
+      new THREE.LineBasicMaterial({ color: 0x0284c7, transparent: true, opacity: 0.42 })
+    );
+    towerEdges.position.copy(towerMesh.position);
+    apartmentGroup.add(towerEdges);
+
+    const slabEdgeMat = new THREE.LineBasicMaterial({ color: 0x64748b, transparent: true, opacity: 0.3 });
+    const slabGeom = new THREE.EdgesGeometry(new THREE.BoxGeometry(towerW + 0.4, 0.18, towerD + 0.4));
+    for (let i = 1; i <= numAptFloors; i++) {
+      const slabLine = new THREE.LineSegments(slabGeom, slabEdgeMat);
+      slabLine.position.set(0, towerBaseY + i * aptFloorH, 0);
+      apartmentGroup.add(slabLine);
+    }
+
+    const roofBox = new THREE.Mesh(new THREE.BoxGeometry(14, 2.4, 12), podiumGlass);
+    roofBox.position.set(0, towerBaseY + towerH + 1.2, 0);
+    apartmentGroup.add(roofBox);
+
+    const roofEdges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(14, 2.4, 12)),
+      new THREE.LineBasicMaterial({ color: 0x334155, transparent: true, opacity: 0.45 })
+    );
+    roofEdges.position.copy(roofBox.position);
+    apartmentGroup.add(roofEdges);
+
+    aptTitleSpriteRef = makeBillboardSprite(
+      [initialEn ? "🏢 APARTMENT BUILDING (GROUND: Y = 0)" : "🏢 TÒA NHÀ CHUNG CƯ (MẶT ĐẤT: Y = 0)"],
+      {
+        bgColor: "rgba(15, 23, 42, 0.78)",
+        borderColor: "#94a3b8",
+        textColor: "#f8fafc",
+        scaleX: 16,
+        scaleY: 3.1,
+        alwaysOnTop: false
+      }
+    );
+    aptTitleSpriteRef.position.set(0, towerBaseY + towerH + 5.2, 0);
+    apartmentGroup.add(aptTitleSpriteRef);
+  }
+
+  function buildBasementRampFlight(parentGroup, yBottom, yTop, basementLevel) {
+    const dZ = Z_RAMP_END - Z_RAMP_START;
+    const dY = yTop - yBottom;
+    const rampLen = Math.hypot(dZ, dY);
+    const slopeAngle = Math.atan2(dY, dZ);
+
+    const wellCenterX = (X_RAMP_SPLIT + X_RAMP_OUTER) / 2;
+    const midY = (yBottom + yTop) / 2;
+    const midZ = (Z_RAMP_START + Z_RAMP_END) / 2;
+
+    const rampPivot = new THREE.Group();
+    rampPivot.position.set(wellCenterX, midY, midZ);
+    rampPivot.rotation.x = -slopeAngle;
+    parentGroup.add(rampPivot);
+
+    box(rampPivot, RAMP_WELL_W, 0.38, rampLen + 0.35, 0, 0, 0, concrete);
+    box(rampPivot, RAMP_WELL_W - 0.15, 0.05, rampLen + 0.3, 0, 0.21, 0, rampRoadMat);
+
+    const halfW = RAMP_WELL_W / 2;
+    box(rampPivot, 0.35, 1.05, rampLen + 0.45, -halfW, 0.68, 0, wallWhite);
+    box(rampPivot, 0.35, 1.05, rampLen + 0.45, +halfW, 0.68, 0, wallWhite);
+    box(rampPivot, 0.18, 0.12, rampLen - 0.6, 0, 0.26, 0, wallWhite);
+
+    const xUpLane = -RAMP_WELL_W / 4;
+    const xDownLane = +RAMP_WELL_W / 4;
+    for (const zLocal of [-6, 0, 6]) {
+      arrow(rampPivot, xUpLane, 0.26, zLocal, Math.PI, arrowOutMat, 0.72);
+      arrow(rampPivot, xDownLane, 0.26, zLocal, 0, arrowInMat, 0.72);
+    }
+
+    const upperVi = basementLevel === 1 ? "Mặt đất" : `B${basementLevel - 1}`;
+    const upperEn = basementLevel === 1 ? "Ground" : `B${basementLevel - 1}`;
+    const lowerLabel = `B${basementLevel}`;
+
+    const upSprite = makeBillboardSprite(
+      [initialEn ? `Exit / Up ↑ (${lowerLabel} → ${upperEn})` : `Lối ra / lên ↑ (${lowerLabel} → ${upperVi})`],
+      {
+        bgColor: "rgba(30, 58, 138, 0.92)",
+        borderColor: "#60a5fa",
+        textColor: "#ffffff",
+        scaleX: 9.2,
+        scaleY: 2.35,
+        alwaysOnTop: true
+      }
+    );
+    upSprite.position.set(wellCenterX + xUpLane, midY + 1.85, midZ + 2.6);
+    parentGroup.add(upSprite);
+
+    const downSprite = makeBillboardSprite(
+      [initialEn ? `Entry / Down ↓ (${upperEn} → ${lowerLabel})` : `Lối vào / xuống ↓ (${upperVi} → ${lowerLabel})`],
+      {
+        bgColor: "rgba(22, 101, 52, 0.92)",
+        borderColor: "#4ade80",
+        textColor: "#ffffff",
+        scaleX: 9.2,
+        scaleY: 2.35,
+        alwaysOnTop: true
+      }
+    );
+    downSprite.position.set(wellCenterX + xDownLane, midY + 1.85, midZ - 2.6);
+    parentGroup.add(downSprite);
+    rampSprites.push({ upSprite, downSprite, basementLevel });
+  }
+
+  function buildBasementFloorBase(group, y, basementLevel) {
+    const slabH = 0.42;
+    const asphaltH = 0.045;
+    const wallH = 1.05;
+    const wallT = 0.35;
+    const wallY = y + 0.68;
+
+    const mainPlusInnerW = BW + RAMP_INNER_W;
+    const mainPlusInnerX = -RAMP_INNER_W / 2;
+    box(group, mainPlusInnerW, slabH, BD, mainPlusInnerX, y, 0, concrete);
+    box(group, mainPlusInnerW - 0.2, asphaltH, BD - 0.2, mainPlusInnerX, y + 0.23, 0, asphalt);
+
+    const wellCenterX = (X_RAMP_SPLIT + X_RAMP_OUTER) / 2;
+    const backLandLen = Z_RAMP_START - -HBD;
+    const backLandZ = (-HBD + Z_RAMP_START) / 2;
+    const frontLandLen = HBD - Z_RAMP_END;
+    const frontLandZ = (Z_RAMP_END + HBD) / 2;
+
+    box(group, RAMP_WELL_W, slabH, backLandLen, wellCenterX, y, backLandZ, concrete);
+    box(group, RAMP_WELL_W - 0.1, asphaltH, backLandLen - 0.1, wellCenterX, y + 0.23, backLandZ, asphalt);
+
+    box(group, RAMP_WELL_W, slabH, frontLandLen, wellCenterX, y, frontLandZ, concrete);
+    box(group, RAMP_WELL_W - 0.1, asphaltH, frontLandLen - 0.1, wellCenterX, y + 0.23, frontLandZ, asphalt);
+
+    if (basementLevel === 3) {
+      const midLen = Z_RAMP_END - Z_RAMP_START;
+      box(group, RAMP_WELL_W, slabH, midLen, wellCenterX, y, 0, concrete);
+      box(group, RAMP_WELL_W - 0.1, asphaltH, midLen, wellCenterX, y + 0.23, 0, asphalt);
+      box(group, 0.22, 0.28, 7.5, wellCenterX, y + 0.34, Z_RAMP_START - 4.2, wallWhite);
+      box(group, RAMP_WELL_W + wallT, wallH, wallT, wellCenterX, wallY, Z_RAMP_END, wallWhite);
+      box(group, wallT, wallH, midLen + wallT, X_RAMP_SPLIT, wallY, 0, wallWhite);
+    }
+
+    const colGroup = new THREE.Group();
+    colGroup.name = `columns-B${basementLevel}`;
+    for (const cx of [-HBW + 2, -13, 0, 13, HBW - 2]) {
+      for (const cz of [-HBD + 2, HBD - 2]) {
+        box(colGroup, 0.75, floorHeight - 0.4, 0.75, cx, y + floorHeight / 2, cz, columnMat);
+      }
+    }
+    group.add(colGroup);
+    floorColumnGroups.push(colGroup);
+
+    const totalW = BW + RAMP_TOTAL_W;
+    const totalCenterX = (X_RAMP_OUTER + HBW) / 2;
+
+    box(group, totalW + wallT, wallH, wallT, totalCenterX, wallY, -HBD, wallWhite);
+    box(group, totalW + wallT, wallH, wallT, totalCenterX, wallY, HBD, wallWhite);
+    box(group, wallT, wallH, BD + wallT, HBW, wallY, 0, wallWhite);
+    box(group, wallT, wallH, backLandLen + 0.3, X_RAMP_OUTER, wallY, backLandZ, wallWhite);
+    box(group, wallT, wallH, frontLandLen + 0.3, X_RAMP_OUTER, wallY, frontLandZ, wallWhite);
+    if (basementLevel === 3) {
+      box(group, wallT, wallH, Z_RAMP_END - Z_RAMP_START + 0.3, X_RAMP_OUTER, wallY, 0, wallWhite);
+    }
+
+    const innerCorrX = (X_RAMP_SPLIT + -HBW) / 2;
+    arrow(group, wellCenterX + 1.5, y + 0.32, -20.5, -Math.PI / 2, arrowInMat, 0.7);
+    arrow(group, innerCorrX, y + 0.32, -20.5, -Math.PI / 2, arrowInMat, 0.65);
+
+    if (basementLevel < 3) {
+      for (const zc of [-8, 4, 16]) {
+        arrow(group, innerCorrX - 1.2, y + 0.32, zc, Math.PI, arrowInMat, 0.58);
+        arrow(group, innerCorrX + 1.2, y + 0.32, zc, 0, arrowOutMat, 0.58);
+      }
+      arrow(group, wellCenterX + 1.2, y + 0.32, 20.5, Math.PI / 2, arrowInMat, 0.68);
+    } else {
+      for (const zc of [-4, 10]) {
+        arrow(group, innerCorrX, y + 0.32, zc, 0, arrowOutMat, 0.62);
+      }
+    }
+    arrow(group, wellCenterX - 1.6, y + 0.32, -16, Math.PI, arrowOutMat, 0.68);
+
+    const floorTag = makeBillboardSprite(
+      [initialEn ? `BASEMENT B${basementLevel}` : `TẦNG HẦM B${basementLevel}`],
+      {
+        bgColor: basementLevel === 1 ? "rgba(15, 118, 110, 0.9)" : "rgba(30, 58, 138, 0.9)",
+        borderColor: "#ffffff",
+        textColor: "#ffffff",
+        scaleX: 7.2,
+        scaleY: 2.0,
+        alwaysOnTop: false
+      }
+    );
+    floorTag.position.set(HBW - 2.5, y + 2.5, HBD - 1.5);
+    group.add(floorTag);
+    floorTagSprites.push({ sprite: floorTag, basementLevel });
+
+    buildBasementRampFlight(group, y, y + floorHeight, basementLevel);
+  }
+
+  // ── TẦNG HẦM B1 – 100 XE MÁY ──────────────────────────────────────────────
+  {
+    const level = 1;
+    const y = -level * floorHeight;
+    const group = new THREE.Group();
+    group.name = "Basement B1";
+
+    buildBasementFloorBase(group, y, level);
+
+    for (const ax of [-18, -6, 6, 16]) {
+      arrow(group, ax, y + 0.32, -20.5, -Math.PI / 2, arrowInMat, 0.65);
+      arrow(group, ax, y + 0.32, 20.5, Math.PI / 2, arrowOutMat, 0.65);
+    }
+    const zoneW = 38;
+    const zoneD = 30;
+    box(group, zoneW, 0.05, 0.16, 2, y + 0.31, -zoneD / 2, yellow);
+    box(group, zoneW, 0.05, 0.16, 2, y + 0.31, +zoneD / 2, yellow);
+    box(group, 0.16, 0.05, zoneD, 2 - zoneW / 2, y + 0.31, 0, yellow);
+    box(group, 0.16, 0.05, zoneD, 2 + zoneW / 2, y + 0.31, 0, yellow);
+
+    const boardGroup = new THREE.Group();
+    boardGroup.name = "B1 Moto Info Board";
+    boardGroup.position.set(-20.5, y, -12.5);
+    group.add(boardGroup);
+
+    box(boardGroup, 4.4, 0.3, 1.3, 0, 0.35, 0, concrete);
+    box(boardGroup, 0.2, 2.8, 0.2, -1.5, 1.75, 0, signPoleMat);
+    box(boardGroup, 0.2, 2.8, 0.2, 1.5, 1.75, 0, signPoleMat);
+
+    b1SignBoardMeshRef = box(boardGroup, 4.6, 1.7, 0.35, 0, 3.0, 0, signBoardMat);
+    b1SignBoardMeshRef.userData = {
+      id: initialEn ? "MOTORBIKE PARKING INFO BOARD (B1)" : "BẢNG THÔNG TIN BÃI XE MÁY (B1)",
+      floor: "B1",
+      isMotoInfo: true,
+      currentMoto: MOTO_CURRENT,
+      availableMoto: MOTO_AVAILABLE,
+      maxCapacity: MOTO_CAPACITY
+    };
+    interactables.push(b1SignBoardMeshRef);
+
+    b1BoardSpriteRef = makeBillboardSprite(
+      initialEn
+        ? [
+            "🏍️ MOTORBIKE PARKING (BASEMENT B1)",
+            `Available slots: ${MOTO_AVAILABLE} / ${MOTO_CAPACITY}`
+          ]
+        : [
+            "🏍️ BÃI XE MÁY (TẦNG HẦM B1)",
+            `Slots trống: ${MOTO_AVAILABLE} / ${MOTO_CAPACITY}`
+          ],
+      {
+        bgColor: "rgba(15, 23, 42, 0.95)",
+        borderColor: "#22c55e",
+        textColor: "#ffffff",
+        subTextColor: "#4ade80",
+        scaleX: 11.5,
+        scaleY: 3.5,
+        alwaysOnTop: true
+      }
+    );
+    b1BoardSpriteRef.position.set(0, 4.6, 0);
+    boardGroup.add(b1BoardSpriteRef);
+
+    motoB1CenterSprite = makeBillboardSprite(
+      initialEn
+        ? [
+            `🏍️ MOTORBIKE PARKING ZONE (B1 – ${MOTO_CAPACITY} BIKES)`,
+            `Parked: ${MOTO_CURRENT} bikes · Available: ${MOTO_AVAILABLE} / ${MOTO_CAPACITY} slots`
+          ]
+        : [
+            `🏍️ KHU VỰC ĐỖ XE MÁY (TẦNG B1 – ${MOTO_CAPACITY} XE)`,
+            `Đang gửi: ${MOTO_CURRENT} xe · Trống: ${MOTO_AVAILABLE} / ${MOTO_CAPACITY} slots`
+          ],
+      {
+        bgColor: "rgba(13, 148, 136, 0.94)",
+        borderColor: "#ffffff",
+        textColor: "#ffffff",
+        subTextColor: "#fef08a",
+        scaleX: 18,
+        scaleY: 5.0,
+        alwaysOnTop: true
+      }
+    );
+    motoB1CenterSprite.position.set(2, y + 2.9, 0);
+    motoB1CenterSprite.visible = false;
+    group.add(motoB1CenterSprite);
+
+    scene.add(group);
+    floors.push(group);
+  }
+
+  // ── TẦNG HẦM B2 & B3 – 25 Ô TÔ THƯỜNG + 25 Ô TÔ ĐIỆN / TẦNG ─────────────
+  const safeLevels = Array.isArray(levels) ? levels : [];
+  const findBasementLevel = (lvlNum) => {
+    const targetCode = `B${lvlNum}`;
+    const byCode = safeLevels.find((l) => String(l.levelCode || "").toUpperCase() === targetCode);
+    if (byCode) return byCode;
+    return safeLevels[lvlNum - 1] ?? null;
+  };
+
+  for (let level = 2; level <= 3; level++) {
+    const y = -level * floorHeight;
+    const floorCode = `B${level}`;
+    const group = new THREE.Group();
+    group.name = `Basement ${floorCode}`;
+
+    buildBasementFloorBase(group, y, level);
+
+    const slotW = 2.6;
+    const slotD = 5.0;
+    const rowZPositions = [-22, -11, 0, 11, 22];
+
+    const aisleZPositions = [-16.5, -5.5, 5.5, 16.5];
+    for (const az of aisleZPositions) {
+      for (const ax of [-14, -6, 6, 14]) {
+        box(group, 3.0, 0.05, 0.12, ax, y + 0.32, az, yellow);
+      }
+      for (const ax of [-10, 10]) {
+        arrow(group, ax, y + 0.35, az - 1.2, Math.PI / 2, arrowYellowMat, 0.52);
+        arrow(group, ax, y + 0.35, az + 1.2, -Math.PI / 2, arrowYellowMat, 0.52);
+      }
+    }
+
+    for (const sideZ of [-11, 11]) {
+      arrow(group, -21, y + 0.35, sideZ, 0, arrowYellowMat, 0.62);
+      arrow(group, 21, y + 0.35, sideZ, Math.PI, arrowYellowMat, 0.62);
+    }
+    for (const cz of [-22, -11, 0, 11, 22]) {
+      box(group, 0.14, 0.05, 4.2, 0, y + 0.32, cz, cyanLine);
+    }
+
+    const matchedLevel = findBasementLevel(level);
+    const levelSlots = matchedLevel?.slots ?? [];
+    const slotByCode = new Map();
+    levelSlots.forEach((s) => {
+      const code = String(s.slotCode || "").toUpperCase();
+      if (code) slotByCode.set(code, s);
+    });
+    const carFallbackSlots = levelSlots.filter((s) => !isEvParkingSlot(s));
+    const evFallbackSlots = levelSlots.filter((s) => isEvParkingSlot(s));
+    const usedIds = new Set();
+    let carSeq = 0;
+    let evSeq = 0;
+
+    // ── KHU A (BÊN TRÁI): 25 Ô TÔ THƯỜNG ──
+    const carStartX = -14.7;
+    let carCount = 0;
+    rowZPositions.forEach((sz) => {
+      for (let c = 0; c < 5; c++) {
+        carCount++;
+        const sx = carStartX + c * slotW;
+        const defaultId = `${floorCode}-C${String(carCount).padStart(2, "0")}`;
+        let apiSlot = slotByCode.get(defaultId);
+        if (apiSlot && usedIds.has(apiSlot.slotId)) apiSlot = undefined;
+        if (!apiSlot) {
+          while (carSeq < carFallbackSlots.length && usedIds.has(carFallbackSlots[carSeq].slotId)) {
+            carSeq++;
+          }
+          if (carSeq < carFallbackSlots.length) {
+            apiSlot = carFallbackSlots[carSeq++];
+          }
+        }
+        if (apiSlot) usedIds.add(apiSlot.slotId);
+
+        const displayCode = apiSlot?.slotCode || defaultId;
+        const statusKey = String(apiSlot?.status || "AVAILABLE").toUpperCase();
+        const slotInfo = {
+          slotId: apiSlot?.slotId || defaultId,
+          slotCode: displayCode,
+          floorCode: apiSlot?.floorCode || matchedLevel?.levelCode || floorCode,
+          zoneCode: apiSlot?.zoneCode || "CAR",
+          supportedVehicleTypes: apiSlot?.supportedVehicleTypes || ["CAR"],
+          features: apiSlot?.features || [],
+          vehicleType: "CAR",
+          isEvSlot: false,
+          id: displayCode,
+          slotOrder: carCount,
+          floor: floorCode,
+          floorIndex: level,
+          status: statusKey,
+          isSlot: true,
+          isParkingSlot: true
+        };
+
+        const mesh = box(
+          group,
+          slotW - 0.14, 0.035, slotD - 0.14,
+          sx, y + 0.305, sz,
+          mat(getSlotColorHex(slotInfo, false), { transparent: true, opacity: 0.8 }),
+          false
+        );
+        mesh.userData = slotInfo;
+        slotMeshes.push(mesh);
+        interactables.push(mesh);
+
+        for (const dx of [-slotW / 2 + 0.04, slotW / 2 - 0.04]) {
+          box(group, 0.07, 0.05, slotD, sx + dx, y + 0.33, sz, white, false);
+        }
+        box(group, slotW, 0.05, 0.07, sx, y + 0.33, sz - slotD / 2, white, false);
+        box(group, slotW, 0.05, 0.07, sx, y + 0.33, sz + slotD / 2, white, false);
+
+        const lbl = createSlotLabel(displayCode, false);
+        lbl.position.set(sx, y + 0.355, sz);
+        group.add(lbl);
+      }
+    });
+
+    // ── KHU B (BÊN PHẢI): 25 Ô TÔ ĐIỆN (EV) ──
+    const evStartX = 4.3;
+    let evCount = 0;
+    rowZPositions.forEach((sz) => {
+      for (let c = 0; c < 5; c++) {
+        evCount++;
+        const sx = evStartX + c * slotW;
+        const defaultId = `${floorCode}-EV${String(evCount).padStart(2, "0")}`;
+        let apiSlot = slotByCode.get(defaultId);
+        if (apiSlot && usedIds.has(apiSlot.slotId)) apiSlot = undefined;
+        if (!apiSlot) {
+          while (evSeq < evFallbackSlots.length && usedIds.has(evFallbackSlots[evSeq].slotId)) {
+            evSeq++;
+          }
+          if (evSeq < evFallbackSlots.length) {
+            apiSlot = evFallbackSlots[evSeq++];
+          }
+        }
+        if (apiSlot) usedIds.add(apiSlot.slotId);
+
+        const displayCode = apiSlot?.slotCode || defaultId;
+        const statusKey = String(apiSlot?.status || "AVAILABLE").toUpperCase();
+        const slotInfo = {
+          slotId: apiSlot?.slotId || defaultId,
+          slotCode: displayCode,
+          floorCode: apiSlot?.floorCode || matchedLevel?.levelCode || floorCode,
+          zoneCode: apiSlot?.zoneCode || "EV",
+          supportedVehicleTypes: apiSlot?.supportedVehicleTypes || ["CAR"],
+          features: apiSlot?.features?.length ? apiSlot.features : ["EV_CHARGING"],
+          vehicleType: "EV",
+          isEvSlot: true,
+          id: displayCode,
+          slotOrder: evCount,
+          floor: floorCode,
+          floorIndex: level,
+          status: statusKey,
+          isSlot: true,
+          isParkingSlot: true
+        };
+
+        const mesh = box(
+          group,
+          slotW - 0.14, 0.035, slotD - 0.14,
+          sx, y + 0.305, sz,
+          mat(getSlotColorHex(slotInfo, false), { transparent: true, opacity: 0.82 }),
+          false
+        );
+        mesh.userData = slotInfo;
+        slotMeshes.push(mesh);
+        interactables.push(mesh);
+
+        for (const dx of [-slotW / 2 + 0.04, slotW / 2 - 0.04]) {
+          box(group, 0.08, 0.05, slotD, sx + dx, y + 0.33, sz, cyanLine, false);
+        }
+        box(group, slotW, 0.05, 0.08, sx, y + 0.33, sz - slotD / 2, cyanLine, false);
+        box(group, slotW, 0.05, 0.08, sx, y + 0.33, sz + slotD / 2, cyanLine, false);
+
+        const lbl = createSlotLabel(`⚡${displayCode}`, true);
+        lbl.position.set(sx, y + 0.355, sz);
+        group.add(lbl);
+      }
+    });
+
+    const carZoneSprite = makeBillboardSprite(
+      [initialEn ? `🚗 REGULAR CAR ZONE (${floorCode} – 25 SPOTS)` : `🚗 KHU Ô TÔ THƯỜNG (${floorCode} – 25 XE)`],
+      {
+        bgColor: "rgba(22, 101, 52, 0.92)",
+        borderColor: "#4ade80",
+        textColor: "#ffffff",
+        scaleX: 12.5,
+        scaleY: 2.8,
+        alwaysOnTop: true
+      }
+    );
+    carZoneSprite.position.set(-9.5, y + 3.0, -28.0);
+    carZoneSprite.visible = false;
+    group.add(carZoneSprite);
+
+    const evZoneSprite = makeBillboardSprite(
+      [initialEn ? `⚡ ELECTRIC CAR ZONE (${floorCode} – 25 EV)` : `⚡ KHU Ô TÔ ĐIỆN (${floorCode} – 25 XE)`],
+      {
+        bgColor: "rgba(3, 105, 161, 0.92)",
+        borderColor: "#38bdf8",
+        textColor: "#ffffff",
+        scaleX: 12.5,
+        scaleY: 2.8,
+        alwaysOnTop: true
+      }
+    );
+    evZoneSprite.position.set(9.5, y + 3.0, -28.0);
+    evZoneSprite.visible = false;
+    group.add(evZoneSprite);
+
+    floorZoneSprites.push({
+      floorIndex: level,
+      floorCode,
+      carZoneSprite,
+      evZoneSprite,
+      sprites: [carZoneSprite, evZoneSprite]
+    });
+
+    scene.add(group);
+    floors.push(group);
+  }
+
+  const dispose = () => {
+    const geometries = new Set();
+    const materials = new Set();
+    const textures = new Set();
+    scene.traverse((object) => {
+      if (object instanceof THREE.Mesh || object instanceof THREE.LineSegments || object instanceof THREE.Sprite) {
+        if (object.geometry) geometries.add(object.geometry);
+        const list = Array.isArray(object.material) ? object.material : [object.material];
+        list.forEach((m) => {
+          if (!m) return;
+          materials.add(m);
+          if (m.map) textures.add(m.map);
+        });
+      }
+    });
+    textures.forEach((t) => t.dispose());
+    geometries.forEach((g) => g.dispose());
+    materials.forEach((m) => m.dispose());
+    scene.clear();
+  };
+
+  const updateMotoStats = (stats) => {
+    if (!stats) return;
+    const isEn = stats.lang === "en";
+    const cap = stats.maxCapacity ?? MOTO_CAPACITY;
+    const avail = stats.availableMoto ?? cap;
+    const curr = stats.currentMoto ?? Math.max(0, cap - avail);
+    if (b1SignBoardMeshRef) {
+      b1SignBoardMeshRef.userData.id = isEn
+        ? "MOTORBIKE PARKING INFO BOARD (B1)"
+        : "BẢNG THÔNG TIN BÃI XE MÁY (B1)";
+      b1SignBoardMeshRef.userData.availableMoto = avail;
+      b1SignBoardMeshRef.userData.maxCapacity = cap;
+      b1SignBoardMeshRef.userData.currentMoto = curr;
+    }
+    if (b1BoardSpriteRef) {
+      updateBillboardSprite(
+        b1BoardSpriteRef,
+        isEn
+          ? [
+              "🏍️ MOTORBIKE PARKING (BASEMENT B1)",
+              `Available slots: ${avail} / ${cap}`
+            ]
+          : [
+              "🏍️ BÃI XE MÁY (TẦNG HẦM B1)",
+              `Slots trống: ${avail} / ${cap}`
+            ]
+      );
+    }
+    if (motoB1CenterSprite) {
+      updateBillboardSprite(
+        motoB1CenterSprite,
+        isEn
+          ? [
+              `🏍️ MOTORBIKE PARKING ZONE (B1 – ${cap} BIKES)`,
+              `Parked: ${curr} bikes · Available: ${avail} / ${cap} slots`
+            ]
+          : [
+              `🏍️ KHU VỰC ĐỖ XE MÁY (TẦNG B1 – ${cap} XE)`,
+              `Đang gửi: ${curr} xe · Trống: ${avail} / ${cap} slots`
+            ]
+      );
+    }
+    if (portalSignSpriteRef) {
+      updateBillboardSprite(
+        portalSignSpriteRef,
+        isEn
+          ? [
+              "🏢 BASEMENT PORTAL (B1 – B2 – B3)",
+              "← Exit Up ↑   |   Entry Down ↓ →"
+            ]
+          : [
+              "🏢 CỔNG HẦM CHUNG CƯ (B1 – B2 – B3)",
+              "← Lối ra hầm ↑   |   Lối vào hầm ↓ →"
+            ]
+      );
+    }
+    if (aptTitleSpriteRef) {
+      updateBillboardSprite(aptTitleSpriteRef, [
+        isEn ? "🏢 APARTMENT BUILDING (GROUND: Y = 0)" : "🏢 TÒA NHÀ CHUNG CƯ (MẶT ĐẤT: Y = 0)"
+      ]);
+    }
+    rampSprites.forEach(({ upSprite, downSprite, basementLevel }) => {
+      const upperVi = basementLevel === 1 ? "Mặt đất" : `B${basementLevel - 1}`;
+      const upperEn = basementLevel === 1 ? "Ground" : `B${basementLevel - 1}`;
+      const lowerLabel = `B${basementLevel}`;
+      updateBillboardSprite(upSprite, [
+        isEn ? `Exit / Up ↑ (${lowerLabel} → ${upperEn})` : `Lối ra / lên ↑ (${lowerLabel} → ${upperVi})`
+      ]);
+      updateBillboardSprite(downSprite, [
+        isEn ? `Entry / Down ↓ (${upperEn} → ${lowerLabel})` : `Lối vào / xuống ↓ (${upperVi} → ${lowerLabel})`
+      ]);
+    });
+    floorTagSprites.forEach(({ sprite, basementLevel }) => {
+      updateBillboardSprite(sprite, [
+        isEn ? `BASEMENT B${basementLevel}` : `TẦNG HẦM B${basementLevel}`
+      ]);
+    });
+    floorZoneSprites.forEach(({ floorCode, carZoneSprite, evZoneSprite }) => {
+      updateBillboardSprite(carZoneSprite, [
+        isEn ? `🚗 REGULAR CAR ZONE (${floorCode} – 25 SPOTS)` : `🚗 KHU Ô TÔ THƯỜNG (${floorCode} – 25 XE)`
+      ]);
+      updateBillboardSprite(evZoneSprite, [
+        isEn ? `⚡ ELECTRIC CAR ZONE (${floorCode} – 25 EV)` : `⚡ KHU Ô TÔ ĐIỆN (${floorCode} – 25 XE)`
+      ]);
+    });
+  };
+
+  return {
+    scene,
+    floors,
+    floorColumnGroups,
+    floorZoneSprites,
+    groundPortalGroup,
+    apartmentGroup,
+    motoB1CenterSprite,
     floorHeight,
     slotMeshes,
     interactables,

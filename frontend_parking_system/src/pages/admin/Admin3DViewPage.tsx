@@ -7,6 +7,7 @@ import {
   Layers,
   Car,
   Bike,
+  Zap,
   X,
   Radio,
 } from "lucide-react";
@@ -91,8 +92,8 @@ export default function Admin3DViewPage() {
       }
       setLevels(levelData.levels);
       setSlots(levelData.slots);
-      if (levelData.levels.length > 0 && !levelData.levels.some((l) => l.levelId === selectedLevelId)) {
-        setSelectedLevelId(levelData.levels[0].levelId);
+      if (levelData.levels.length > 0 && selectedLevelId !== "ALL" && !levelData.levels.some((l) => l.levelId === selectedLevelId)) {
+        setSelectedLevelId(levelData.levels.length > 1 ? "ALL" : levelData.levels[0].levelId);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không tải được sơ đồ 3D của bãi đỗ.");
@@ -123,11 +124,24 @@ export default function Admin3DViewPage() {
 
   // Selected level code
   const selectedLevelCode = useMemo(() => {
-    if (!selectedLevelId) return "";
+    if (!selectedLevelId || selectedLevelId === "ALL") return "ALL";
     const fromLayout = lotLayout?.levels.find((l) => l.id === selectedLevelId)?.code;
     if (fromLayout) return fromLayout;
     return levels.find((l) => l.levelId === selectedLevelId)?.levelCode || "";
   }, [lotLayout, levels, selectedLevelId]);
+
+  const motoSceneStats = useMemo(() => {
+    const motoSlots = slots.filter((s) => s.vehicleType === "Motorcycle");
+    const maxCapacity = motoSlots.length;
+    if (maxCapacity === 0) return null;
+    const availableMoto = motoSlots.filter((s) => s.status === "Available").length;
+    return {
+      availableMoto,
+      maxCapacity,
+      currentMoto: Math.max(0, maxCapacity - availableMoto),
+      lang: "vi" as const,
+    };
+  }, [slots]);
 
   // Map to ModelLevel for 3D Viewer
   const viewerLevels = useMemo<ModelLevel[]>(() => {
@@ -191,6 +205,7 @@ export default function Admin3DViewPage() {
   // Compute live stats for this facility
   const totalSlotsCount = slots.length;
   const availableCount = slots.filter((s) => s.status === "Available").length;
+  const availableEvCount = slots.filter((s) => s.status === "Available" && s.vehicleType === "EV").length;
   const occupiedCount = slots.filter((s) => s.status === "Occupied").length;
   const reservedCount = slots.filter((s) => s.status === "Reserved").length;
   const maintenanceCount = slots.filter((s) => s.status === "Maintenance" || s.operationalStatus === "MAINTENANCE").length;
@@ -223,23 +238,39 @@ export default function Admin3DViewPage() {
           </div>
 
           {/* Level Switcher */}
-          <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <span style={{ fontSize: "0.74rem", fontWeight: 700, color: "var(--adm-muted)", marginRight: "2px" }}>
               Tầng:
             </span>
-            {levels.map((lvl) => {
-              const isSelected = lvl.levelId === selectedLevelId;
-              return (
+            <div style={{ display: "inline-flex", gap: "4px", flexWrap: "wrap", alignItems: "center" }}>
+              {levels.length > 1 && (
                 <button
-                  key={lvl.levelId}
-                  onClick={() => setSelectedLevelId(lvl.levelId)}
-                  className={`adm-level-btn ${isSelected ? "active" : ""}`}
-                  title={`Chuyển góc nhìn mặt cắt ${lvl.levelName}`}
+                  type="button"
+                  onClick={() => setSelectedLevelId("ALL")}
+                  className={`adm-level-btn ${selectedLevelId === "ALL" ? "active" : ""}`}
+                  title="Xem toàn cảnh 3D toàn bãi"
                 >
-                  {lvl.levelName} ({lvl.availableSlots}/{lvl.totalSlots})
+                  <span>Toàn cảnh</span>
                 </button>
-              );
-            })}
+              )}
+              {levels.map((lvl) => {
+                const isSelected = lvl.levelId === selectedLevelId;
+                return (
+                  <button
+                    key={lvl.levelId}
+                    type="button"
+                    onClick={() => setSelectedLevelId(lvl.levelId)}
+                    className={`adm-level-btn ${isSelected ? "active" : ""}`}
+                    title={`Chuyển góc nhìn mặt cắt ${lvl.levelName}`}
+                  >
+                    <span>{lvl.levelName}</span>
+                    <span style={{ opacity: 0.85, fontSize: "10.5px", fontWeight: 500 }}>
+                      ({lvl.availableSlots}/{lvl.totalSlots})
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Action: Switch to Slot Management */}
@@ -260,7 +291,7 @@ export default function Admin3DViewPage() {
       </div>
 
       {error && (
-        <div style={{ padding: "8px 12px", background: "#fee2e2", color: "#b91c1c", borderRadius: "8px", fontSize: "0.78rem", marginBottom: "12px" }}>
+        <div className="adm-alert error" role="alert" style={{ marginBottom: "12px" }}>
           {error}
         </div>
       )}
@@ -286,6 +317,8 @@ export default function Admin3DViewPage() {
         <ParkingViewer
           levels={viewerLevels}
           mapObjects={[]}
+          lotCode={activeFacility?.code}
+          motoStats={motoSceneStats}
           selectedLevelCode={selectedLevelCode}
           selectedId={selectedSlot?.slotId || null}
           onSelect={(modelSlot) => {
@@ -297,11 +330,17 @@ export default function Admin3DViewPage() {
         {/* Legend */}
         <div className="adm-viewer-legend">
           <div className="adm-legend-item">
-            <span className="adm-legend-dot" style={{ background: "#10b981" }} />
+            <span className="adm-legend-dot" style={{ background: "#16a34a" }} />
             <span>Trống ({availableCount})</span>
           </div>
+          {availableEvCount > 0 && (
+            <div className="adm-legend-item">
+              <span className="adm-legend-dot" style={{ background: "#0284c7" }} />
+              <span>Ô tô điện trống ({availableEvCount})</span>
+            </div>
+          )}
           <div className="adm-legend-item">
-            <span className="adm-legend-dot" style={{ background: "#ef4444" }} />
+            <span className="adm-legend-dot" style={{ background: "#888e96" }} />
             <span>Có xe ({occupiedCount})</span>
           </div>
           <div className="adm-legend-item">
@@ -309,7 +348,7 @@ export default function Admin3DViewPage() {
             <span>Đã đặt ({reservedCount})</span>
           </div>
           <div className="adm-legend-item">
-            <span className="adm-legend-dot" style={{ background: "#94a3b8" }} />
+            <span className="adm-legend-dot" style={{ background: "#eab308" }} />
             <span>Bảo trì ({maintenanceCount})</span>
           </div>
         </div>
@@ -337,8 +376,22 @@ export default function Admin3DViewPage() {
               <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid var(--adm-border-subtle)" }}>
                 <span style={{ color: "var(--adm-muted)" }}>Loại xe:</span>
                 <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                  {selectedSlot.vehicleType === "Car" ? <Car size={13} color="#0891b2" /> : <Bike size={13} color="#d97706" />}
-                  {selectedSlot.vehicleType}
+                  {selectedSlot.vehicleType === "EV" ? (
+                    <>
+                      <Zap size={13} color="#0284c7" />
+                      Ô tô điện (EV)
+                    </>
+                  ) : selectedSlot.vehicleType === "Car" ? (
+                    <>
+                      <Car size={13} color="#0891b2" />
+                      Ô tô thường
+                    </>
+                  ) : (
+                    <>
+                      <Bike size={13} color="#d97706" />
+                      Xe máy
+                    </>
+                  )}
                 </span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid var(--adm-border-subtle)" }}>

@@ -3,13 +3,17 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { useLanguage } from "../../context/LanguageContext";
 import {
+  createBasementParkingArea,
   createBuildingParkingArea,
   createOutdoorParkingArea,
-  OUTDOOR_SLOT_COLORS,
+  getSlotColorHex,
+  isEvParkingSlot,
   type MotoSceneStats,
   type ParkingMapObject,
   type ParkingSceneSlot,
 } from "./parking.js";
+
+export type ParkingViewerMode = "outdoor" | "building" | "basement";
 
 export interface ModelSlot extends ParkingSceneSlot {
   floorCode: string;
@@ -23,18 +27,57 @@ export interface ModelLevel {
   slots: ModelSlot[];
 }
 
-function resolveBuildingFloorNumber(levelCode: string, levels: ModelLevel[]): number {
+function resolveSceneMode(
+  lotMode: ParkingViewerMode | undefined,
+  isBuilding: boolean | undefined,
+  lotCode: string | undefined,
+  levels: ModelLevel[],
+): ParkingViewerMode {
+  if (lotMode) return lotMode;
+  const upperLot = (lotCode || "").toUpperCase();
+  if (upperLot.includes("Q7")) return "basement";
+  const hasBasementLevel = levels.some((l) => {
+    const code = (l.levelCode || "").trim().toUpperCase();
+    return code === "B1" || code === "B2" || code === "B3" || (typeof l.elevationM === "number" && l.elevationM < 0);
+  });
+  if (hasBasementLevel) return "basement";
+  if (typeof isBuilding === "boolean") return isBuilding ? "building" : "outdoor";
+  if (upperLot.includes("BT")) return "outdoor";
+  if (upperLot.includes("Q1")) return "building";
+  if (levels.length > 1) return "building";
+  const firstCode = levels[0]?.levelCode?.toUpperCase() ?? "";
+  return firstCode === "F1" || firstCode === "F2" || firstCode === "F3" ? "building" : "outdoor";
+}
+
+function resolveFloorNumber(levelCode: string, levels: ModelLevel[], mode: ParkingViewerMode): number {
   const code = (levelCode || "").trim().toUpperCase();
   if (!code || code === "ALL" || code === "0") return 0;
+  if (mode === "basement") {
+    if (code === "B1" || code === "1" || code === "MOTO" || code.includes("B1")) return 1;
+    if (code === "B2" || code === "2" || code.includes("B2")) return 2;
+    if (code === "B3" || code === "3" || code.includes("B3")) return 3;
+    const idx = levels.findIndex((l) => l.levelCode.toUpperCase() === code || l.levelName.toUpperCase() === code);
+    if (idx >= 0) return Math.min(3, idx + 1);
+    return 0;
+  }
   if (code === "F1" || code === "1" || code === "MOTO") return 1;
   if (code === "F2" || code === "2") return 2;
   if (code === "F3" || code === "3") return 3;
-  const idx = levels.findIndex(l => l.levelCode.toUpperCase() === code);
+  const idx = levels.findIndex((l) => l.levelCode.toUpperCase() === code || l.levelName.toUpperCase() === code);
   if (idx >= 0) {
     if (levels.length === 1) return 2;
     return Math.min(3, idx + 1);
   }
   return 0;
+}
+
+function isSlotAllowedByVehicleFilter(
+  slot: Partial<ModelSlot> & { isEvSlot?: boolean; vehicleType?: string },
+  activeVehicleFilter?: "Car" | "EV" | "Motorbike" | null,
+): boolean {
+  if (!activeVehicleFilter || activeVehicleFilter === "Motorbike") return true;
+  const ev = isEvParkingSlot(slot);
+  return activeVehicleFilter === "EV" ? ev : !ev;
 }
 
 export default function ParkingViewer({
@@ -44,7 +87,9 @@ export default function ParkingViewer({
   onSelect,
   lotCode,
   isBuilding,
+  lotMode,
   motoStats,
+  activeVehicleFilter,
 }: {
   levels: ModelLevel[];
   mapObjects?: ParkingMapObject[];
@@ -53,47 +98,53 @@ export default function ParkingViewer({
   onSelect: (slot: ModelSlot) => void;
   lotCode?: string;
   isBuilding?: boolean;
+  lotMode?: ParkingViewerMode;
   motoStats?: MotoSceneStats | null;
+  activeVehicleFilter?: "Car" | "EV" | "Motorbike" | null;
 }) {
   const { lang } = useLanguage();
   const isEn = lang === "en";
   const host = useRef<HTMLDivElement>(null);
   const meshes = useRef<THREE.Mesh[]>([]);
-  const colorTransitions = useRef(new Map<THREE.Mesh, {
-    from: THREE.Color;
-    to: THREE.Color;
-    startedAt: number;
-  }>());
+  const colorTransitions = useRef(
+    new Map<
+      THREE.Mesh,
+      {
+        from: THREE.Color;
+        to: THREE.Color;
+        startedAt: number;
+      }
+    >(),
+  );
   const resetCameraRef = useRef<(() => void) | null>(null);
   const applyFloorViewRef = useRef<((floorNum: number) => void) | null>(null);
   const updateMotoStatsRef = useRef<((stats: MotoSceneStats | null) => void) | null>(null);
+  const apartmentGroupRef = useRef<THREE.Group | null>(null);
   const selectCallback = useRef(onSelect);
   const [error, setError] = useState(false);
+  const [showApartment, setShowApartment] = useState(true);
+  const [currentFloorNum, setCurrentFloorNum] = useState(0);
   const [motoBoardInfo, setMotoBoardInfo] = useState<{
     id: string;
-    floor: number;
+    floor: string | number;
     availableMoto: number;
     maxCapacity: number;
     currentMoto: number;
   } | null>(null);
 
-  const buildingMode = useMemo(() => {
-    if (typeof isBuilding === "boolean") return isBuilding;
-    const upperLot = (lotCode || "").toUpperCase();
-    if (upperLot.includes("BT")) return false;
-    if (upperLot.includes("Q1") || upperLot.includes("Q7")) return true;
-    if (levels.length > 1) return true;
-    const firstCode = levels[0]?.levelCode?.toUpperCase() ?? "";
-    return firstCode === "B1" || firstCode === "F1" || firstCode === "F2" || firstCode === "F3";
-  }, [isBuilding, lotCode, levels]);
+  const sceneMode = useMemo(
+    () => resolveSceneMode(lotMode, isBuilding, lotCode, levels),
+    [lotMode, isBuilding, lotCode, levels],
+  );
+  const isMultiFloor = sceneMode === "building" || sceneMode === "basement";
 
   const activeLevel = useMemo(
-    () => levels.find(level => level.levelCode === selectedLevelCode) ?? levels[0] ?? null,
+    () => levels.find((level) => level.levelCode === selectedLevelCode) ?? levels[0] ?? null,
     [levels, selectedLevelCode],
   );
   const activeSlots = useMemo(
-    () => (buildingMode ? levels.flatMap(level => level.slots) : activeLevel?.slots ?? []),
-    [buildingMode, levels, activeLevel],
+    () => (isMultiFloor ? levels.flatMap((level) => level.slots) : activeLevel?.slots ?? []),
+    [isMultiFloor, levels, activeLevel],
   );
 
   const levelsRef = useRef(levels);
@@ -101,6 +152,8 @@ export default function ParkingViewer({
   const selectedIdRef = useRef(selectedId);
   const selectedLevelCodeRef = useRef(selectedLevelCode);
   const motoStatsRef = useRef(motoStats ?? null);
+  const showApartmentRef = useRef(showApartment);
+  const activeVehicleFilterRef = useRef(activeVehicleFilter ?? null);
 
   selectCallback.current = onSelect;
   levelsRef.current = levels;
@@ -108,13 +161,15 @@ export default function ParkingViewer({
   selectedIdRef.current = selectedId;
   selectedLevelCodeRef.current = selectedLevelCode;
   motoStatsRef.current = motoStats ?? null;
+  showApartmentRef.current = showApartment;
+  activeVehicleFilterRef.current = activeVehicleFilter ?? null;
 
   const layoutKey = useMemo(() => {
-    if (buildingMode) {
-      return `building:${levels.map(l => `${l.levelId}:${l.slots.length}`).join("|")}`;
+    if (isMultiFloor) {
+      return `${sceneMode}:${levels.map((l) => `${l.levelId}:${l.levelCode}:${l.slots.length}`).join("|")}`;
     }
-    return `outdoor:${activeLevel?.levelId ?? ""}:${(activeLevel?.slots ?? []).map(s => s.slotId).join("|")}`;
-  }, [buildingMode, levels, activeLevel]);
+    return `outdoor:${activeLevel?.levelId ?? ""}:${(activeLevel?.slots ?? []).map((s) => s.slotId).join("|")}`;
+  }, [isMultiFloor, sceneMode, levels, activeLevel]);
 
   useEffect(() => {
     const container = host.current;
@@ -132,40 +187,93 @@ export default function ParkingViewer({
     setMotoBoardInfo(null);
     colorTransitions.current.clear();
 
-    const isBuildingScene = buildingMode;
-    const camera = new THREE.PerspectiveCamera(isBuildingScene ? 55 : 60, 1, 0.1, 1000);
+    const fov = sceneMode === "basement" ? 52 : sceneMode === "building" ? 55 : 60;
+    const camera = new THREE.PerspectiveCamera(fov, 1, 0.1, 1000);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.shadowMap.enabled = isBuildingScene;
+    renderer.shadowMap.enabled = isMultiFloor;
+    if (sceneMode === "basement") {
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    }
     container.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.minDistance = 12;
-    controls.maxDistance = isBuildingScene ? 180 : 100;
-    controls.maxPolarAngle = Math.PI / 2.02;
+    controls.maxDistance = isMultiFloor ? 180 : 100;
+    controls.maxPolarAngle = sceneMode === "basement" ? Math.PI * 0.72 : Math.PI / 2.02;
 
     let scene: THREE.Scene;
     let interactableMeshes: THREE.Mesh[] = [];
     let disposeScene: () => void;
 
-    if (isBuildingScene) {
+    if (sceneMode === "basement") {
+      const built = createBasementParkingArea(levelsRef.current, motoStatsRef.current);
+      scene = built.scene;
+      meshes.current = built.slotMeshes;
+      interactableMeshes = built.interactables;
+      disposeScene = built.dispose;
+      updateMotoStatsRef.current = built.updateMotoStats;
+      apartmentGroupRef.current = built.apartmentGroup;
+
+      const showFloor = (f: number) => {
+        setMotoBoardInfo(null);
+        setCurrentFloorNum(f);
+        built.floors.forEach((g, i) => {
+          g.visible = f === 0 || f === i + 1;
+        });
+        built.groundPortalGroup.visible = f === 0;
+        built.apartmentGroup.visible = f === 0 && showApartmentRef.current;
+        if (built.motoB1CenterSprite) {
+          built.motoB1CenterSprite.visible = f === 1;
+        }
+        built.floorZoneSprites.forEach(({ floorIndex, sprites }) => {
+          sprites.forEach((s) => {
+            s.visible = f === floorIndex;
+          });
+        });
+        built.floorColumnGroups.forEach((cg) => {
+          cg.visible = f === 0;
+        });
+
+        if (f === 0) {
+          controls.target.set(-7, -5, 0);
+          camera.position.set(58, 22, 68);
+        } else {
+          const y = -f * built.floorHeight;
+          controls.target.set(-6, y + 1.5, 0);
+          camera.position.set(-6, y + 46, 44);
+        }
+        camera.updateProjectionMatrix();
+        controls.update();
+      };
+
+      applyFloorViewRef.current = showFloor;
+      const initialFloor = resolveFloorNumber(selectedLevelCodeRef.current, levelsRef.current, "basement");
+      showFloor(initialFloor);
+      resetCameraRef.current = () => {
+        const currentFloor = resolveFloorNumber(selectedLevelCodeRef.current, levelsRef.current, "basement");
+        showFloor(currentFloor);
+      };
+    } else if (sceneMode === "building") {
       const built = createBuildingParkingArea(levelsRef.current, motoStatsRef.current);
       scene = built.scene;
       meshes.current = built.slotMeshes;
       interactableMeshes = built.interactables;
       disposeScene = built.dispose;
       updateMotoStatsRef.current = built.updateMotoStats;
+      apartmentGroupRef.current = null;
 
       const showFloor = (f: number) => {
         setMotoBoardInfo(null);
+        setCurrentFloorNum(f);
         built.floors.forEach((g, i) => {
           g.visible = f === 0 || f === i + 1;
         });
         if (built.motoFloor1CenterSprite) {
           built.motoFloor1CenterSprite.visible = f === 1;
         }
-        built.floorColumnGroups.forEach(cg => {
+        built.floorColumnGroups.forEach((cg) => {
           cg.visible = f === 0;
         });
         const targetY = f === 0 ? 9 : (f - 1) * built.floorHeight + 1.5;
@@ -180,10 +288,10 @@ export default function ParkingViewer({
       };
 
       applyFloorViewRef.current = showFloor;
-      const initialFloor = resolveBuildingFloorNumber(selectedLevelCodeRef.current, levelsRef.current);
+      const initialFloor = resolveFloorNumber(selectedLevelCodeRef.current, levelsRef.current, "building");
       showFloor(initialFloor);
       resetCameraRef.current = () => {
-        const currentFloor = resolveBuildingFloorNumber(selectedLevelCodeRef.current, levelsRef.current);
+        const currentFloor = resolveFloorNumber(selectedLevelCodeRef.current, levelsRef.current, "building");
         showFloor(currentFloor);
       };
     } else {
@@ -193,6 +301,7 @@ export default function ParkingViewer({
       interactableMeshes = built.slotMeshes;
       disposeScene = built.dispose;
       updateMotoStatsRef.current = built.updateMotoStats;
+      apartmentGroupRef.current = null;
 
       const fitOutdoorCamera = () => {
         controls.target.set(0, 0, 0);
@@ -205,14 +314,13 @@ export default function ParkingViewer({
       resetCameraRef.current = fitOutdoorCamera;
     }
 
-    meshes.current.forEach(mesh => {
-      const slot = mesh.userData as ModelSlot;
+    meshes.current.forEach((mesh) => {
+      const slot = mesh.userData as ModelSlot & { isEvSlot?: boolean; vehicleType?: string };
       const material = mesh.material as THREE.MeshStandardMaterial;
-      material.color.setHex(
-        slot.slotId === selectedIdRef.current
-          ? OUTDOOR_SLOT_COLORS.SELECTED
-          : OUTDOOR_SLOT_COLORS[String(slot.status).toUpperCase()] ?? OUTDOOR_SLOT_COLORS.AVAILABLE,
-      );
+      const isSelected = slot.slotId === selectedIdRef.current;
+      material.color.setHex(getSlotColorHex(slot, isSelected));
+      const allowed = isSlotAllowedByVehicleFilter(slot, activeVehicleFilterRef.current);
+      material.opacity = allowed ? (slot.isEvSlot ? 0.82 : 0.8) : 0.26;
     });
 
     const resize = new ResizeObserver(() => {
@@ -233,12 +341,15 @@ export default function ParkingViewer({
       if (!down || !event.isPrimary || Math.hypot(event.clientX - down.x, event.clientY - down.y) > 5) return;
       down = null;
       const rect = renderer.domElement.getBoundingClientRect();
-      raycaster.setFromCamera(new THREE.Vector2(
-        ((event.clientX - rect.left) / rect.width) * 2 - 1,
-        -((event.clientY - rect.top) / rect.height) * 2 + 1,
-      ), camera);
+      raycaster.setFromCamera(
+        new THREE.Vector2(
+          ((event.clientX - rect.left) / rect.width) * 2 - 1,
+          -((event.clientY - rect.top) / rect.height) * 2 + 1,
+        ),
+        camera,
+      );
 
-      const visibleTargets = interactableMeshes.filter(s => {
+      const visibleTargets = interactableMeshes.filter((s) => {
         let p: THREE.Object3D | null = s.parent;
         while (p) {
           if (!p.visible) return false;
@@ -259,6 +370,10 @@ export default function ParkingViewer({
           maxCapacity: data.maxCapacity,
           currentMoto: data.currentMoto,
         });
+        return;
+      }
+
+      if (!isSlotAllowedByVehicleFilter(data, activeVehicleFilterRef.current)) {
         return;
       }
 
@@ -298,19 +413,26 @@ export default function ParkingViewer({
       resetCameraRef.current = null;
       applyFloorViewRef.current = null;
       updateMotoStatsRef.current = null;
+      apartmentGroupRef.current = null;
     };
-  }, [layoutKey, buildingMode]);
+  }, [layoutKey, sceneMode, isMultiFloor]);
 
   useEffect(() => {
-    if (!buildingMode || !applyFloorViewRef.current) return;
-    const floorNum = resolveBuildingFloorNumber(selectedLevelCode, levels);
+    if (!isMultiFloor || !applyFloorViewRef.current) return;
+    const floorNum = resolveFloorNumber(selectedLevelCode, levels, sceneMode);
     applyFloorViewRef.current(floorNum);
-  }, [buildingMode, selectedLevelCode, levels]);
+  }, [isMultiFloor, sceneMode, selectedLevelCode, levels]);
+
+  useEffect(() => {
+    if (sceneMode === "basement" && apartmentGroupRef.current) {
+      apartmentGroupRef.current.visible = currentFloorNum === 0 && showApartment;
+    }
+  }, [sceneMode, showApartment, currentFloorNum]);
 
   useEffect(() => {
     updateMotoStatsRef.current?.(motoStats ?? null);
     if (motoStats) {
-      setMotoBoardInfo(prev =>
+      setMotoBoardInfo((prev) =>
         prev
           ? {
               ...prev,
@@ -324,20 +446,17 @@ export default function ParkingViewer({
   }, [motoStats]);
 
   useEffect(() => {
-    const slotById = new Map(activeSlots.map(slot => [slot.slotId, slot] as const));
-    meshes.current.forEach(mesh => {
+    const slotById = new Map(activeSlots.map((slot) => [slot.slotId, slot] as const));
+    meshes.current.forEach((mesh) => {
       const slot = slotById.get(String(mesh.userData.slotId));
       if (slot) {
         mesh.userData = { ...mesh.userData, ...slot };
       }
-      const status = String(slot?.status ?? mesh.userData.status ?? "AVAILABLE").toUpperCase();
       const isSelected = String(mesh.userData.slotId) === selectedId;
       const material = mesh.material as THREE.MeshStandardMaterial;
-      const target = new THREE.Color(
-        isSelected
-          ? OUTDOOR_SLOT_COLORS.SELECTED
-          : OUTDOOR_SLOT_COLORS[status] ?? OUTDOOR_SLOT_COLORS.AVAILABLE,
-      );
+      const target = new THREE.Color(getSlotColorHex(mesh.userData, isSelected));
+      const allowed = isSlotAllowedByVehicleFilter(mesh.userData, activeVehicleFilter);
+      material.opacity = allowed ? (isEvParkingSlot(mesh.userData) ? 0.82 : 0.8) : 0.26;
       if (!material.color.equals(target)) {
         colorTransitions.current.set(mesh, {
           from: material.color.clone(),
@@ -346,11 +465,17 @@ export default function ParkingViewer({
         });
       }
     });
-  }, [activeSlots, selectedId]);
+  }, [activeSlots, selectedId, activeVehicleFilter]);
 
   return (
     <div className="booking-viewer" ref={host} aria-label={isEn ? "3D parking model" : "Mô hình bãi đỗ 3D"}>
-      {error && <p role="alert">{isEn ? "Unable to open 3D graphics. You can still use the slot list below." : "Không thể mở đồ họa 3D. Danh sách ô bên dưới vẫn dùng được."}</p>}
+      {error && (
+        <p role="alert">
+          {isEn
+            ? "Unable to open 3D graphics. You can still use the slot list below."
+            : "Không thể mở đồ họa 3D. Danh sách ô bên dưới vẫn dùng được."}
+        </p>
+      )}
       {motoBoardInfo && (
         <div
           style={{
@@ -367,7 +492,9 @@ export default function ParkingViewer({
             boxShadow: "0 8px 24px rgba(15, 23, 42, 0.14)",
           }}
         >
-          <strong style={{ display: "block", marginBottom: 4 }}>{isEn ? "MOTORBIKE PARKING INFO BOARD" : motoBoardInfo.id}</strong>
+          <strong style={{ display: "block", marginBottom: 4 }}>
+            {isEn ? "MOTORBIKE PARKING INFO BOARD" : motoBoardInfo.id}
+          </strong>
           <div>
             {isEn
               ? `Floor ${motoBoardInfo.floor} · Available: ${motoBoardInfo.availableMoto} / ${motoBoardInfo.maxCapacity} slots (Parked: ${motoBoardInfo.currentMoto} bikes)`
@@ -375,10 +502,61 @@ export default function ParkingViewer({
           </div>
         </div>
       )}
-      <button className="booking-camera-reset" type="button" disabled={error}
-        onClick={() => resetCameraRef.current?.()}>
-        {isEn ? "Reset camera" : "Đặt lại camera"}
-      </button>
+      <div
+        className="booking-viewer-controls"
+        style={{
+          position: "absolute",
+          top: 12,
+          right: 12,
+          zIndex: 2,
+          display: "flex",
+          flexWrap: "wrap",
+          justifyContent: "flex-end",
+          alignItems: "center",
+          gap: 8,
+          maxWidth: "calc(100% - 24px)",
+        }}
+      >
+        {sceneMode === "basement" && !error && (
+          <button
+            className="booking-camera-reset"
+            type="button"
+            disabled={currentFloorNum !== 0}
+            style={{
+              position: "static",
+              top: "auto",
+              right: "auto",
+              background: currentFloorNum === 0 && showApartment ? "#0f766e" : undefined,
+              color: currentFloorNum === 0 && showApartment ? "#ffffff" : undefined,
+              borderColor: currentFloorNum === 0 && showApartment ? "#0f766e" : undefined,
+              opacity: currentFloorNum !== 0 ? 0.55 : 1,
+            }}
+            onClick={() => setShowApartment((prev) => !prev)}
+            title={
+              isEn
+                ? "Toggle translucent apartment building above basement (Overview mode)"
+                : "Bật/tắt khối tòa chung cư bán trong suốt phía trên hầm (chế độ Toàn cảnh)"
+            }
+          >
+            {showApartment
+              ? isEn
+                ? "🏢 Apartment: On"
+                : "🏢 Chung cư: Hiện"
+              : isEn
+                ? "🏢 Apartment: Off"
+                : "🏢 Chung cư: Ẩn"}
+          </button>
+        )}
+        <button
+          className="booking-camera-reset"
+          type="button"
+          disabled={error}
+          style={{ position: "static", top: "auto", right: "auto" }}
+          onClick={() => resetCameraRef.current?.()}
+        >
+          {isEn ? "Reset camera" : "Đặt lại camera"}
+        </button>
+      </div>
     </div>
   );
 }

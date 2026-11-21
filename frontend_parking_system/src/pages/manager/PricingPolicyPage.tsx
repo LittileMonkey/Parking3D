@@ -4,6 +4,7 @@ import {
   CreditCard,
   Car,
   Bike,
+  Zap,
   Sparkles,
   History,
   CheckCircle2,
@@ -30,7 +31,7 @@ interface OutletContextType {
 
 export default function PricingPolicyPage() {
   const { selectedLotId, refreshKey } = useOutletContext<OutletContextType>();
-  const [type, setType] = useState<"CAR" | "MOTORBIKE">("CAR");
+  const [type, setType] = useState<"CAR" | "EV" | "MOTORBIKE">("CAR");
   const [plans, setPlans] = useState<PricingVersion[]>([]);
   const [rules, setRules] = useState<BlockPricing>(initialRules);
   const [name, setName] = useState("Biểu giá tiêu chuẩn theo block");
@@ -166,6 +167,15 @@ export default function PricingPolicyPage() {
             </button>
             <button
               type="button"
+              className={`pm-period-btn ${type === "EV" ? "active" : ""}`}
+              onClick={() => setType("EV")}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              <Zap size={14} />
+              <span>Ô tô điện (EV)</span>
+            </button>
+            <button
+              type="button"
               className={`pm-period-btn ${type === "MOTORBIKE" ? "active" : ""}`}
               onClick={() => setType("MOTORBIKE")}
               style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
@@ -251,7 +261,7 @@ export default function PricingPolicyPage() {
                 </div>
                 <div>
                   <h3 className="pm-card-h3">
-                    Thông Số Biểu Giá ({type === "CAR" ? "Ô tô" : "Xe máy"})
+                    Thông Số Biểu Giá ({type === "CAR" ? "Ô tô" : type === "EV" ? "Ô tô điện (EV)" : "Xe máy"})
                   </h3>
                   <span className="pm-card-sub">
                     Phiên bản hiện tại: <strong>v{plans[0]?.version ?? 1}</strong> • Trạng thái:{" "}

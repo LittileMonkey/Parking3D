@@ -1,4 +1,5 @@
 using Npgsql;
+using Parking.Parking.Domain;
 using Parking.ServiceDefaults;
 
 namespace Parking.Parking.Persistence.Repositories;
@@ -6,18 +7,22 @@ namespace Parking.Parking.Persistence.Repositories;
 public sealed partial class ParkingRepository
 {
     // Commands are supplied by the caller and share its transaction and verified IDs.
-    private static async Task<Guid> RegisterAndLockWalkInVehicleAsync(Func<string, NpgsqlCommand> command, string vehicleType, CancellationToken ct)
+    private static async Task<Guid> RegisterAndLockWalkInVehicleAsync(Func<string, NpgsqlCommand> command, string vehicleType, bool isEv, CancellationToken ct)
     {
+        var requestedFuel = isEv ? VehicleTypeRules.ElectricFuel : "GASOLINE";
         // 5. Đăng ký xe tự động vào bảng vehicles nếu chưa có & đối soát vehicle_type & Khóa VEHICLE
         Guid vehicleId;
         string storedVehicleType;
         await using (var ensureVehicle = command("""
             INSERT INTO vehicles (id, plate_country, plate_normalized, vehicle_type, fuel_type, is_active)
-            VALUES (gen_random_uuid(), 'VN', @plate, @type, 'GASOLINE', true)
-            ON CONFLICT (plate_country, plate_normalized) DO UPDATE SET is_active=true
+            VALUES (gen_random_uuid(), 'VN', @plate, @type, @fuel, true)
+            ON CONFLICT (plate_country, plate_normalized) DO UPDATE
+            SET is_active = true,
+                fuel_type = CASE WHEN vehicles.vehicle_type = 'CAR' THEN EXCLUDED.fuel_type ELSE vehicles.fuel_type END
             RETURNING id, vehicle_type;
             """))
         {
+            ensureVehicle.Parameters.AddWithValue("fuel", requestedFuel);
             await using var reader = await ensureVehicle.ExecuteReaderAsync(ct);
             await reader.ReadAsync(ct);
             vehicleId = reader.GetGuid(0);

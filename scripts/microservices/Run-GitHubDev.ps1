@@ -27,6 +27,11 @@ $settings=@{}
 foreach($line in Get-Content -Encoding UTF8 '.env'){
     if($line -match '^([A-Z0-9_]+)=(.*)$'){$settings[$Matches[1]]=$Matches[2].Trim().Trim('"').Trim("'")}
 }
+if($settings.LOCAL_BOOTSTRAP_EMAIL){$settings.BOOTSTRAP_EMAIL=$settings.LOCAL_BOOTSTRAP_EMAIL}
+if($settings.LOCAL_STAFF_EMAIL){$settings.DEMO_STAFF_EMAIL=$settings.LOCAL_STAFF_EMAIL}
+$localDbPort=if($settings.LOCAL_POSTGRES_PORT){[int]$settings.LOCAL_POSTGRES_PORT}else{5432}
+$localDbUser=if($settings.LOCAL_POSTGRES_USER){$settings.LOCAL_POSTGRES_USER}else{'postgres'}
+$localParkingDatabase=if($settings.LOCAL_PARKING_DATABASE){$settings.LOCAL_PARKING_DATABASE}else{'parking_parking'}
 foreach($key in @('JWT_KEY','GRPC_SERVICE_KEY','BOOTSTRAP_EMAIL','BOOTSTRAP_PASSWORD','DEMO_STAFF_EMAIL','DEMO_STAFF_PASSWORD')){
     if([string]::IsNullOrWhiteSpace($settings[$key])){throw "Thiếu $key trong .env. Không chạy seed bằng tài khoản mặc định hardcode."}
 }
@@ -49,7 +54,7 @@ if($LASTEXITCODE -ne 0){throw 'Build thất bại; chưa khởi động BE.'}
 
 $services=@(
     @{Name='identity';Project='src/Services/Identity/Parking.Identity.Api';Db='parking_identity';Http=5041;Grpc=5042},
-    @{Name='parking';Project='src/Services/Parking/Parking.Parking.Api';Db='parking_parking';Http=8082;Grpc=8083},
+    @{Name='parking';Project='src/Services/Parking/Parking.Parking.Api';Db=$localParkingDatabase;Http=8082;Grpc=8083},
     @{Name='payment';Project='src/Services/Payment/Parking.Payment.Api';Db='parking_payment';Http=8084;Grpc=8085},
     @{Name='ai';Project='src/Services/AI/Parking.AI.Api';Db='parking_ai';Http=5004;Grpc=5005},
     @{Name='gateway';Project='src/Gateway/Parking.Gateway';Db='';Http=8080;Grpc=0}
@@ -71,7 +76,7 @@ try{
         }
         if($service.Db){
             $builder=[System.Data.Common.DbConnectionStringBuilder]::new()
-            $builder['Host']='localhost';$builder['Port']=5432;$builder['Username']='postgres';$builder['Database']=$service.Db;$builder['Password']=$dbPassword
+            $builder['Host']='localhost';$builder['Port']=$localDbPort;$builder['Username']=$localDbUser;$builder['Database']=$service.Db;$builder['Password']=$dbPassword
             $variables['ConnectionStrings__Service']=$builder.ConnectionString
         }
         foreach($provider in $services | Where-Object Db){
@@ -97,7 +102,7 @@ for($attempt=0;$attempt -lt 30;$attempt++){
 if(-not $ready){throw 'BE chưa ready. Xem artifacts/local-stack/*.error.log và *.log; không coi khởi động process là chạy thành công.'}
 Write-Host 'BE READY: Identity, Parking, Payment, AI và Gateway http://localhost:8080'
 Write-Host 'Terminal FE: cd frontend_parking_system; npm run dev'
-Write-Host 'Đăng nhập bằng BOOTSTRAP_EMAIL/PASSWORD hoặc DEMO_STAFF_EMAIL/PASSWORD, DEMO_CUSTOMER_EMAIL/PASSWORD trong .env.'
+Write-Host 'Tài khoản đã có giữ nguyên mật khẩu; LOCAL_BOOTSTRAP_EMAIL/LOCAL_STAFF_EMAIL chỉ chọn lại tài khoản local, không reset mật khẩu.'
 Write-Host 'Dừng BE: .\scripts\microservices\Run-GitHubDev.ps1 -Stop'
 if($KeepAlive){
     Write-Host 'Stack is running in background. Press Ctrl+C to terminate or use Run-GitHubDev.ps1 -Stop'

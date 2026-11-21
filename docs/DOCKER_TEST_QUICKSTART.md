@@ -1,5 +1,7 @@
 # Test database + backend bằng Docker, frontend bằng Vite
 
+Muốn chạy backend trực tiếp và xem tài khoản mới trong PostgreSQL local bằng pgAdmin? Xem [LOCAL_TEST_QUICKSTART.md](LOCAL_TEST_QUICKSTART.md). Dữ liệu Docker và local là hai bộ riêng.
+
 Mở Docker Desktop, chọn Linux containers, đợi engine chạy. Mở PowerShell mới và kiểm tra `docker version` (cần cả Client và Server), `docker compose version`.
 
 Code GitHub mới nhất ở mốc kiểm tra là `789b5079`, thêm container Ollama tự tải `qwen2.5:3b`. Script start tự tìm Docker CLI tại vị trí cài per-user thông dụng khi PATH chưa cập nhật. Nếu báo pipe `dockerDesktopLinuxEngine` không tồn tại thì Docker Desktop/engine chưa chạy, không phải lỗi project.

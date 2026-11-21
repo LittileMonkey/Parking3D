@@ -7,13 +7,14 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "test": "node --test src/components/parking/*.test.mjs src/services/__tests__/*.test.mjs",
     "test:parking": "node --test src/components/parking/parkingAppearance.test.mjs src/components/parking/parkingRealtime.test.mjs",
     "test:realtime": "node --test src/components/parking/parkingRealtime.test.mjs",
-    "test:hold": "node --test src/services/bookingHold.test.mjs",
-    "test:payment": "node --test src/services/paymentReturnContext.test.mjs src/services/staff/staffApi.test.mjs",
-    "test:staff": "node --test src/services/staff/staffApi.test.mjs src/services/staff/api.staff.test.mjs",
-    "test:registration": "node --test src/services/registration.test.mjs",
-    "test:auth": "node --test src/services/authStorage.test.mjs"
+    "test:hold": "node --test src/services/__tests__/bookingHold.test.mjs",
+    "test:payment": "node --test src/services/__tests__/paymentReturnContext.test.mjs src/services/__tests__/staffApi.test.mjs",
+    "test:staff": "node --test src/services/__tests__/staffApi.test.mjs src/services/__tests__/api.staff.test.mjs",
+    "test:registration": "node --test src/services/__tests__/registration.test.mjs",
+    "test:auth": "node --test src/services/__tests__/authStorage.test.mjs"
   },
   "dependencies": {
     "@microsoft/signalr": "^9.0.19",

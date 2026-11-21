@@ -192,6 +192,7 @@ export interface SlotControlItem {
 export interface LevelSummary {
   levelId: string;
   levelName: string;
+  levelCode?: string;
   totalSlots: number;
   occupiedSlots: number;
   availableSlots: number;

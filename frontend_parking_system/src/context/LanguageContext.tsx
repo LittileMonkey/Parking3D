@@ -147,6 +147,25 @@ const translations: Record<Language, Record<string, string>> = {
     "footer.privacy": "Chính sách bảo mật",
     "footer.terms": "Điều khoản dịch vụ",
     "footer.rights": "Bản quyền thuộc về ParkMatrix Corporation. Mọi quyền được bảo lưu.",
+
+    // Admin Console
+    "admin.brand_subtitle": "KHÔNG GIAN QUẢN TRỊ",
+    "admin.scope": "Phạm Vi Quản Trị",
+    "admin.scope_val": "Toàn Nền Tảng (Global)",
+    "admin.section_heading": "PHÂN HỆ QUẢN TRỊ",
+    "admin.nav_dashboard": "Tổng Quan Nền Tảng",
+    "admin.nav_map3d": "Sơ Đồ 3D Toàn Cảnh",
+    "admin.nav_slots": "Quản Lý Ô Đỗ (Slots)",
+    "admin.nav_users": "Người Dùng & Phân Quyền",
+    "admin.nav_facilities": "Hạ Tầng Bãi Đỗ Xe",
+    "admin.nav_staff": "Phân Bổ Nhân Sự Cơ Sở",
+    "admin.nav_services": "Dịch Vụ & AI Vision",
+    "admin.role_tag": "Quản trị viên toàn hệ thống",
+    "admin.logout": "Đăng xuất",
+    "admin.refresh": "Làm mới",
+    "admin.eyebrow": "KHU VỰC QUẢN TRỊ TOÀN NỀN TẢNG",
+    "admin.status_ready": "4 Microservices Sẵn Sàng",
+    "admin.status_checking": "Kiểm tra kết nối",
   },
   en: {
     // Top Bar
@@ -285,6 +304,25 @@ const translations: Record<Language, Record<string, string>> = {
     "footer.privacy": "Privacy Policy",
     "footer.terms": "Terms of Service",
     "footer.rights": "Copyright © ParkMatrix Corporation. All rights reserved.",
+
+    // Admin Console
+    "admin.brand_subtitle": "ADMIN CONSOLE",
+    "admin.scope": "Admin Scope",
+    "admin.scope_val": "Global Platform",
+    "admin.section_heading": "ADMIN MODULES",
+    "admin.nav_dashboard": "Platform Overview",
+    "admin.nav_map3d": "3D Digital Twin Map",
+    "admin.nav_slots": "Slot Management",
+    "admin.nav_users": "Users & RBAC",
+    "admin.nav_facilities": "Parking Facilities",
+    "admin.nav_staff": "Staff Assignments",
+    "admin.nav_services": "Services & AI Vision",
+    "admin.role_tag": "Platform System Admin",
+    "admin.logout": "Logout",
+    "admin.refresh": "Refresh",
+    "admin.eyebrow": "SYSTEM ADMIN CONSOLE",
+    "admin.status_ready": "4 Microservices Online",
+    "admin.status_checking": "Checking connection",
   },
 };
 
