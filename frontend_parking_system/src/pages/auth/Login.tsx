@@ -1,4 +1,4 @@
-import GoogleSignIn from "../components/auth/GoogleSignIn";
+﻿import GoogleSignIn from "../../components/auth/GoogleSignIn";
 import { useState, useEffect, type FormEvent } from "react";
 import {
   ArrowLeft,
@@ -10,9 +10,9 @@ import {
   AlertCircle
 } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ApiError } from "../services/api";
-import { useAuth, getRedirectPathForUser } from "../context/AuthContext";
-import AuthShowcase from "../components/auth/AuthShowcase";
+import { ApiError } from "../../services/api";
+import { useAuth, getRedirectPathForUser } from "../../context/AuthContext";
+import AuthShowcase from "../../components/auth/AuthShowcase";
 import "./Auth.css";
 
 export default function Login() {
@@ -230,3 +230,4 @@ export default function Login() {
     </div>
   );
 }
+

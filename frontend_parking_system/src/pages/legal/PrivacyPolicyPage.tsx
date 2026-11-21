@@ -1,6 +1,6 @@
-import { Link } from "react-router-dom";
-import { useLanguage } from "../context/LanguageContext";
-import CustomerLayout from "../components/customer/CustomerLayout";
+﻿import { Link } from "react-router-dom";
+import { useLanguage } from "../../context/LanguageContext";
+import CustomerLayout from "../../components/customer/CustomerLayout";
 import {
   ShieldCheck,
   Scale,
@@ -314,3 +314,4 @@ export default function PrivacyPolicyPage() {
     </CustomerLayout>
   );
 }
+

@@ -1,7 +1,7 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { ApiError, api, type ApprovedFaqResponse, type ParkingLot } from "../services/api";
-import { useLanguage } from "../context/LanguageContext";
-import CustomerLayout from "../components/customer/CustomerLayout";
+﻿import { useEffect, useState, type FormEvent } from "react";
+import { ApiError, api, type ApprovedFaqResponse, type ParkingLot } from "../../services/api";
+import { useLanguage } from "../../context/LanguageContext";
+import CustomerLayout from "../../components/customer/CustomerLayout";
 
 function getErrorMessage(error: unknown, isEn = false) {
   if (error instanceof ApiError) {
@@ -182,3 +182,4 @@ export default function FaqPage() {
     </CustomerLayout>
   );
 }
+

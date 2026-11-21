@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { findPaymentReturn, rememberPaymentReturn } from './paymentReturnContext.ts';
+import { findPaymentReturn, rememberPaymentReturn } from '../customer/paymentReturnContext.ts';
 
 function storage() {
   const data = new Map();

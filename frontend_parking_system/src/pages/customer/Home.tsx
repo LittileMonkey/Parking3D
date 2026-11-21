@@ -1,11 +1,11 @@
-import { useEffect, useState, type FormEvent } from "react";
+﻿import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowDown, ArrowRight, Car, Check, ChevronDown, Clock3, CreditCard, LocateFixed, MapPin, ParkingCircle, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Bike, Layers3, Zap } from "lucide-react";
-import CustomerLayout from "../components/customer/CustomerLayout";
-import HomeFaq from "../components/customer/HomeFaq";
-import LandingParkingPreview from "../components/customer/LandingParkingPreview";
-import { useLanguage } from "../context/LanguageContext";
-import { api, type ParkingLot } from "../services/api";
+import CustomerLayout from "../../components/customer/CustomerLayout";
+import HomeFaq from "../../components/customer/HomeFaq";
+import LandingParkingPreview from "../../components/customer/LandingParkingPreview";
+import { useLanguage } from "../../context/LanguageContext";
+import { api, type ParkingLot } from "../../services/api";
 import "./Home.css";
 
 function getLotVisualMeta(lot: ParkingLot, index: number) {
@@ -187,3 +187,4 @@ export default function Home() {
     </CustomerLayout>
   );
 }
+

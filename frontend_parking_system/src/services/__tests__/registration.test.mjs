@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 
 function registration() {
-  const source = fs.readFileSync(new URL('./registration.ts', import.meta.url), 'utf8');
+  const source = fs.readFileSync(new URL('../auth/registration.ts', import.meta.url), 'utf8');
   const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const exports = {};
   vm.runInNewContext(output, { exports });

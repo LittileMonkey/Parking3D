@@ -1,7 +1,7 @@
-import { useEffect, useState, type FormEvent } from "react";
+﻿import { useEffect, useState, type FormEvent } from "react";
 import { ArrowLeft, Clock3, MailCheck, RefreshCw } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ApiError, api } from "../services/api";
+import { ApiError, api } from "../../services/api";
 
 const OTP_LIFETIME_MS = 60_000;
 
@@ -182,3 +182,4 @@ export default function VerifyEmail() {
     </main>
   );
 }
+
