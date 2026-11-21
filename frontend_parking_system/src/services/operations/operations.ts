@@ -2,6 +2,7 @@ import { request } from '../api';
 export interface BlockPricing {
   blockMinutes: number; rateVnd: number; dailyCapVnd: number; multiplier: number;
   peakStart: string | null; peakEnd: string | null;
+  minimumChargeVnd?: number;
 }
 export interface PricingVersion {
   id: string; lotId: string; vehicleType: string; version: number; name: string; status: string;

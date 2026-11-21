@@ -9,22 +9,25 @@ namespace Parking.Parking.Infrastructure.Services
     public class EstimatedPriceService : IEstimatedPriceService
     {
         private readonly IParkingLotRepository _parkingLotRepository;
+        private readonly ICurrentPricingCustomer? _currentCustomer;
         private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-        public EstimatedPriceService(IParkingLotRepository parkingLotRepository)
+        public EstimatedPriceService(IParkingLotRepository parkingLotRepository, ICurrentPricingCustomer? currentCustomer = null)
         {
             _parkingLotRepository = parkingLotRepository;
+            _currentCustomer = currentCustomer;
         }
         public async Task<EstimatedPriceResult> CalculateEstimatedFeeAsync(
             Guid lotId,
             string vehicleType,
             DateTime startTime,
-            int expectedDurationMinutes)
+            int expectedDurationMinutes,
+            CancellationToken cancellationToken = default)
         {
             var normalizedType = vehicleType.Trim().ToUpperInvariant();
             // Select against the requested instant on every estimate. A lot/type cache
             // cannot represent scheduled plans or a newly published overlapping version.
-            var ruleConfig = await _parkingLotRepository.GetPricingRuleConfigAsync(lotId, normalizedType, startTime);
+            var ruleConfig = await _parkingLotRepository.GetPricingRuleConfigAsync(lotId, normalizedType, startTime, cancellationToken);
             if (ruleConfig == null)
             {
                 return new EstimatedPriceResult
@@ -50,12 +53,18 @@ namespace Parking.Parking.Infrastructure.Services
             // 6. Tính toán chi phí thực tế bằng Domain logic lõi (BlockPrice.Estimate)
             var startOffset = new DateTimeOffset(startTime.ToUniversalTime(), TimeSpan.Zero);
             var endOffset = startOffset.AddMinutes(expectedDurationMinutes);
-            var totalAmount = price.Estimate(startOffset, endOffset, tz);
+            var grace = _currentCustomer?.UserId is Guid customerId
+                ? await _parkingLotRepository.GetAvailableGraceMinutesAsync(lotId, normalizedType, startOffset, customerId, cancellationToken)
+                : 0;
+            var totalAmount = price.Estimate(startOffset.AddMinutes(grace), endOffset, tz);
             return new EstimatedPriceResult
             {
                 TotalFee = totalAmount,
                 Currency = "VND",
+                MinimumChargeVnd = price.MinimumChargeVnd,
                 Details = $"Block {price.BlockMinutes}p, Đơn giá {price.RateVnd:N0} đ, Trần ngày {price.DailyCapVnd:N0} đ"
+                    + (grace > 0 ? $". Đã tính miễn {grace} phút đầu theo quyền lợi trong ngày; quyền lợi được kiểm tra lại khi đặt chỗ." : string.Empty)
+                    + (price.MinimumChargeVnd > 0 ? $". Phí cuối cùng tối thiểu {price.MinimumChargeVnd:N0} đ/lượt sau ưu đãi." : string.Empty)
             };
         }
     }

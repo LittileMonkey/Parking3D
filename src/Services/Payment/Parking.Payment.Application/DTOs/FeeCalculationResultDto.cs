@@ -23,6 +23,8 @@ namespace Parking.Payment.Application.DTOs
         public bool IsGoldStarMember { get; init; }
         public long GoldStarDiscountAmountVnd { get; init; }
         public long FinalNetAmountVnd { get; init; }
+        public long MinimumChargeVnd { get; init; }
+        public long MinimumChargeAdjustmentVnd { get; init; }
         public string Currency { get; init; } = "VND";
         public IReadOnlyList<DayPricingBreakdownDto> DailyBreakdowns { get; init; } = [];
     }

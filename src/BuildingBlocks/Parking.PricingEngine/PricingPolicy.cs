@@ -19,7 +19,8 @@ namespace Parking.Pricing;
         TimeOnly Peak2Start,                // Giờ bắt đầu cao điểm chiều (VD: 17:30)
         TimeOnly Peak2End,                  // Giờ kết thúc cao điểm chiều (VD: 19:00)
         long DailyCapVnd,                   // Mức trần giá tối đa trong một ngày lịch (VD: 150.000 đ)
-        decimal GoldStarDiscountRate        // Tỷ lệ chiết khấu hội viên Gold Star (VD: 0.10m = 10%)
+        decimal GoldStarDiscountRate,       // Tỷ lệ chiết khấu hội viên Gold Star (VD: 0.10m = 10%)
+        long MinimumChargeVnd = 0           // Legacy snapshots omit this field and retain their original fee.
     )
     {
         /// <summary>
@@ -35,6 +36,8 @@ namespace Parking.Pricing;
 
             if (InitialRateVnd < 0 || SubsequentRateVnd < 0 || DailyCapVnd < 0)
                 throw new ArgumentException("Đơn giá và mức trần ngày không được là số âm.");
+            if (MinimumChargeVnd < 0 || MinimumChargeVnd > DailyCapVnd)
+                throw new ArgumentException("Minimum charge must be non-negative and cannot exceed the daily cap.");
 
             if (PeakMultiplier < 1.0m)
                 throw new ArgumentException("Hệ số nhân giờ cao điểm phải >= 1.0 (không thể giảm giá vào giờ cao điểm).", nameof(PeakMultiplier));

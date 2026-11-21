@@ -16,8 +16,10 @@ public sealed partial class ParkingRepository
         const string sql = """
             SELECT b.id,b.code,b.lot_id,l.name,b.customer_id,r.slot_id,s.code,b.plate_snapshot,
               CASE WHEN b.vehicle_type = 'CAR' AND UPPER(COALESCE(v.fuel_type, '')) = 'ELECTRIC' THEN 'EV' ELSE b.vehicle_type END,
-              b.starts_at,b.ends_at,b.hold_expires_at,b.arrival_deadline,b.status::text,b.estimated_amount,b.created_at
+              b.starts_at,b.ends_at,b.hold_expires_at,b.arrival_deadline,b.status::text,b.estimated_amount,b.created_at,
+              coalesce((ps.resolved_rules->>'minimumChargeVnd')::bigint,0)
             FROM bookings b JOIN parking_lots l ON l.id=b.lot_id
+            JOIN pricing_snapshots ps ON ps.id=b.pricing_snapshot_id
             LEFT JOIN vehicles v ON v.id=b.vehicle_id
             LEFT JOIN LATERAL (
               SELECT slot_id FROM slot_reservations WHERE booking_id=b.id
@@ -55,7 +57,8 @@ public sealed partial class ParkingRepository
             Status: reader.GetString(13),
             EstimatedAmount: checked((long)reader.GetDecimal(14)),
             QrToken: null,
-            CreatedAt: reader.GetFieldValue<DateTimeOffset>(15));
+            CreatedAt: reader.GetFieldValue<DateTimeOffset>(15),
+            MinimumChargeVnd: reader.GetInt64(16));
 
         return (detail, ownerId, lotId);
     }

@@ -413,6 +413,10 @@ public class ParkingLotSpatialTests
         public int Calls { get; private set; }
         public Func<DateTime, (string Timezone, string ParametersJson)?>? RuleAt { get; init; }
 
+        public Task<int> GetAvailableGraceMinutesAsync(Guid lotId, string vehicleType,
+            DateTimeOffset startsAt, Guid customerId, CancellationToken cancellationToken = default)
+            => Task.FromResult(0);
+
         public Task<List<ParkingLot>> GetAvailableLotsAsync(string vehicleType, CancellationToken cancellationToken = default)
             => Task.FromResult(lots ?? new List<ParkingLot>());
 

@@ -124,6 +124,8 @@ ON CONFLICT DO NOTHING;
 $aiSyncSql | docker compose -f compose.microservices.yml exec -T ai-db psql -X -v ON_ERROR_STOP=1 -U ai -d parking_ai
 if ($LASTEXITCODE -ne 0) { throw 'Không đồng bộ được danh mục bãi xe sang AI service.' }
 
+Get-Content -Raw -Encoding UTF8 database/services/parking/migrations/012_minimum_charge_10000.sql | docker compose -f compose.microservices.yml exec -T parking-db psql -X -v ON_ERROR_STOP=1 -U parking -d parking_parking
+if($LASTEXITCODE -ne 0){throw 'Minimum-charge migration after demo seed failed.'}
 Write-Host 'DEMO READY: đã bổ sung bãi, slot, cổng, biểu giá, bản đồ PUBLISHED, xe customer và hai ca Staff/Manager để bàn giao.'
 Write-Host 'Tài khoản: BOOTSTRAP_EMAIL/PASSWORD; DEMO_STAFF_EMAIL/PASSWORD; DEMO_CUSTOMER_EMAIL/PASSWORD trong .env. Không chia sẻ secrets.'
 Write-Host 'Đây là fixture Development; không phải xác minh quyền sở hữu xe thực tế.'

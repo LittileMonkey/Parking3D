@@ -87,7 +87,8 @@ public sealed class ParkingCatalogGrpc(IParkingRepository repository, IParkingLo
             Peak2End = peak2End,
             DailyCapVnd = dailyCap,
             GoldStarDiscountRate = goldStarDiscount,
-            Timezone = ruleConfig.Value.Timezone
+            Timezone = ruleConfig.Value.Timezone,
+            MinimumChargeVnd = root.TryGetProperty("minimumChargeVnd", out var minimum) ? minimum.GetInt64() : 0
         };
     }
 }

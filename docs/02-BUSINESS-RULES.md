@@ -80,6 +80,8 @@
 
 ## 3. Các Quy tắc Đã Hiệu chỉnh So với Bản Cũ (Adjustments from V2/V3)
 
+**Cập nhật ngày 21/11/2026 theo yêu cầu:** biểu giá mới/được nâng cấp có `minimumChargeVnd >= 10000` mỗi lượt, sau grace/ưu đãi, áp dụng CASH/VNPAY theo bãi/loại xe. Minimum không vượt trần ngày, không thu lại trên từng khoản quá giờ và không sửa snapshot đã chốt. Chi tiết: [MINIMUM_PARKING_CHARGE.md](MINIMUM_PARKING_CHARGE.md).
+
 1. **Bãi bỏ giả định "Chỉ có 1 bãi 3 tầng":** Đổi sang nền tảng Multi-Parking Lot; các tầng F01, F02, F03 chỉ là dữ liệu mẫu của bãi demo.
 2. **Bãi bỏ quy tắc khóa cứng "Dung lượng >90% thì khóa":** Đổi thành chính sách cấu hình theo từng bãi và từng loại phương tiện:
    - `warningOccupancyPercent` (ví dụ: cảnh báo khi đạt 90%).

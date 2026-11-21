@@ -1,18 +1,23 @@
 namespace Parking.Parking.Domain;
 
 public sealed record BlockPrice(int BlockMinutes, long RateVnd, long DailyCapVnd, decimal Multiplier,
-    string? PeakStart = null, string? PeakEnd = null)
+    string? PeakStart = null, string? PeakEnd = null, long MinimumChargeVnd = 0)
 {
     public void Validate()
     {
         if (BlockMinutes <= 0 || BlockMinutes > 1440 || RateVnd < 0 || DailyCapVnd < 0 || Multiplier < 1 || Multiplier > 1.5m)
             throw new ArgumentException("Invalid block price");
+        if (MinimumChargeVnd < 0 || MinimumChargeVnd > DailyCapVnd)
+            throw new ArgumentException("Minimum charge must be non-negative and cannot exceed the daily cap.");
         if ((PeakStart is null) != (PeakEnd is null) ||
             (PeakStart is not null && (!TimeOnly.TryParse(PeakStart, out _) || !TimeOnly.TryParse(PeakEnd, out _) || PeakStart == PeakEnd)))
             throw new ArgumentException("Invalid peak window");
     }
 
     public long Estimate(DateTimeOffset start, DateTimeOffset end, TimeZoneInfo timezone)
+        => Math.Max(MinimumChargeVnd, EstimateBeforeMinimum(start, end, timezone));
+
+    private long EstimateBeforeMinimum(DateTimeOffset start, DateTimeOffset end, TimeZoneInfo timezone)
     {
         Validate(); if (end <= start) throw new ArgumentException("Invalid parking interval");
         decimal total = 0; var cursor = start;
@@ -69,12 +74,13 @@ public sealed record BlockPrice(int BlockMinutes, long RateVnd, long DailyCapVnd
             var dayEnd = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(nextMidnight, timezone));
             var stop = actualExit < dayEnd ? actualExit : dayEnd;
             var prepaidStart = bookedStart > dayStart ? bookedStart : dayStart;
-            var prepaid = prepaidStart < expectedExit ? Estimate(prepaidStart, expectedExit, timezone) : 0;
+            var prepaid = prepaidStart < expectedExit ? EstimateBeforeMinimum(prepaidStart, expectedExit, timezone) : 0;
             var remainingCap = Math.Max(0, DailyCapVnd - prepaid);
-            total = checked(total + Math.Min(remainingCap, Estimate(cursor, stop, timezone)));
+            total = checked(total + Math.Min(remainingCap, EstimateBeforeMinimum(cursor, stop, timezone)));
             cursor = stop;
         }
-        return total;
+        var booked = EstimateBeforeMinimum(bookedStart, expectedExit, timezone);
+        return Math.Max(0, Math.Max(MinimumChargeVnd, checked(booked + total)) - Math.Max(MinimumChargeVnd, booked));
     }
 }
 

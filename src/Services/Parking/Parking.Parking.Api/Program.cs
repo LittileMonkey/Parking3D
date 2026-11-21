@@ -43,6 +43,8 @@ builder.Services.AddParkingCaching(builder.Configuration);
 // 2. ÄÄƒng kÃ½ Repository vÃ  Service tÃ­nh giÃ¡ THáº¬T (thay tháº¿ Fake)
 builder.Services.AddScoped<IParkingLotRepository, ParkingLotRepository>();
 builder.Services.AddScoped<IEstimatedPriceService, EstimatedPriceService>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentPricingCustomer, CurrentPricingCustomer>();
 
 builder.Services.AddControllers().ConfigureApiBehaviorOptions(options =>
     options.InvalidModelStateResponseFactory = context => new BadRequestObjectResult(

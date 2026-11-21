@@ -134,6 +134,26 @@ public class ParkingLotRepository : IParkingLotRepository
     /// <summary>
     /// Thực hiện câu lệnh SQL đọc cấu hình biểu giá hiệu lực (FLAT_BLOCK / FLAT_BLOCK_EV) từ bảng pricing_plans và pricing_rules.
     /// </summary>
+    public async Task<int> GetAvailableGraceMinutesAsync(Guid lotId, string vehicleType,
+        DateTimeOffset startsAt, Guid customerId, CancellationToken cancellationToken = default)
+    {
+        var normalizedType = VehicleTypeRules.TryResolve(vehicleType, out var resolved)
+            ? resolved.BaseVehicleType : vehicleType.Trim().ToUpperInvariant();
+        await using var command = _db.CreateCommand("""
+            SELECT p.grace_free_minutes FROM lot_vehicle_policies p
+            WHERE p.lot_id=@lot AND p.vehicle_type=@type
+              AND NOT EXISTS (
+                SELECT 1 FROM daily_grace_claims g WHERE g.user_id=@user
+                  AND g.local_day=(@start AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
+              )
+            """);
+        command.Parameters.AddWithValue("lot", lotId);
+        command.Parameters.AddWithValue("type", normalizedType);
+        command.Parameters.AddWithValue("user", customerId);
+        command.Parameters.AddWithValue("start", startsAt.UtcDateTime);
+        return await command.ExecuteScalarAsync(cancellationToken) is int minutes ? minutes : 0;
+    }
+
     public async Task<(string Timezone, string ParametersJson)?> GetPricingRuleConfigAsync(
         Guid lotId,
         string vehicleType,

@@ -45,6 +45,9 @@ $arguments=@('compose','-f','compose.microservices.yml','up','-d','--wait','--wa
 if(-not $NoBuild){$arguments+='--build'}
 & docker @arguments
 if($LASTEXITCODE -ne 0){throw 'Stack chưa healthy. Xem docker compose -f compose.microservices.yml ps và logs --tail 80.'}
+# Upgrade pricing only after the running services understand minimumChargeVnd.
+Get-Content -Raw -Encoding UTF8 database/services/parking/migrations/012_minimum_charge_10000.sql | docker compose -f compose.microservices.yml exec -T parking-db psql -X -v ON_ERROR_STOP=1 -U parking -d parking_parking
+if($LASTEXITCODE -ne 0){throw 'Minimum-charge migration failed; existing pricing snapshots were not rewritten.'}
 $ready=Invoke-RestMethod 'http://localhost:8080/health/ready' -TimeoutSec 15
 if(-not $ready.isSuccess){throw 'Gateway dependencies chưa ready.'}
 Write-Host 'DATABASE + BE READY: http://localhost:8080/health/ready'

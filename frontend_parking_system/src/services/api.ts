@@ -84,6 +84,7 @@ export interface ParkingLot {
 }
 
 export interface EstimatedPricing {
+  minimumChargeVnd?: number;
   expectedDurationMinutes?: number | null;
   estimatedTotalFee?: number | null;
   currency?: string | null;
@@ -190,6 +191,7 @@ export interface Booking {
 }
 
 export interface BookingDetail {
+  minimumChargeVnd?: number;
   bookingId: string;
   bookingCode: string;
   lotId: string;
@@ -1275,6 +1277,7 @@ export interface PaymentReceiptDto {
 }
 
 export interface BookingDetailDto {
+  minimumChargeVnd?: number;
   bookingId: string;
   bookingCode: string;
   lotId: string;
@@ -1327,6 +1330,8 @@ export interface CalculateFeeRequest {
 }
 
 export interface CalculateFeeResponse {
+  minimumChargeVnd?: number;
+  minimumChargeAdjustmentVnd?: number;
   parkingLotId: string;
   entryTime: string;
   exitTime: string;

@@ -22,6 +22,7 @@ const initialRules: BlockPricing = {
   multiplier: 1,
   peakStart: null,
   peakEnd: null,
+  minimumChargeVnd: 10000,
 };
 
 interface OutletContextType {
@@ -58,7 +59,7 @@ export default function PricingPolicyPage() {
         if (!current) return;
         setPlans(data);
         if (data.length > 0) {
-          setRules(data[0].rules ?? initialRules);
+          setRules({ ...initialRules, ...data[0].rules, minimumChargeVnd: data[0].rules?.minimumChargeVnd ?? 10000 });
           setName(data[0].name ?? "Biểu giá tiêu chuẩn theo block");
         } else {
           setRules(initialRules);
@@ -82,6 +83,10 @@ export default function PricingPolicyPage() {
       return;
     }
 
+    if (!Number.isSafeInteger(rules.minimumChargeVnd) || (rules.minimumChargeVnd ?? 0) < 10000 || rules.dailyCapVnd < (rules.minimumChargeVnd ?? 0)) {
+      setError("Phí tối thiểu phải từ 10.000đ/lượt và không vượt quá trần giá ngày.");
+      return;
+    }
     setBusy(true);
     setError("");
     setNotice("");
@@ -113,20 +118,21 @@ export default function PricingPolicyPage() {
     const rate = rules.rateVnd || 5000;
     const mult = rules.multiplier || 1;
     const cap = rules.dailyCapVnd || 150000;
+    const minimum = rules.minimumChargeVnd ?? 10000;
 
     // 1 block cost
-    const oneBlockCost = rate;
+    const oneBlockCost = Math.max(minimum, Math.min(rate, cap));
 
     // 2 hours regular: 120 mins
     const blocksIn2H = Math.ceil(120 / blockMins);
-    const cost2HRegular = Math.min(blocksIn2H * rate, cap);
+    const cost2HRegular = Math.max(minimum, Math.min(blocksIn2H * rate, cap));
 
     // 2 hours peak
-    const cost2HPeak = Math.min(Math.round(blocksIn2H * rate * mult), cap);
+    const cost2HPeak = Math.max(minimum, Math.min(Math.round(blocksIn2H * rate * mult), cap));
 
     // 8 hours day parking
     const blocksIn8H = Math.ceil(480 / blockMins);
-    const cost8H = Math.min(blocksIn8H * rate, cap);
+    const cost8H = Math.max(minimum, Math.min(blocksIn8H * rate, cap));
 
     return {
       oneBlockCost,
@@ -327,13 +333,20 @@ export default function PricingPolicyPage() {
                   </div>
 
                   <div className="pm-form-group">
+                    <label className="pm-label" htmlFor="minimum-charge">Phí tối thiểu mỗi lượt (VND):</label>
+                    <input id="minimum-charge" type="number" min={10000} step={1000}
+                      className="pm-input-number" required value={rules.minimumChargeVnd ?? 10000}
+                      onChange={(e) => setRules({ ...rules, minimumChargeVnd: Number(e.target.value) })} />
+                    <small style={{ fontSize: 11, color: "var(--pm-muted)" }}>Áp dụng sau ưu đãi, một lần cho cả lượt đỗ</small>
+                  </div>
+                  <div className="pm-form-group">
                     <label className="pm-label" htmlFor="daily-cap">
                       Trần giá mỗi ngày (VND):
                     </label>
                     <input
                       id="daily-cap"
                       type="number"
-                      min={1000}
+                      min={rules.minimumChargeVnd ?? 10000}
                       step={10000}
                       className="pm-input-number"
                       required
@@ -601,7 +614,7 @@ export default function PricingPolicyPage() {
                       <td>
                         <strong>{plan.rules.rateVnd.toLocaleString("vi-VN")} ₫</strong> / {plan.rules.blockMinutes} phút
                       </td>
-                      <td>{plan.rules.dailyCapVnd.toLocaleString("vi-VN")} ₫</td>
+                      <td>{plan.rules.dailyCapVnd.toLocaleString("vi-VN")} ₫<small style={{ display: "block" }}>Tối thiểu/lượt: {(plan.rules.minimumChargeVnd ?? 0).toLocaleString("vi-VN")} ₫</small></td>
                       <td>{plan.rules.multiplier}x</td>
                       <td>
                         <span className={`pm-badge ${plan.status === "ACTIVE" ? "success" : "warning"}`}>

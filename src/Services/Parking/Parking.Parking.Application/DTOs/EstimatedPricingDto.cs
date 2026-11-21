@@ -14,5 +14,6 @@ namespace Parking.Parking.Application.DTOs
         public decimal EstimatedTotalFee { get; set; }
         public string Currency { get; set; } = "VND";
         public string BillingDetails { get; set; } = string.Empty;
+        public long MinimumChargeVnd { get; set; }
     }
 }

@@ -47,7 +47,8 @@ namespace Parking.Parking.Application.Features.ParkingLots.Queries
                     lot.Id,
                     request.VehicleType,
                     start.UtcDateTime,
-                    request.ExpectedDuration);
+                    request.ExpectedDuration,
+                    cancellationToken);
                 if (!pricing.HasPricing || pricing.TotalFee < 0) continue; // Never advertise missing pricing as free.
                 // Gom dữ liệu vào DTO
                 resultItems.Add(new ParkingLotItemDto
@@ -66,7 +67,8 @@ namespace Parking.Parking.Application.Features.ParkingLots.Queries
                         ExpectedDurationMinutes = request.ExpectedDuration,
                         EstimatedTotalFee = pricing.TotalFee,
                         Currency = pricing.Currency,
-                        BillingDetails = pricing.Details
+                        BillingDetails = pricing.Details,
+                        MinimumChargeVnd = pricing.MinimumChargeVnd
                     }
                 });
             }

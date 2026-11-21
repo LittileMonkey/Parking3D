@@ -25,6 +25,10 @@ namespace Parking.Parking.Application.Interfaces
             DateTime startTime, 
             CancellationToken cancellationToken = default);
 
+        /// <summary>Reads unclaimed daily grace without reserving or consuming it.</summary>
+        Task<int> GetAvailableGraceMinutesAsync(Guid lotId, string vehicleType, DateTimeOffset startsAt,
+            Guid customerId, CancellationToken cancellationToken = default);
+
 
 
     }
